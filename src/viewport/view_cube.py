@@ -23,7 +23,7 @@ class ViewCubeOverlay(QWidget):
         """Initialise le ViewCube avec une disposition claire et ergonomique."""
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setFixedSize(165, 155)
+        self.setFixedSize(185, 155)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(4, 4, 4, 4)

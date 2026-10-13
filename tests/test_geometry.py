@@ -101,3 +101,22 @@ def test_mesh_buffer_generation() -> None:
     assert len(buffer.faces) == 12  # 6 faces rectangulaires = 12 triangles
     assert len(buffer.normals) == len(buffer.vertices)
     assert len(buffer.edges) >= 12  # Arêtes du cube
+
+
+def test_sharp_edges_coplanar_filtering() -> None:
+    """Vérifie que les arêtes de triangulation internes coplanaires d'une face perforée ne sont pas tracées."""
+    box = make_box(60.0, 80.0, 20.0, center=True)
+    cyl = make_cylinder(8.0, 30.0, segments=36, center=True)
+    drilled_plate = box.difference(cyl)
+    buf = drilled_plate.to_mesh_buffer()
+
+    mesh = drilled_plate._manifold.to_mesh()
+    positions = np.array(mesh.vert_properties)[:, :3]
+
+    # Sommets sur la face supérieure (Z = 10.0)
+    top_verts = np.where(np.abs(positions[:, 2] - 10.0) < 1e-3)[0]
+    top_sharp_edges = [e for e in buf.edges if e[0] in top_verts and e[1] in top_verts]
+
+    # Doit contenir exactement 40 arêtes (4 côtés du rectangle + 36 facettes du cercle percé)
+    # et ZERO arête parasite traversant la face plane entre le cercle et les coins du rectangle
+    assert len(top_sharp_edges) == 40

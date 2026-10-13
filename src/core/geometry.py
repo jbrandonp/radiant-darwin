@@ -347,7 +347,8 @@ def _extract_sharp_edges(
     e1 = np.sort(tri_verts[:, [1, 2]], axis=1)
     e2 = np.sort(tri_verts[:, [2, 0]], axis=1)
     all_edges = np.vstack([e0, e1, e2])  # (3N, 2)
-    face_indices = np.repeat(np.arange(len(tri_verts), dtype=np.int32), 3)
+    # np.tile associe correctement chaque ligne empilée à son indice de triangle respectif
+    face_indices = np.tile(np.arange(len(tri_verts), dtype=np.int32), 3)
 
     # 2. Tri lexical pour regrouper les arêtes identiques contiguës
     order = np.lexsort((all_edges[:, 1], all_edges[:, 0]))
@@ -370,8 +371,8 @@ def _extract_sharp_edges(
         if count == 1:
             # Arête frontière libre
             sharp_edges.append(edge)
-        elif count == 2:
-            # Arête partagée entre deux facettes
+        elif count >= 2:
+            # Arête partagée entre deux facettes ou plus
             f0 = sorted_faces[start]
             f1 = sorted_faces[start + 1]
             dot_val = float(np.dot(face_normals[f0], face_normals[f1]))

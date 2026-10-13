@@ -22,6 +22,8 @@ class CADBrowserTree(QWidget):
         super().__init__(parent)
         self.document = document
 
+        self.setMinimumWidth(260)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
@@ -32,6 +34,9 @@ class CADBrowserTree(QWidget):
 
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
+        self.tree.setIndentation(14)
+        if self.tree.header():
+            self.tree.header().setStretchLastSection(True)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_context_menu)
         self.tree.itemClicked.connect(self._on_item_clicked)

@@ -121,6 +121,7 @@ class CADMainWindow(QMainWindow):
         # 4. Navigateur gauche
         self.browser_dock = QDockWidget("Navigateur", self)
         self.browser_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        self.browser_dock.setMinimumWidth(260)
         self.browser = CADBrowserTree(self.document)
         self.browser_dock.setWidget(self.browser)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.browser_dock)
@@ -128,9 +129,12 @@ class CADMainWindow(QMainWindow):
         # 5. Inspecteur droit
         self.props_dock = QDockWidget("Paramètres", self)
         self.props_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        self.props_dock.setMinimumWidth(260)
         self.props_panel = CADPropertiesPanel(self.document)
         self.props_dock.setWidget(self.props_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.props_dock)
+
+        self.resizeDocks([self.browser_dock, self.props_dock], [270, 270], Qt.Orientation.Horizontal)
 
         # Barre d'état professionnelle avec badges d'information
         self.status_bar = QStatusBar()

@@ -7,7 +7,7 @@ Verticalité, Distance, Parallélisme, Perpendicularité) via optimisation Leven
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 import numpy as np
 from scipy.optimize import least_squares
 
@@ -23,6 +23,10 @@ class ConstraintType(Enum):
     PARALLEL = auto()         # Deux segments sont parallèles
     PERPENDICULAR = auto()    # Deux segments sont orthogonaux
     FIXED = auto()            # Point ancré à une coordonnée fixe
+    EQUAL = auto()            # Deux segments ont la même longueur
+    ANGLE = auto()            # Angle fixé entre deux segments
+    POINT_ON_LINE = auto()    # Point aligné sur un segment de droite
+    TANGENT = auto()          # Segment de droite tangent à un cercle
 
 
 @dataclass
@@ -92,6 +96,50 @@ class SketchConstraintSolver2D:
         """Contraint deux segments de droite (A1-A2 et B1-B2) à être perpendiculaires."""
         self.constraints.append(GeometricConstraint(
             ConstraintType.PERPENDICULAR, (pt_a1_idx, pt_a2_idx, pt_b1_idx, pt_b2_idx)
+        ))
+
+    def add_equal(self, pt_a1_idx: int, pt_a2_idx: int, pt_b1_idx: int, pt_b2_idx: int) -> None:
+        """Contraint deux segments de droite à avoir la même longueur euclidienne."""
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.EQUAL, (pt_a1_idx, pt_a2_idx, pt_b1_idx, pt_b2_idx)
+        ))
+
+    def add_angle(
+        self,
+        pt_a1_idx: int,
+        pt_a2_idx: int,
+        pt_b1_idx: int,
+        pt_b2_idx: int,
+        angle_deg: float = 90.0,
+        target_angle_deg: Optional[float] = None
+    ) -> None:
+        """Contraint l'angle géométrique entre deux segments de droite en degrés."""
+        val = float(target_angle_deg if target_angle_deg is not None else angle_deg)
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.ANGLE, (pt_a1_idx, pt_a2_idx, pt_b1_idx, pt_b2_idx), target_value=val
+        ))
+
+    def add_point_on_line(self, pt_target_or_line1: int, pt_line1_or_line2: int, pt_line2_or_target: int) -> None:
+        """Contraint un point à être aligné sur la droite reliant deux autres points."""
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.POINT_ON_LINE, (pt_line1_or_line2, pt_line2_or_target, pt_target_or_line1)
+        ))
+
+    def add_tangent(
+        self,
+        pt_line1_idx: int,
+        pt_line2_idx: int,
+        center: Union[int, Point2D],
+        radius: float
+    ) -> None:
+        """Contraint un segment de droite à être tangent à un cercle (distance centre-droite = rayon)."""
+        if isinstance(center, Point2D):
+            c_idx = self.add_point(center)
+            self.add_fixed(c_idx, center.u, center.v)
+        else:
+            c_idx = int(center)
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.TANGENT, (pt_line1_idx, pt_line2_idx, c_idx), target_value=max(0.001, float(radius))
         ))
 
     def solve(self, tolerance: float = 1e-6) -> Tuple[bool, List[Point2D]]:
@@ -168,6 +216,49 @@ class SketchConstraintSolver2D:
                     dx_b = x[2 * i_b2] - x[2 * i_b1]
                     dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
                     res.append(dx_a * dx_b + dy_a * dy_b)
+
+                elif c_type == ConstraintType.EQUAL:
+                    i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+                    dist_a = np.hypot(x[2 * i_a2] - x[2 * i_a1], x[2 * i_a2 + 1] - x[2 * i_a1 + 1])
+                    dist_b = np.hypot(x[2 * i_b2] - x[2 * i_b1], x[2 * i_b2 + 1] - x[2 * i_b1 + 1])
+                    res.append(dist_a - dist_b)
+
+                elif c_type == ConstraintType.ANGLE:
+                    i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+                    dx_a = x[2 * i_a2] - x[2 * i_a1]
+                    dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
+                    dx_b = x[2 * i_b2] - x[2 * i_b1]
+                    dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
+                    len_a = float(np.hypot(dx_a, dy_a))
+                    len_b = float(np.hypot(dx_b, dy_b))
+                    if len_a > 1e-9 and len_b > 1e-9:
+                        cos_target = float(np.cos(np.radians(c.target_value)))
+                        dot_prod = (dx_a * dx_b + dy_a * dy_b) / (len_a * len_b)
+                        res.append(dot_prod - cos_target)
+                    else:
+                        res.append(0.0)
+
+                elif c_type == ConstraintType.POINT_ON_LINE:
+                    i_l1, i_l2, i_p = indices[0], indices[1], indices[2]
+                    dx_l = x[2 * i_l2] - x[2 * i_l1]
+                    dy_l = x[2 * i_l2 + 1] - x[2 * i_l1 + 1]
+                    dx_p = x[2 * i_p] - x[2 * i_l1]
+                    dy_p = x[2 * i_p + 1] - x[2 * i_l1 + 1]
+                    res.append(dx_l * dy_p - dy_l * dx_p)
+
+                elif c_type == ConstraintType.TANGENT:
+                    i_l1, i_l2, i_c = indices[0], indices[1], indices[2]
+                    x1, y1 = x[2 * i_l1], x[2 * i_l1 + 1]
+                    x2, y2 = x[2 * i_l2], x[2 * i_l2 + 1]
+                    xc, yc = x[2 * i_c], x[2 * i_c + 1]
+                    dx = x2 - x1
+                    dy = y2 - y1
+                    line_len = float(np.hypot(dx, dy))
+                    if line_len > 1e-9:
+                        dist_center = abs(dx * (y1 - yc) - dy * (x1 - xc)) / line_len
+                        res.append(dist_center - c.target_value)
+                    else:
+                        res.append(0.0)
 
             return np.array(res, dtype=np.float64)
 

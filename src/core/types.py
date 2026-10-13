@@ -90,6 +90,16 @@ class Point2D:
     u: float
     v: float
 
+    @property
+    def x(self) -> float:
+        """Alias cartésien X pour la coordonnée U."""
+        return self.u
+
+    @property
+    def y(self) -> float:
+        """Alias cartésien Y pour la coordonnée V."""
+        return self.v
+
     def to_array(self) -> np.ndarray:
         """Convertit le point 2D en tableau NumPy."""
         return np.array([self.u, self.v], dtype=np.float64)

@@ -12,8 +12,8 @@ import numpy as np
 from typing import Dict, List
 
 from src.core.types import BooleanOperation, PlaneType, Point2D, Vector3D
-from src.core.geometry import Solid, make_box, make_cylinder, make_cone, make_torus
-from src.core.feature import ConeFeature, TorusFeature
+from src.core.geometry import Solid, make_box, make_cylinder, make_cone, make_torus, make_wedge
+from src.core.feature import ConeFeature, TorusFeature, WedgeFeature, BoxFeature
 from src.core.fasteners import (
     create_hex_bolt, create_socket_head_cap_screw, create_hex_nut, create_washer,
     FastenerFeature, ISO_METRIC_TABLE
@@ -23,10 +23,12 @@ from src.core.section_tools import (
 )
 from src.core.exporter import CADExporter
 from src.core.step_exporter import STEPExporter
-from src.core.sketch import Sketch2D
+from src.core.sketch import Sketch2D, SketchSlot, SketchRegularPolygon, SketchEllipse
+from src.solver.constraints_2d import SketchConstraintSolver2D, ConstraintType
 from src.core.document import CADDocument
 from src.core.operations_advanced import (
-    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature
+    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature,
+    HoleFeature, PipeFeature
 )
 from src.core.inspector import (
     measure_points, measure_angle_vectors, compute_center_of_mass,
@@ -526,3 +528,224 @@ def test_serializer_with_cone_torus_and_fasteners(tmp_path):
     assert loaded_doc.features[1].__class__.__name__ == "TorusFeature"
     assert loaded_doc.features[2].__class__.__name__ == "FastenerFeature"
     assert len(loaded_doc.bodies) == 3
+
+
+def test_wedge_primitive_and_feature():
+    """Vérifie la création géométrique et paramétrique d'un coin (Wedge) FreeCAD."""
+    # 1. Coin triangulaire pur (sommet pointu dx_top=0)
+    wedge_tri = make_wedge(30.0, 20.0, 15.0, dx_top=0.0, dy_top=20.0, name="TriWedge")
+    assert not wedge_tri.is_empty()
+    assert wedge_tri.volume() > 0.0
+    # Volume théorique d'un prisme triangulaire : 0.5 * 30 * 20 * 15 = 4500 mm³
+    assert pytest.approx(wedge_tri.volume(), rel=0.01) == 4500.0
+
+    # 2. Coin trapézoïdal (dx_top=10, dy_top=20)
+    wedge_trap = make_wedge(30.0, 20.0, 15.0, dx_top=10.0, dy_top=20.0, name="TrapWedge")
+    assert not wedge_trap.is_empty()
+    assert wedge_trap.volume() > 0.0
+    # Volume théorique trapézoïdal : (30 + 10) / 2 * 20 * 15 = 6000 mm³
+    assert pytest.approx(wedge_trap.volume(), rel=0.01) == 6000.0
+
+    # 3. WedgeFeature dans un CADDocument
+    doc = CADDocument("TestWedgeDoc")
+    w_feat = WedgeFeature("feat_w", "Coin Paramétrique", dx=40.0, dy=25.0, dz=12.0, dx_top=0.0, dy_top=25.0)
+    doc.add_feature(w_feat)
+    assert len(doc.bodies) == 1
+    body = list(doc.bodies.values())[0]
+    assert pytest.approx(body.volume(), rel=0.02) == 6000.0
+
+
+def test_hole_counterbore_and_countersink():
+    """Vérifie les perçages avancés FreeCAD : lamage (counterbore) et fraisage (countersink)."""
+    # 1. Base commune
+    doc_simple = CADDocument("DocSimpleHole")
+    doc_simple.add_feature(BoxFeature("box_1", "Base", 40.0, 40.0, 30.0, center=False))
+    doc_simple.add_feature(HoleFeature("hole_s", "Simple Hole", "box_1", 20.0, 20.0, diameter=6.0, depth=20.0, hole_type="simple"))
+    vol_simple = list(doc_simple.bodies.values())[0].volume()
+
+    # 2. Lamage (Counterbore)
+    doc_cbore = CADDocument("DocCBore")
+    doc_cbore.add_feature(BoxFeature("box_1", "Base", 40.0, 40.0, 30.0, center=False))
+    doc_cbore.add_feature(HoleFeature(
+        "hole_cb", "CBore Hole", "box_1", 20.0, 20.0,
+        diameter=6.0, depth=20.0,
+        hole_type="counterbore", cbore_dia=12.0, cbore_depth=5.0
+    ))
+    vol_cbore = list(doc_cbore.bodies.values())[0].volume()
+
+    # Le lamage enlève plus de matière que le trou simple
+    assert vol_cbore < vol_simple
+
+    # 3. Fraisage (Countersink)
+    doc_csink = CADDocument("DocCSink")
+    doc_csink.add_feature(BoxFeature("box_1", "Base", 40.0, 40.0, 30.0, center=False))
+    doc_csink.add_feature(HoleFeature(
+        "hole_cs", "CSink Hole", "box_1", 20.0, 20.0,
+        diameter=6.0, depth=20.0,
+        hole_type="countersink", csink_dia=14.0, csink_angle=90.0
+    ))
+    vol_csink = list(doc_csink.bodies.values())[0].volume()
+
+    # Le fraisage conique enlève plus de matière que le trou simple
+    assert vol_csink < vol_simple
+
+
+def test_pipe_feature_3d_sweep():
+    """Vérifie la création de tuyauterie 3D continue pleine et creuse (PipeFeature)."""
+    path = [(0.0, 0.0, 0.0), (0.0, 0.0, 40.0), (30.0, 0.0, 40.0)]
+
+    # 1. Tuyau solide plein
+    doc_solid = CADDocument("DocPipeSolid")
+    pipe_solid = PipeFeature("pipe_s", "Tuyau Plein", path, outer_radius=5.0)
+    doc_solid.add_feature(pipe_solid)
+    assert len(doc_solid.bodies) == 1
+    body_solid = list(doc_solid.bodies.values())[0]
+    assert not body_solid.is_empty()
+    assert body_solid.volume() > 4000.0
+
+    # 2. Tuyau creux
+    doc_hollow = CADDocument("DocPipeHollow")
+    pipe_hollow = PipeFeature("pipe_h", "Tuyau Creux", path, outer_radius=5.0, inner_radius=3.0)
+    doc_hollow.add_feature(pipe_hollow)
+    assert len(doc_hollow.bodies) == 1
+    body_hollow = list(doc_hollow.bodies.values())[0]
+    assert not body_hollow.is_empty()
+    # Le tuyau creux doit avoir un volume strictement inférieur au tuyau plein
+    assert body_hollow.volume() < body_solid.volume()
+    assert body_hollow.volume() > 1000.0
+
+
+def test_sketch_slot_polygon_ellipse():
+    """Vérifie les nouvelles primitives 2D du Sketcher : trou oblong, polygone régulier et ellipse."""
+    sketch = Sketch2D("sk_primitives", "Primitives 2D", plane=PlaneType.XY)
+
+    # Trou oblong (Slot)
+    slot = sketch.add_slot(Point2D(-20.0, 0.0), Point2D(20.0, 0.0), radius=5.0)
+    assert isinstance(slot, SketchSlot)
+    pts_slot = slot.to_profile_points(num_segments=16)
+    assert len(pts_slot) >= 20
+    # La longueur totale du contour doit englober de X=-25 à X=25
+    xs = [p.x for p in pts_slot]
+    assert min(xs) <= -24.9
+    assert max(xs) >= 24.9
+
+    # Polygone régulier hexagone
+    poly = sketch.add_regular_polygon(Point2D(0.0, 0.0), radius=15.0, sides=6)
+    assert isinstance(poly, SketchRegularPolygon)
+    pts_poly = poly.to_profile_points()
+    assert len(pts_poly) == 6
+
+    # Ellipse
+    ell = sketch.add_ellipse(Point2D(0.0, 0.0), radius_x=25.0, radius_y=12.0)
+    assert isinstance(ell, SketchEllipse)
+    pts_ell = ell.to_profile_points(num_segments=32)
+    assert len(pts_ell) == 32
+    xs_ell = [p.x for p in pts_ell]
+    ys_ell = [p.y for p in pts_ell]
+    assert pytest.approx(max(xs_ell), 0.1) == 25.0
+    assert pytest.approx(max(ys_ell), 0.1) == 12.0
+
+
+def test_solver_2d_advanced_constraints():
+    """Vérifie le solveur géométrique 2D sur les contraintes Equal, Angle, PointOnLine et Tangent."""
+    # 1. Contrainte EQUAL (Deux segments de même longueur)
+    solver = SketchConstraintSolver2D()
+    p0 = solver.add_point(Point2D(0.0, 0.0))
+    p1 = solver.add_point(Point2D(20.0, 0.0))
+    p2 = solver.add_point(Point2D(0.0, 10.0))
+    p3 = solver.add_point(Point2D(15.0, 10.0))
+
+    solver.add_fixed(p0, 0.0, 0.0)
+    solver.add_fixed(p1, 20.0, 0.0) # Longueur p0-p1 = 20.0
+    solver.add_fixed(p2, 0.0, 10.0)
+    solver.add_horizontal(p2, p3)
+    solver.add_equal(p0, p1, p2, p3) # Force longueur p2-p3 = 20.0
+
+    ok, pts = solver.solve()
+    assert ok
+    len_01 = np.linalg.norm(np.array([pts[1].x - pts[0].x, pts[1].y - pts[0].y]))
+    len_23 = np.linalg.norm(np.array([pts[3].x - pts[2].x, pts[3].y - pts[2].y]))
+    assert pytest.approx(len_01, 1e-3) == len_23
+
+    # 2. Contrainte ANGLE (Angle droit 90° entre deux segments perpendiculaires)
+    solver_ang = SketchConstraintSolver2D()
+    a0 = solver_ang.add_point(Point2D(0.0, 0.0))
+    a1 = solver_ang.add_point(Point2D(30.0, 0.0))
+    a2 = solver_ang.add_point(Point2D(10.0, 25.0)) # Sera ajusté à la verticale
+
+    solver_ang.add_fixed(a0, 0.0, 0.0)
+    solver_ang.add_fixed(a1, 30.0, 0.0)
+    solver_ang.add_distance(a0, a2, 20.0)
+    solver_ang.add_angle(a0, a1, a0, a2, target_angle_deg=90.0)
+
+    ok_ang, pts_ang = solver_ang.solve()
+    assert ok_ang
+    assert pytest.approx(pts_ang[2].x, abs=1e-2) == 0.0
+    assert pytest.approx(pts_ang[2].y, abs=1e-2) == 20.0
+
+    # 3. Contrainte POINT ON LINE
+    solver_pol = SketchConstraintSolver2D()
+    l0 = solver_pol.add_point(Point2D(0.0, 0.0))
+    l1 = solver_pol.add_point(Point2D(50.0, 50.0))
+    lp = solver_pol.add_point(Point2D(10.0, 20.0))
+
+    solver_pol.add_fixed(l0, 0.0, 0.0)
+    solver_pol.add_fixed(l1, 50.0, 50.0)
+    solver_pol.add_point_on_line(lp, l0, l1)
+    solver_pol.add_distance(l0, lp, 28.28427) # Doit converger vers (20, 20)
+
+    ok_pol, pts_pol = solver_pol.solve()
+    assert ok_pol
+    assert pytest.approx(pts_pol[2].x, 0.1) == pts_pol[2].y
+
+    # 4. Contrainte TANGENT (Ligne tangente à un cercle)
+    solver_tan = SketchConstraintSolver2D()
+    tp0 = solver_tan.add_point(Point2D(0.0, 15.0))
+    tp1 = solver_tan.add_point(Point2D(40.0, 15.0))
+    center = Point2D(20.0, 0.0)
+    radius = 10.0
+
+    solver_tan.add_horizontal(tp0, tp1)
+    solver_tan.add_tangent(tp0, tp1, center, radius)
+    ok_tan, pts_tan = solver_tan.solve()
+    assert ok_tan
+    # La ligne horizontale tangente au cercle de centre (20, 0) et rayon 10 doit être à Y=10 ou Y=-10
+    assert pytest.approx(abs(pts_tan[0].y), 1e-2) == 10.0
+
+
+def test_serializer_with_wedge_pipe_and_advanced_holes(tmp_path):
+    """Vérifie la sérialisation/désérialisation complète avec Coin, Tuyau 3D et Perçages avancés."""
+    doc = CADDocument("ProjetPariteFreeCADComplet")
+    doc.add_feature(BoxFeature("box_base", "Socle", 60.0, 60.0, 20.0, center=False))
+    doc.add_feature(WedgeFeature("wedge_1", "Coin Support", dx=30.0, dy=20.0, dz=15.0, dx_top=0.0, dy_top=20.0))
+    doc.add_feature(PipeFeature(
+        "pipe_1", "Tube Raccord",
+        path_points=[(0.0, 0.0, 0.0), (0.0, 0.0, 30.0), (20.0, 0.0, 30.0)],
+        outer_radius=4.0, inner_radius=2.5
+    ))
+    doc.add_feature(HoleFeature(
+        "hole_1", "Trou Lamé", "box_base",
+        x=15.0, y=15.0, diameter=5.0, depth=15.0,
+        hole_type="counterbore", cbore_dia=9.0, cbore_depth=4.0
+    ))
+
+    filepath = str(tmp_path / "freecad_parity_full.cadproj")
+    saved = ProjectSerializer.save_project(doc, filepath)
+    assert saved
+
+    loaded = ProjectSerializer.load_project(filepath)
+    assert loaded is not None
+    assert len(loaded.features) == 4
+    types = [f.__class__.__name__ for f in loaded.features]
+    assert "WedgeFeature" in types
+    assert "PipeFeature" in types
+    assert "HoleFeature" in types
+
+    hole_feat = [f for f in loaded.features if isinstance(f, HoleFeature)][0]
+    assert hole_feat.hole_type == "counterbore"
+    assert hole_feat.cbore_dia == 9.0
+    assert hole_feat.cbore_depth == 4.0
+
+    pipe_feat = [f for f in loaded.features if isinstance(f, PipeFeature)][0]
+    assert len(pipe_feat.path_points) == 3
+    assert pipe_feat.inner_radius == 2.5

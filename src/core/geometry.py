@@ -299,6 +299,72 @@ def make_torus(major_radius: float, minor_radius: float, segments: int = 36, nam
     return Solid(manifold_torus, name)
 
 
+def make_wedge(
+    dx: float,
+    dy: float,
+    dz: float,
+    dx_top: float = 0.0,
+    dy_top: float = 0.0,
+    name: str = "Wedge"
+) -> Solid:
+    """
+    Crée un coin ou prisme trapézoïdal paramétrique (Wedge FreeCAD Part).
+    - dx : largeur de la base selon X
+    - dy : profondeur de la base selon Y
+    - dz : hauteur totale selon Z
+    - dx_top : largeur de la face supérieure selon X (0.0 pour une arête vive / rampe)
+    - dy_top : profondeur de la face supérieure selon Y (0.0 pour conserver dy)
+    """
+    safe_dx = max(0.001, dx)
+    safe_dy = max(0.001, dy)
+    safe_dz = max(0.001, dz)
+    safe_dx_top = max(0.0, min(safe_dx, dx_top))
+    safe_dy_top = safe_dy if dy_top <= 0.0 else max(0.001, min(safe_dy, dy_top))
+
+    if safe_dx_top <= 1e-4:
+        # Coin triangulaire (arête vive le long de Y au sommet à X = 0)
+        verts = np.array([
+            [0.0, 0.0, 0.0],
+            [safe_dx, 0.0, 0.0],
+            [safe_dx, safe_dy, 0.0],
+            [0.0, safe_dy, 0.0],
+            [0.0, 0.0, safe_dz],
+            [0.0, safe_dy, safe_dz],
+        ], dtype=np.float32)
+        faces = np.array([
+            [0, 2, 1], [0, 3, 2],
+            [0, 1, 4],
+            [3, 5, 2],
+            [0, 4, 5], [0, 5, 3],
+            [1, 2, 5], [1, 5, 4],
+        ], dtype=np.uint32)
+    else:
+        # Prisme trapézoïdal à 8 sommets
+        x_off = (safe_dx - safe_dx_top) / 2.0
+        y_off = (safe_dy - safe_dy_top) / 2.0
+        verts = np.array([
+            [0.0, 0.0, 0.0],
+            [safe_dx, 0.0, 0.0],
+            [safe_dx, safe_dy, 0.0],
+            [0.0, safe_dy, 0.0],
+            [x_off, y_off, safe_dz],
+            [x_off + safe_dx_top, y_off, safe_dz],
+            [x_off + safe_dx_top, y_off + safe_dy_top, safe_dz],
+            [x_off, y_off + safe_dy_top, safe_dz],
+        ], dtype=np.float32)
+        faces = np.array([
+            [0, 2, 1], [0, 3, 2],
+            [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 5, 4],
+            [2, 3, 7], [2, 7, 6],
+            [0, 4, 7], [0, 7, 3],
+            [1, 6, 5], [1, 2, 6],
+        ], dtype=np.uint32)
+
+    mesh = m.Mesh(vert_properties=verts, tri_verts=faces)
+    return Solid(m.Manifold(mesh), name)
+
+
 def extrude_polygon(
     points: Sequence[Point2D],
     height: float,

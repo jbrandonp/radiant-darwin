@@ -11,7 +11,7 @@ import manifold3d as m
 from scipy.interpolate import interp1d
 
 from src.core.types import BooleanOperation, FeatureStatus, Vector3D, Point2D, PlaneType
-from src.core.geometry import Solid, make_cylinder, make_sphere, make_box, _extract_sharp_edges
+from src.core.geometry import Solid, make_cylinder, make_sphere, make_box, make_cone, _extract_sharp_edges
 from src.core.feature import Feature, _apply_boolean_operation
 from src.core.sketch import Sketch2D
 
@@ -229,8 +229,11 @@ class MirrorFeature(Feature):
 
 class HoleFeature(Feature):
     """
-    Outil de perçage paramétrique (Alésage, trou traversant ou borgne).
-    Soustrait automatiquement un cylindre à la position (X, Y) spécifiée.
+    Outil de perçage paramétrique avancé (FreeCAD PartDesign Hole).
+    Prend en charge :
+    - Perçage simple (simple cylindrical hole)
+    - Lamage / Chambrage pour tête cylindrique CHC (Counterbore)
+    - Fraisage conique pour tête fraisée FHC (Countersink)
     """
 
     def __init__(
@@ -242,35 +245,82 @@ class HoleFeature(Feature):
         pos_y: float = 0.0,
         diameter: float = 6.0,
         depth: float = 50.0,
-        segments: int = 36
+        segments: int = 36,
+        hole_type: str = "simple",
+        cbore_dia: float = 10.0,
+        cbore_depth: float = 6.0,
+        csink_dia: float = 12.0,
+        csink_angle: float = 90.0,
+        x: Optional[float] = None,
+        y: Optional[float] = None
     ) -> None:
         super().__init__(feature_id, name)
         self.target_body_id = target_body_id
+        self.hole_type = str(hole_type).lower()
+        actual_x = float(x if x is not None else pos_x)
+        actual_y = float(y if y is not None else pos_y)
+        self.pos_x = actual_x
+        self.pos_y = actual_y
+        self.diameter = float(diameter)
+        self.depth = float(depth)
+        self.cbore_dia = float(cbore_dia)
+        self.cbore_depth = float(cbore_depth)
+        self.csink_dia = float(csink_dia)
+        self.csink_angle = float(csink_angle)
         self.parameters = {
-            "pos_x": float(pos_x),
-            "pos_y": float(pos_y),
+            "pos_x": actual_x,
+            "pos_y": actual_y,
             "diameter": float(diameter),
             "depth": float(depth),
             "segments": float(segments),
+            "cbore_dia": float(cbore_dia),
+            "cbore_depth": float(cbore_depth),
+            "csink_dia": float(csink_dia),
+            "csink_angle": float(csink_angle),
         }
 
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
-        """Perce la pièce cible à la coordonnée demandée."""
+        """Perce la pièce cible à la coordonnée demandée avec lamage ou fraisage optionnel."""
         updated = dict(existing_bodies)
-        if self.target_body_id not in updated:
+        target_key = self.target_body_id
+        if target_key not in updated and f"body_{target_key}" in updated:
+            target_key = f"body_{target_key}"
+        elif target_key not in updated and updated:
+            target_key = list(updated.keys())[0]
+
+        if target_key not in updated:
             self.status = FeatureStatus.ERROR
             return updated
 
-        target = updated[self.target_body_id]
+        target = updated[target_key]
         rad = max(0.01, self.parameters["diameter"] / 2.0)
         dep = max(0.01, self.parameters["depth"])
         segs = max(16, int(self.parameters["segments"]))
         px = self.parameters["pos_x"]
         py = self.parameters["pos_y"]
 
-        # Créer le cylindre de découpe centré et le positionner
-        cutter = make_cylinder(rad, dep, segments=segs, center=True).translate(Vector3D(px, py, 0.0))
-        updated[self.target_body_id] = target.difference(cutter)
+        b_min, b_max = target.bounding_box()
+        top_z = b_max.z
+
+        # 1. Cylindre principal débouchant depuis la face supérieure vers le bas
+        cutter = make_cylinder(rad, dep + 0.1, segments=segs, center=False).translate(Vector3D(0.0, 0.0, top_z - dep))
+
+        # 2. Lamage (Counterbore) ou Fraisage conique (Countersink)
+        if self.hole_type == "counterbore":
+            cb_rad = max(rad, self.parameters.get("cbore_dia", rad * 2.0) / 2.0)
+            cb_dep = max(0.01, self.parameters.get("cbore_depth", 6.0))
+            cbore_cyl = make_cylinder(cb_rad, cb_dep + 0.2, segments=segs, center=False).translate(Vector3D(0.0, 0.0, top_z - cb_dep))
+            cutter = cutter.union(cbore_cyl)
+        elif self.hole_type == "countersink":
+            cs_rad = max(rad, self.parameters.get("csink_dia", rad * 2.0) / 2.0)
+            cs_angle = max(30.0, min(150.0, self.parameters.get("csink_angle", 90.0)))
+            half_angle_rad = np.radians(cs_angle / 2.0)
+            cs_h = max(0.01, (cs_rad - rad) / float(np.tan(half_angle_rad)))
+            csink_cone = make_cone(rad, cs_rad, cs_h + 0.2, segments=segs).translate(Vector3D(0.0, 0.0, top_z - cs_h))
+            cutter = cutter.union(csink_cone)
+
+        cutter_placed = cutter.translate(Vector3D(px, py, 0.0))
+        updated[target_key] = target.difference(cutter_placed)
         self.status = FeatureStatus.OK
         return updated
 
@@ -721,3 +771,106 @@ class DraftFeature(Feature):
         updated[self.target_body_id] = target.warp(_draft_warp)
         self.status = FeatureStatus.OK
         return updated
+
+
+class PipeFeature(Feature):
+    """
+    Extrusion tubulaire le long d'une trajectoire 3D multi-axes (FreeCAD PartDesign Pipe).
+    Permet de créer des conduites, tubulures, serpentins et guides-fils complexes.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Pipe",
+        path_points: Optional[List[Tuple[float, float, float]]] = None,
+        outer_radius: float = 6.0,
+        inner_radius: float = 0.0,
+        operation: BooleanOperation = BooleanOperation.NEW_BODY,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.path_points: List[Tuple[float, float, float]] = (
+            path_points if path_points is not None else [(0.0, 0.0, 0.0), (50.0, 0.0, 0.0), (50.0, 50.0, 0.0)]
+        )
+        self.operation = operation
+        self.target_body_id = target_body_id
+        self.outer_radius = float(outer_radius)
+        self.inner_radius = float(inner_radius)
+        self.parameters = {
+            "outer_radius": float(outer_radius),
+            "inner_radius": float(inner_radius),
+        }
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère le tuyau 3D étanche le long de la trajectoire multi-points."""
+        r_out = max(0.1, self.parameters["outer_radius"])
+        r_in = max(0.0, min(r_out * 0.95, self.parameters.get("inner_radius", 0.0)))
+        pts = [np.array(p, dtype=np.float32) for p in self.path_points]
+
+        if len(pts) < 2:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        solid_pipe = self._build_pipe_solid(pts, r_out, self.name)
+        if r_in > 0.05:
+            inner_pipe = self._build_pipe_solid(pts, r_in, f"{self.name}_inner")
+            solid_pipe = solid_pipe.difference(inner_pipe)
+
+        self.status = FeatureStatus.OK
+        return _apply_boolean_operation(existing_bodies, solid_pipe, self.operation, self.body_id, self.target_body_id)
+
+    @staticmethod
+    def _build_pipe_solid(pts: List[np.ndarray], radius: float, name: str) -> Solid:
+        """Construit un réseau de cylindres orientés et de rotules sphériques étanches."""
+        solid_total: Optional[Solid] = None
+        for i in range(len(pts) - 1):
+            p0 = pts[i]
+            p1 = pts[i + 1]
+            v = p1 - p0
+            length = float(np.linalg.norm(v))
+            if length < 1e-4:
+                continue
+
+            v_norm = v / length
+            z = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+            dot = float(np.dot(z, v_norm))
+            if abs(dot - 1.0) < 1e-6:
+                rot_mat = np.eye(3, dtype=np.float32)
+            elif abs(dot + 1.0) < 1e-6:
+                rot_mat = np.diag([1.0, -1.0, -1.0]).astype(np.float32)
+            else:
+                k = np.cross(z, v_norm)
+                k_len = float(np.linalg.norm(k))
+                k = k / k_len
+                c = dot
+                s = k_len
+                skew_k = np.array([
+                    [0.0, -k[2], k[1]],
+                    [k[2], 0.0, -k[0]],
+                    [-k[1], k[0], 0.0]
+                ], dtype=np.float32)
+                rot_mat = np.eye(3, dtype=np.float32) + s * skew_k + (1.0 - c) * (skew_k @ skew_k)
+
+            trans_mat = np.zeros((3, 4), dtype=np.float32)
+            trans_mat[:3, :3] = rot_mat
+            trans_mat[:3, 3] = p0
+
+            cyl_m = m.Manifold.cylinder(length, radius, radius, 32).transform(trans_mat)
+            seg_solid = Solid(cyl_m, f"seg_{i}")
+
+            sph_m = m.Manifold.sphere(radius, 32).translate(list(p0))
+            sph_solid = Solid(sph_m, f"joint_{i}")
+
+            if solid_total is None:
+                solid_total = seg_solid.union(sph_solid)
+            else:
+                solid_total = solid_total.union(seg_solid).union(sph_solid)
+
+        last_sph = Solid(m.Manifold.sphere(radius, 32).translate(list(pts[-1])), "joint_end")
+        if solid_total is None:
+            return last_sph
+        solid_total = solid_total.union(last_sph)
+        solid_total.name = name
+        return solid_total

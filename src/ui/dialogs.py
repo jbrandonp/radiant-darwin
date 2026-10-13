@@ -300,12 +300,12 @@ class RevolveDialog(QDialog):
 
 
 class HoleDialog(QDialog):
-    """Dialogue de création de perçage paramétrique."""
+    """Dialogue de création de perçage paramétrique (Simple, Lamage, Fraisage)."""
 
     def __init__(self, existing_bodies: List[str], parent: Optional[QDialog] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Perçage (Hole Tool)")
-        self.setFixedSize(300, 220)
+        self.setWindowTitle("Perçage Avancé (Hole Tool)")
+        self.setFixedSize(320, 360)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -314,6 +314,12 @@ class HoleDialog(QDialog):
         for b_id in existing_bodies:
             self.combo_target.addItem(b_id, b_id)
         form.addRow("Corps Cible :", self.combo_target)
+
+        self.combo_type = QComboBox()
+        self.combo_type.addItem("Simple", "simple")
+        self.combo_type.addItem("Lamage (Counterbore)", "counterbore")
+        self.combo_type.addItem("Fraisage (Countersink)", "countersink")
+        form.addRow("Type de Perçage :", self.combo_type)
 
         self.spin_x = QDoubleSpinBox()
         self.spin_x.setRange(-5000.0, 5000.0)
@@ -339,6 +345,32 @@ class HoleDialog(QDialog):
         self.spin_depth.setSuffix(" mm")
         form.addRow("Profondeur :", self.spin_depth)
 
+        # Lamage (Counterbore)
+        self.spin_cbore_dia = QDoubleSpinBox()
+        self.spin_cbore_dia.setRange(0.5, 1000.0)
+        self.spin_cbore_dia.setValue(10.0)
+        self.spin_cbore_dia.setSuffix(" mm")
+        form.addRow("Ø Lamage :", self.spin_cbore_dia)
+
+        self.spin_cbore_depth = QDoubleSpinBox()
+        self.spin_cbore_depth.setRange(0.1, 1000.0)
+        self.spin_cbore_depth.setValue(5.0)
+        self.spin_cbore_depth.setSuffix(" mm")
+        form.addRow("Prof. Lamage :", self.spin_cbore_depth)
+
+        # Fraisage (Countersink)
+        self.spin_csink_dia = QDoubleSpinBox()
+        self.spin_csink_dia.setRange(0.5, 1000.0)
+        self.spin_csink_dia.setValue(12.0)
+        self.spin_csink_dia.setSuffix(" mm")
+        form.addRow("Ø Fraisage :", self.spin_csink_dia)
+
+        self.spin_csink_angle = QDoubleSpinBox()
+        self.spin_csink_angle.setRange(10.0, 180.0)
+        self.spin_csink_angle.setValue(90.0)
+        self.spin_csink_angle.setSuffix(" °")
+        form.addRow("Angle Fraisage :", self.spin_csink_angle)
+
         layout.addLayout(form)
 
         btns = QHBoxLayout()
@@ -350,8 +382,20 @@ class HoleDialog(QDialog):
         btns.addWidget(btn_ok)
         layout.addLayout(btns)
 
-    def get_values(self) -> Tuple[str, float, float, float, float]:
-        return (self.combo_target.currentData(), self.spin_x.value(), self.spin_y.value(), self.spin_dia.value(), self.spin_depth.value())
+    def get_values(self) -> Tuple[str, float, float, float, float, str, float, float, float, float]:
+        hole_type = str(self.combo_type.currentData())
+        return (
+            str(self.combo_target.currentData()),
+            self.spin_x.value(),
+            self.spin_y.value(),
+            self.spin_dia.value(),
+            self.spin_depth.value(),
+            hole_type,
+            self.spin_cbore_dia.value(),
+            self.spin_cbore_depth.value(),
+            self.spin_csink_dia.value(),
+            self.spin_csink_angle.value()
+        )
 
 
 class ShellDialog(QDialog):
@@ -1418,6 +1462,166 @@ class CreateTorusDialog(QDialog):
             "major_radius": self.spin_r_maj.value(),
             "minor_radius": self.spin_r_min.value(),
             "segments": 36,
+            "operation": ops[self.combo_op.currentIndex()],
+            "target_body_id": None if target == "Aucun corps" else target
+        }
+
+
+class CreateWedgeDialog(QDialog):
+    """Dialogue de création d'un coin (Wedge) paramétrique FreeCAD."""
+
+    def __init__(self, existing_bodies: List[str], parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Créer un Coin (Wedge)")
+        self.setFixedSize(320, 290)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.spin_dx = QDoubleSpinBox()
+        self.spin_dx.setRange(0.1, 5000.0)
+        self.spin_dx.setValue(30.0)
+        self.spin_dx.setSuffix(" mm")
+        form.addRow("Largeur Base (dx) :", self.spin_dx)
+
+        self.spin_dy = QDoubleSpinBox()
+        self.spin_dy.setRange(0.1, 5000.0)
+        self.spin_dy.setValue(20.0)
+        self.spin_dy.setSuffix(" mm")
+        form.addRow("Longueur Base (dy) :", self.spin_dy)
+
+        self.spin_dz = QDoubleSpinBox()
+        self.spin_dz.setRange(0.1, 5000.0)
+        self.spin_dz.setValue(15.0)
+        self.spin_dz.setSuffix(" mm")
+        form.addRow("Hauteur (dz) :", self.spin_dz)
+
+        self.spin_dx_top = QDoubleSpinBox()
+        self.spin_dx_top.setRange(0.0, 5000.0)
+        self.spin_dx_top.setValue(0.0)
+        self.spin_dx_top.setSuffix(" mm")
+        form.addRow("Largeur Sommet (dx_top) :", self.spin_dx_top)
+
+        self.spin_dy_top = QDoubleSpinBox()
+        self.spin_dy_top.setRange(0.0, 5000.0)
+        self.spin_dy_top.setValue(20.0)
+        self.spin_dy_top.setSuffix(" mm")
+        form.addRow("Longueur Sommet (dy_top) :", self.spin_dy_top)
+
+        self.combo_op = QComboBox()
+        self.combo_op.addItems(["Nouveau Corps", "Joindre (Union)", "Couper (Différence)", "Intersection"])
+        form.addRow("Opération Booléenne :", self.combo_op)
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Créer le Coin")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[float, BooleanOperation, Optional[str]]]:
+        ops = [
+            BooleanOperation.NEW_BODY,
+            BooleanOperation.JOIN,
+            BooleanOperation.CUT,
+            BooleanOperation.INTERSECT
+        ]
+        target = self.combo_target.currentText()
+        return {
+            "dx": self.spin_dx.value(),
+            "dy": self.spin_dy.value(),
+            "dz": self.spin_dz.value(),
+            "dx_top": self.spin_dx_top.value(),
+            "dy_top": self.spin_dy_top.value(),
+            "operation": ops[self.combo_op.currentIndex()],
+            "target_body_id": None if target == "Aucun corps" else target
+        }
+
+
+class CreatePipeDialog(QDialog):
+    """Dialogue de création d'un tuyau 3D (Pipe Feature) paramétrique FreeCAD."""
+
+    def __init__(self, existing_bodies: List[str], parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Créer un Tuyau 3D (Pipe)")
+        self.setFixedSize(340, 270)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.spin_outer_r = QDoubleSpinBox()
+        self.spin_outer_r.setRange(0.2, 500.0)
+        self.spin_outer_r.setValue(6.0)
+        self.spin_outer_r.setSuffix(" mm")
+        form.addRow("Rayon Extérieur :", self.spin_outer_r)
+
+        self.chk_hollow = QCheckBox("Tuyau Creux (Hollow)")
+        self.chk_hollow.setChecked(True)
+        form.addRow("", self.chk_hollow)
+
+        self.spin_inner_r = QDoubleSpinBox()
+        self.spin_inner_r.setRange(0.1, 500.0)
+        self.spin_inner_r.setValue(4.0)
+        self.spin_inner_r.setSuffix(" mm")
+        form.addRow("Rayon Intérieur :", self.spin_inner_r)
+
+        self.combo_path = QComboBox()
+        self.combo_path.addItem("Coude en L (0,0,0 -> 0,0,50 -> 40,0,50)", 0)
+        self.combo_path.addItem("Double Coude en S (0,0,0 -> 0,0,30 -> 30,0,30 -> 30,40,30)", 1)
+        self.combo_path.addItem("Segment Droit (0,0,0 -> 0,0,60)", 2)
+        form.addRow("Trajectoire 3D :", self.combo_path)
+
+        self.combo_op = QComboBox()
+        self.combo_op.addItems(["Nouveau Corps", "Joindre (Union)", "Couper (Différence)", "Intersection"])
+        form.addRow("Opération Booléenne :", self.combo_op)
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Créer le Tuyau")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[float, List[Tuple[float, float, float]], BooleanOperation, Optional[str], Optional[float]]]:
+        ops = [
+            BooleanOperation.NEW_BODY,
+            BooleanOperation.JOIN,
+            BooleanOperation.CUT,
+            BooleanOperation.INTERSECT
+        ]
+        target = self.combo_target.currentText()
+        path_idx = int(self.combo_path.currentData())
+        if path_idx == 0:
+            path_pts: List[Tuple[float, float, float]] = [(0.0, 0.0, 0.0), (0.0, 0.0, 50.0), (40.0, 0.0, 50.0)]
+        elif path_idx == 1:
+            path_pts = [(0.0, 0.0, 0.0), (0.0, 0.0, 30.0), (30.0, 0.0, 30.0), (30.0, 40.0, 30.0)]
+        else:
+            path_pts = [(0.0, 0.0, 0.0), (0.0, 0.0, 60.0)]
+
+        inner_rad: Optional[float] = self.spin_inner_r.value() if self.chk_hollow.isChecked() else None
+        if inner_rad is not None and inner_rad >= self.spin_outer_r.value():
+            inner_rad = None
+
+        return {
+            "outer_radius": self.spin_outer_r.value(),
+            "inner_radius": inner_rad,
+            "path_points": path_pts,
             "operation": ops[self.combo_op.currentIndex()],
             "target_body_id": None if target == "Aucun corps" else target
         }

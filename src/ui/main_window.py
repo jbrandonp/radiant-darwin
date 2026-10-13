@@ -20,14 +20,14 @@ from src.core.sketch import Sketch2D
 from src.core.geometry import Solid
 from src.core.feature import (
     BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature,
-    ConeFeature, TorusFeature
+    ConeFeature, TorusFeature, WedgeFeature
 )
 from src.core.fasteners import FastenerFeature
 from src.core.section_tools import slice_solid_contours, create_sketch_from_cross_section
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature,
-    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature
+    LoftFeature, SweepFeature, PipeFeature, FilletFeature, ChamferFeature, DraftFeature
 )
 from src.core.exporter import CADExporter
 from src.core.serializer import ProjectSerializer
@@ -53,7 +53,8 @@ from src.ui.dialogs import (
     CombineDialog, FEADialog, ParametersDialog, SheetMetalDialog,
     RenderDialog, LoftDialog, SweepDialog, FilletDialog,
     ChamferDialog, DraftDialog, MeasureDialog, MeshAnalysisDialog,
-    CreateConeDialog, CreateTorusDialog, FastenerDialog, SectionCutDialog
+    CreateConeDialog, CreateTorusDialog, CreateWedgeDialog, CreatePipeDialog,
+    FastenerDialog, SectionCutDialog
 )
 from src.ui.theme import FUSION_DARK_STYLESHEET
 
@@ -170,6 +171,8 @@ class CADMainWindow(QMainWindow):
         self.ribbon.create_sphere_requested.connect(self._on_action_create_sphere)
         self.ribbon.create_cone_requested.connect(self._on_action_create_cone)
         self.ribbon.create_torus_requested.connect(self._on_action_create_torus)
+        self.ribbon.create_wedge_requested.connect(self._on_action_create_wedge)
+        self.ribbon.create_pipe_requested.connect(self._on_action_create_pipe)
         self.ribbon.extrude_requested.connect(self._on_action_extrude)
         self.ribbon.revolve_requested.connect(self._on_action_revolve)
         self.ribbon.loft_requested.connect(self._on_action_loft)
@@ -198,6 +201,9 @@ class CADMainWindow(QMainWindow):
         self.ribbon.new_sketch_yz_requested.connect(lambda: self._create_sketch(PlaneType.YZ))
         self.ribbon.add_sketch_rect_requested.connect(self._add_rect_to_active_sketch)
         self.ribbon.add_sketch_circle_requested.connect(self._add_circle_to_active_sketch)
+        self.ribbon.add_sketch_slot_requested.connect(self._add_slot_to_active_sketch)
+        self.ribbon.add_sketch_polygon_requested.connect(self._add_polygon_to_active_sketch)
+        self.ribbon.add_sketch_ellipse_requested.connect(self._add_ellipse_to_active_sketch)
         self.ribbon.solve_constraints_requested.connect(self._on_action_solve_constraints)
         self.ribbon.toggle_sketch_mode_requested.connect(self._on_toggle_sketch_mode)
 
@@ -490,6 +496,48 @@ class CADMainWindow(QMainWindow):
             )
             self.document.add_feature(feat)
 
+    def _on_action_create_wedge(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        dlg = CreateWedgeDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            op = vals["operation"]
+            tgt = vals["target_body_id"]
+            feat = WedgeFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Coin {self._feature_seq}",
+                dx=float(vals["dx"]),
+                dy=float(vals["dy"]),
+                dz=float(vals["dz"]),
+                dx_top=float(vals["dx_top"]),
+                dy_top=float(vals["dy_top"]),
+                operation=op if isinstance(op, BooleanOperation) else BooleanOperation.NEW_BODY,
+                target_body_id=str(tgt) if tgt is not None else None
+            )
+            self.document.add_feature(feat)
+
+    def _on_action_create_pipe(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        dlg = CreatePipeDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            op = vals["operation"]
+            tgt = vals["target_body_id"]
+            inner_r = vals["inner_radius"]
+            path_pts = vals["path_points"]
+            feat = PipeFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Tuyau 3D {self._feature_seq}",
+                path_points=path_pts if isinstance(path_pts, list) else [(0.0, 0.0, 0.0), (0.0, 0.0, 50.0)],
+                outer_radius=float(vals["outer_radius"]),
+                inner_radius=float(inner_r) if inner_r is not None else None,
+                operation=op if isinstance(op, BooleanOperation) else BooleanOperation.NEW_BODY,
+                target_body_id=str(tgt) if tgt is not None else None
+            )
+            self.document.add_feature(feat)
+
     def _on_action_extrude(self) -> None:
         if not self.document.sketches:
             QMessageBox.information(self, "Extrusion", "Créez d'abord une esquisse 2D.")
@@ -523,9 +571,23 @@ class CADMainWindow(QMainWindow):
             return
         dlg = HoleDialog(bodies, self)
         if dlg.exec():
-            target, px, py, dia, dep = dlg.get_values()
+            target, px, py, dia, dep, h_type, cb_d, cb_h, cs_d, cs_a = dlg.get_values()
             self._feature_seq += 1
-            feat = HoleFeature(f"feat_{self._feature_seq}", f"Perçage Ø{dia}mm", target, px, py, dia, dep)
+            type_label = "Perçage" if h_type == "simple" else ("Lamage" if h_type == "counterbore" else "Fraisage")
+            feat = HoleFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"{type_label} Ø{dia}mm",
+                target_body_id=target,
+                x=px,
+                y=py,
+                diameter=dia,
+                depth=dep,
+                hole_type=h_type,
+                cbore_dia=cb_d,
+                cbore_depth=cb_h,
+                csink_dia=cs_d,
+                csink_angle=cs_a
+            )
             self.document.add_feature(feat)
 
     def _on_action_shell(self) -> None:
@@ -758,6 +820,30 @@ class CADMainWindow(QMainWindow):
             return
         last_sketch = list(self.document.sketches.values())[-1]
         last_sketch.add_circle(Point2D(0.0, 0.0), 10.0)
+        self.document.rebuild()
+
+    def _add_slot_to_active_sketch(self) -> None:
+        if not self.document.sketches:
+            self._create_sketch(PlaneType.XY)
+            return
+        last_sketch = list(self.document.sketches.values())[-1]
+        last_sketch.add_slot(Point2D(-15.0, 0.0), Point2D(15.0, 0.0), 6.0)
+        self.document.rebuild()
+
+    def _add_polygon_to_active_sketch(self) -> None:
+        if not self.document.sketches:
+            self._create_sketch(PlaneType.XY)
+            return
+        last_sketch = list(self.document.sketches.values())[-1]
+        last_sketch.add_regular_polygon(Point2D(0.0, 0.0), 15.0, 6)
+        self.document.rebuild()
+
+    def _add_ellipse_to_active_sketch(self) -> None:
+        if not self.document.sketches:
+            self._create_sketch(PlaneType.XY)
+            return
+        last_sketch = list(self.document.sketches.values())[-1]
+        last_sketch.add_ellipse(Point2D(0.0, 0.0), 20.0, 10.0)
         self.document.rebuild()
 
     def _on_action_solve_constraints(self) -> None:

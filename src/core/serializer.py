@@ -17,11 +17,11 @@ from src.core.types import PlaneType, BooleanOperation, Point2D
 from src.core.sketch import Sketch2D
 from src.core.feature import (
     Feature, BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature,
-    ConeFeature, TorusFeature
+    ConeFeature, TorusFeature, WedgeFeature
 )
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
-    MirrorFeature, HoleFeature, ShellFeature,
+    MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
     LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature
 )
 from src.core.fasteners import FastenerFeature
@@ -105,6 +105,10 @@ class ProjectSerializer:
                 f_dict["join_bodies"] = getattr(feat, "join_bodies")
             if hasattr(feat, "join_with_source"):
                 f_dict["join_with_source"] = getattr(feat, "join_with_source")
+            if hasattr(feat, "hole_type"):
+                f_dict["hole_type"] = getattr(feat, "hole_type")
+            if hasattr(feat, "path_points"):
+                f_dict["path_points"] = getattr(feat, "path_points")
 
             data["features"].append(f_dict)
 
@@ -212,7 +216,12 @@ class ProjectSerializer:
                         py = float(params.get("pos_y", 0.0))
                         dia = float(params.get("diameter", 6.0))
                         dep = float(params.get("depth", 30.0))
-                        feat = HoleFeature(f_id, f_name, target_id or "", px, py, dia, dep)
+                        htype = str(f_data.get("hole_type", "simple"))
+                        cbdia = float(params.get("cbore_dia", 10.0))
+                        cbdep = float(params.get("cbore_depth", 6.0))
+                        csdia = float(params.get("csink_dia", 12.0))
+                        csang = float(params.get("csink_angle", 90.0))
+                        feat = HoleFeature(f_id, f_name, target_id or "", px, py, dia, dep, 36, htype, cbdia, cbdep, csdia, csang)
 
                     elif f_cls == "ShellFeature":
                         thick = float(params.get("wall_thickness", 2.0))
@@ -300,6 +309,27 @@ class ProjectSerializer:
                         size = str(f_data.get("standard_size", "M6"))
                         length = float(params.get("length", 30.0))
                         feat = FastenerFeature(f_id, f_name, ftype, size, length, op, target_id)
+
+                    elif f_cls == "WedgeFeature":
+                        dx = float(params.get("dx", 30.0))
+                        dy = float(params.get("dy", 20.0))
+                        dz = float(params.get("dz", 15.0))
+                        dx_top = float(params.get("dx_top", 0.0))
+                        dy_top = float(params.get("dy_top", 0.0))
+                        feat = WedgeFeature(f_id, f_name, dx, dy, dz, dx_top, dy_top, op, target_id)
+
+                    elif f_cls == "PipeFeature":
+                        raw_pts = f_data.get("path_points")
+                        pts_list: List[Tuple[float, float, float]] = []
+                        if isinstance(raw_pts, list):
+                            for p in raw_pts:
+                                if isinstance(p, (list, tuple)) and len(p) >= 3:
+                                    pts_list.append((float(p[0]), float(p[1]), float(p[2])))
+                        if not pts_list:
+                            pts_list = [(0.0, 0.0, 0.0), (50.0, 0.0, 0.0), (50.0, 50.0, 0.0)]
+                        r_out = float(params.get("outer_radius", 6.0))
+                        r_in = float(params.get("inner_radius", 0.0))
+                        feat = PipeFeature(f_id, f_name, pts_list, r_out, r_in, op, target_id)
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

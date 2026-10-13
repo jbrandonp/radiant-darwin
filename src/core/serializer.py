@@ -19,6 +19,7 @@ from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature
 )
+from src.sheetmetal.sheet_metal import SheetMetalFeature
 
 
 class ProjectSerializer:
@@ -167,6 +168,15 @@ class ProjectSerializer:
             elif f_cls == "BooleanFeature":
                 tool_id = f_data.get("tool_body_id", "")
                 feat = BooleanFeature(f_id, f_name, target_id or "", tool_id, op)
+
+            elif f_cls == "SheetMetalFeature":
+                bw = params.get("base_width", 60.0)
+                bl = params.get("base_length", 80.0)
+                th = params.get("thickness", 2.0)
+                br = params.get("bend_radius", 2.0)
+                fl = params.get("flange_length", 25.0)
+                kf = params.get("k_factor", 0.44)
+                feat = SheetMetalFeature(f_id, f_name, bw, bl, th, br, fl, kf, target_id)
 
             if feat:
                 feat.is_suppressed = f_data.get("is_suppressed", False)

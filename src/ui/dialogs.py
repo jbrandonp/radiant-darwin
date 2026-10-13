@@ -1,19 +1,20 @@
 """
-Boîtes de dialogue modales pour la création de solides et d'opérations CAO.
-Permet à l'utilisateur de saisir les dimensions et l'opération booléenne (New Body, Join, Cut).
+Boîtes de dialogue modales pour la création de solides, tôlerie et paramètres fx.
+Permet à l'utilisateur de configurer les dimensions, opérations et expressions paramétriques.
 """
 
 from __future__ import annotations
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout,
-    QDoubleSpinBox, QSpinBox, QComboBox, QPushButton, QLabel, QCheckBox
+    QDoubleSpinBox, QComboBox, QPushButton, QLabel, QCheckBox,
+    QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit
 )
 from PySide6.QtCore import Qt
 
 from src.core.types import BooleanOperation, PlaneType, Vector3D
+from src.core.parameters import ParameterTable
 from src.materials.material_db import MATERIAL_LIBRARY, PhysicalMaterial
-from src.assembly.assembly_manager import JointType
 
 
 class CreateBoxDialog(QDialog):
@@ -341,13 +342,7 @@ class HoleDialog(QDialog):
         layout.addLayout(btns)
 
     def get_values(self) -> Tuple[str, float, float, float, float]:
-        return (
-            self.combo_target.currentData(),
-            self.spin_x.value(),
-            self.spin_y.value(),
-            self.spin_dia.value(),
-            self.spin_depth.value()
-        )
+        return (self.combo_target.currentData(), self.spin_x.value(), self.spin_y.value(), self.spin_dia.value(), self.spin_depth.value())
 
 
 class ShellDialog(QDialog):
@@ -469,3 +464,127 @@ class FEADialog(QDialog):
 
     def get_values(self) -> Tuple[str, str, float]:
         return (self.combo_target.currentData(), self.combo_mat.currentData(), self.spin_force.value())
+
+
+class ParametersDialog(QDialog):
+    """Dialogue de gestion des paramètres et équations globales fx style Fusion 360."""
+
+    def __init__(self, param_table: ParameterTable, parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Paramètres Utilisateur (fx)")
+        self.resize(520, 360)
+        self.param_table = param_table
+
+        layout = QVBoxLayout(self)
+
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Nom", "Expression", "Valeur (mm)", "Commentaire"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table)
+
+        # Remplir la table existante
+        self._populate_table()
+
+        # Ligne d'ajout de paramètre
+        add_box = QHBoxLayout()
+        self.input_name = QLineEdit()
+        self.input_name.setPlaceholderText("Nom (ex: epaisseur)")
+        self.input_expr = QLineEdit()
+        self.input_expr.setPlaceholderText("Expression (ex: 2.5 * 2)")
+        btn_add = QPushButton("Ajouter fx")
+        btn_add.clicked.connect(self._on_add_param)
+        add_box.addWidget(self.input_name)
+        add_box.addWidget(self.input_expr)
+        add_box.addWidget(btn_add)
+        layout.addLayout(add_box)
+
+        # Boutons
+        btns = QHBoxLayout()
+        btn_close = QPushButton("Fermer")
+        btn_close.clicked.connect(self.accept)
+        btns.addStretch(1)
+        btns.addWidget(btn_close)
+        layout.addLayout(btns)
+
+    def _populate_table(self) -> None:
+        """Remplit le tableau avec les paramètres actuels."""
+        self.table.setRowCount(0)
+        for name, p in self.param_table.parameters.items():
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            self.table.setItem(r, 0, QTableWidgetItem(p.name))
+            self.table.setItem(r, 1, QTableWidgetItem(p.expression))
+            self.table.setItem(r, 2, QTableWidgetItem(f"{p.value:.3f}"))
+            self.table.setItem(r, 3, QTableWidgetItem(p.comment))
+
+    def _on_add_param(self) -> None:
+        """Ajoute et évalue un nouveau paramètre."""
+        name = self.input_name.text().strip()
+        expr = self.input_expr.text().strip()
+        if name and expr:
+            self.param_table.set_parameter(name, expr)
+            self._populate_table()
+            self.input_name.clear()
+            self.input_expr.clear()
+
+
+class SheetMetalDialog(QDialog):
+    """Dialogue de création d'une pièce de tôlerie avec rebord plié."""
+
+    def __init__(self, parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Tôlerie Industrielle (Sheet Metal)")
+        self.setFixedSize(320, 260)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.spin_w = QDoubleSpinBox()
+        self.spin_w.setRange(5.0, 5000.0)
+        self.spin_w.setValue(60.0)
+        self.spin_w.setSuffix(" mm")
+        form.addRow("Largeur Tôle :", self.spin_w)
+
+        self.spin_l = QDoubleSpinBox()
+        self.spin_l.setRange(5.0, 5000.0)
+        self.spin_l.setValue(80.0)
+        self.spin_l.setSuffix(" mm")
+        form.addRow("Longueur Tôle :", self.spin_l)
+
+        self.spin_t = QDoubleSpinBox()
+        self.spin_t.setRange(0.5, 10.0)
+        self.spin_t.setValue(2.0)
+        self.spin_t.setSuffix(" mm")
+        form.addRow("Épaisseur (t) :", self.spin_t)
+
+        self.spin_r = QDoubleSpinBox()
+        self.spin_r.setRange(0.5, 10.0)
+        self.spin_r.setValue(2.0)
+        self.spin_r.setSuffix(" mm")
+        form.addRow("Rayon de pliage (R) :", self.spin_r)
+
+        self.spin_flange = QDoubleSpinBox()
+        self.spin_flange.setRange(5.0, 500.0)
+        self.spin_flange.setValue(25.0)
+        self.spin_flange.setSuffix(" mm")
+        form.addRow("Hauteur Rebord Plié :", self.spin_flange)
+
+        layout.addLayout(form)
+
+        btns = QHBoxLayout()
+        btn_ok = QPushButton("Créer la Tôle")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_ok)
+        layout.addLayout(btns)
+
+    def get_values(self) -> Tuple[float, float, float, float, float]:
+        return (
+            self.spin_w.value(),
+            self.spin_l.value(),
+            self.spin_t.value(),
+            self.spin_r.value(),
+            self.spin_flange.value()
+        )

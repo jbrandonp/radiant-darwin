@@ -24,6 +24,7 @@ from src.core.operations_advanced import (
 )
 from src.core.exporter import CADExporter
 from src.core.serializer import ProjectSerializer
+from src.core.parameters import ParameterTable
 from src.solver.constraints_2d import SketchConstraintSolver2D
 from src.materials.material_db import MATERIAL_LIBRARY, MaterialCalculator
 from src.fea.fea_solver import FEASimulator
@@ -31,6 +32,8 @@ from src.cam.cam_engine import CAMEngine, ToolpathOperation
 from src.assembly.assembly_manager import AssemblyManager, JointType
 from src.drawing.drawing_generator import TechnicalDrawingGenerator, TechnicalSheet
 from src.drawing.svg_exporter import SVGDrawingExporter
+from src.sheetmetal.sheet_metal import SheetMetalPart, SheetMetalRule, FlatPattern, SheetMetalFeature
+from src.sheetmetal.dxf_exporter import DXFExporter
 from src.viewport.viewport_widget import CADViewportWidget
 from src.viewport.sketch_mode import ViewportSketchController
 from src.ui.ribbon import CADRibbonBar
@@ -40,7 +43,7 @@ from src.ui.properties_panel import CADPropertiesPanel
 from src.ui.dialogs import (
     CreateBoxDialog, CreateCylinderDialog, CreateSphereDialog,
     ExtrudeDialog, RevolveDialog, HoleDialog, ShellDialog,
-    CombineDialog, FEADialog
+    CombineDialog, FEADialog, ParametersDialog, SheetMetalDialog
 )
 from src.ui.theme import FUSION_DARK_STYLESHEET
 
@@ -56,12 +59,16 @@ class CADMainWindow(QMainWindow):
 
         # Modèle de données central
         self.document = CADDocument("Projet Mécanique 1")
+        self.param_table = ParameterTable()
+        self._init_default_parameters()
         self.cam_engine = CAMEngine()
         self.cam_operations: List[ToolpathOperation] = []
         self.assembly_mgr = AssemblyManager()
         self.drawing_gen = TechnicalDrawingGenerator()
         self.sketch_ctrl = ViewportSketchController()
         self.active_sheet: Optional[TechnicalSheet] = None
+        self.active_sheet_metal: Optional[SheetMetalPart] = None
+        self.active_flat_pattern: Optional[FlatPattern] = None
         self._feature_seq = 0
         self._sketch_seq = 0
 
@@ -71,6 +78,14 @@ class CADMainWindow(QMainWindow):
 
         # Composant initial élégant
         self._create_initial_sample()
+
+    def _init_default_parameters(self) -> None:
+        """Initialise les équations et paramètres globaux par défaut."""
+        self.param_table.set_parameter("epaisseur_tole", "2.0", "mm", "Épaisseur nominale tôle")
+        self.param_table.set_parameter("largeur_base", "60.0", "mm", "Largeur platine de base")
+        self.param_table.set_parameter("longueur_base", "80.0", "mm", "Longueur platine de base")
+        self.param_table.set_parameter("rayon_pliage", "2.0", "mm", "Rayon intérieur de pliage")
+        self.param_table.set_parameter("rebord_hauteur", "25.0", "mm", "Hauteur du rebord plié")
 
     def _setup_ui(self) -> None:
         """Organise l'agencement des panneaux et widgets."""
@@ -118,6 +133,7 @@ class CADMainWindow(QMainWindow):
         # Fichier
         self.ribbon.save_project_requested.connect(self._on_save_project)
         self.ribbon.load_project_requested.connect(self._on_load_project)
+        self.ribbon.manage_parameters_requested.connect(self._on_action_manage_parameters)
 
         # Solide
         self.ribbon.create_box_requested.connect(self._on_action_create_box)
@@ -138,6 +154,11 @@ class CADMainWindow(QMainWindow):
         self.ribbon.add_sketch_circle_requested.connect(self._add_circle_to_active_sketch)
         self.ribbon.solve_constraints_requested.connect(self._on_action_solve_constraints)
         self.ribbon.toggle_sketch_mode_requested.connect(self._on_toggle_sketch_mode)
+
+        # Tôlerie Industrielle
+        self.ribbon.create_sheet_metal_requested.connect(self._on_action_create_sheet_metal)
+        self.ribbon.flat_pattern_requested.connect(self._on_action_flat_pattern)
+        self.ribbon.export_dxf_laser_requested.connect(self._on_action_export_dxf_laser)
 
         # Assemblage
         self.ribbon.add_joint_requested.connect(self._on_action_add_joint)
@@ -220,6 +241,90 @@ class CADMainWindow(QMainWindow):
                 self.timeline.refresh()
                 self.browser.refresh()
                 QMessageBox.information(self, "Projet Ouvert", f"Projet chargé avec succès :\n{new_doc.name} ({len(new_doc.features)} opérations)")
+
+    # --- Paramètres Utilisateur fx ---
+    def _on_action_manage_parameters(self) -> None:
+        """Ouvre la boîte de dialogue de gestion des paramètres et formules globales."""
+        dlg = ParametersDialog(self.param_table, self)
+        dlg.exec()
+        self.status_bar.showMessage("Table des paramètres fx mise à jour", 3000)
+
+    # --- Tôlerie Industrielle (Sheet Metal) ---
+    def _on_action_create_sheet_metal(self) -> None:
+        """Crée une pièce de tôlerie avec rebord plié et l'ajoute à la timeline."""
+        dlg = SheetMetalDialog(self)
+        if dlg.exec():
+            w, l, t, r, flange = dlg.get_values()
+            self._feature_seq += 1
+            feat = SheetMetalFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Tôlerie {self._feature_seq}",
+                base_width=w,
+                base_length=l,
+                thickness=t,
+                bend_radius=r,
+                flange_length=flange,
+                k_factor=0.44
+            )
+            self.document.add_feature(feat)
+            self.active_sheet_metal = feat.get_sheet_metal_part()
+            self.active_flat_pattern = self.active_sheet_metal.generate_flat_pattern()
+            self.status_bar.showMessage(f"Pièce de tôlerie créée : {w}x{l} mm (t={t} mm)", 4000)
+            QMessageBox.information(
+                self, "Tôlerie Créée",
+                f"Pièce de tôlerie générée avec succès !\n"
+                f"• Base : {w:.1f} x {l:.1f} mm\n"
+                f"• Épaisseur : {t:.1f} mm, Rayon : {r:.1f} mm\n"
+                f"• Rebord : {flange:.1f} mm (90°)\n"
+                f"• Facteur K : 0.44 (Acier standard)"
+            )
+
+    def _on_action_flat_pattern(self) -> None:
+        """Calcule et affiche les dimensions du flan de tôle déplié à plat."""
+        if not self.active_sheet_metal:
+            for feat in self.document.features:
+                if isinstance(feat, SheetMetalFeature):
+                    self.active_sheet_metal = feat.get_sheet_metal_part()
+                    break
+
+        if not self.active_sheet_metal:
+            QMessageBox.information(self, "Mise à Plat", "Veuillez d'abord créer une pièce de tôlerie.")
+            return
+
+        self.active_flat_pattern = self.active_sheet_metal.generate_flat_pattern()
+        fp = self.active_flat_pattern
+        bend = self.active_sheet_metal.bends[0] if self.active_sheet_metal.bends else None
+        bd_str = f"{bend.bend_deduction_mm:.2f} mm" if bend else "0.0 mm"
+        ba_str = f"{bend.bend_allowance_mm:.2f} mm" if bend else "0.0 mm"
+
+        QMessageBox.information(
+            self, "Flan Déplié à Plat (Flat Pattern)",
+            f"Calcul du déplié terminé selon la fibre neutre (K-Factor = {self.active_sheet_metal.rule.k_factor}) :\n\n"
+            f"• Longueur développée totale : {fp.total_length_mm:.2f} mm\n"
+            f"• Largeur du flan : {fp.total_width_mm:.2f} mm\n"
+            f"• Épaisseur : {fp.thickness_mm:.2f} mm\n"
+            f"• Déduction de pliage (BD) : {bd_str}\n"
+            f"• Développement du pli (BA) : {ba_str}\n"
+            f"• Nombre d'axes de pliage : {len(fp.bend_centerlines)}\n\n"
+            f"Prêt pour découpe laser CNC (Format DXF) !"
+        )
+
+    def _on_action_export_dxf_laser(self) -> None:
+        """Exporte le flan déplié en fichier AutoCAD DXF (calques CUT et BEND)."""
+        if not self.active_flat_pattern:
+            self._on_action_flat_pattern()
+        if not self.active_flat_pattern:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "Exporter le Patron Déplié Laser", "", "AutoCAD DXF (*.dxf)")
+        if path:
+            DXFExporter.export_flat_pattern_dxf(self.active_flat_pattern, path)
+            QMessageBox.information(
+                self, "Exportation Laser DXF",
+                f"Fichier DXF généré avec succès :\n{path}\n\n"
+                f"• Calque 'CUT' : Découpe laser extérieure\n"
+                f"• Calque 'BEND' : Axes de pliage pour plieuse CNC"
+            )
 
     # --- Mode Esquisse Interactif ---
     def _on_toggle_sketch_mode(self) -> None:

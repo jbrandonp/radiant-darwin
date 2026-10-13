@@ -13,6 +13,7 @@ from src.core.operations_advanced import (
 from src.core.document import CADDocument
 from src.core.exporter import CADExporter
 from src.core.serializer import ProjectSerializer
+from src.core.parameters import UserParameter, SafeExpressionEvaluator, ParameterTable
 
 __all__ = [
     "Vector3D",
@@ -47,4 +48,7 @@ __all__ = [
     "CADDocument",
     "CADExporter",
     "ProjectSerializer",
+    "UserParameter",
+    "SafeExpressionEvaluator",
+    "ParameterTable",
 ]

@@ -1,6 +1,6 @@
 """
 Ruban d'outils supérieur (Ribbon Bar) inspiré d'Autodesk Fusion 360.
-Organisé en 8 ateliers : CONCEPTION, ESQUISSE, ASSEMBLAGE, SIMULATION, FABRICATION, DESSIN 2D, AFFICHAGE, EXPORT.
+Organisé en 9 ateliers : FICHIER, CONCEPTION, ESQUISSE, TÔLERIE, ASSEMBLAGE, SIMULATION, FABRICATION, DESSIN 2D, AFFICHAGE, EXPORT.
 """
 
 from __future__ import annotations
@@ -77,9 +77,10 @@ def _create_ribbon_group(title: str, buttons: list[QToolButton]) -> QWidget:
 class CADRibbonBar(QTabWidget):
     """Barre de ruban principale avec tous les ateliers de Fusion 360."""
 
-    # Fichier & Projet
+    # Fichier & Paramètres fx
     save_project_requested = Signal()
     load_project_requested = Signal()
+    manage_parameters_requested = Signal()
 
     # Solide
     create_box_requested = Signal()
@@ -100,6 +101,11 @@ class CADRibbonBar(QTabWidget):
     add_sketch_circle_requested = Signal()
     solve_constraints_requested = Signal()
     toggle_sketch_mode_requested = Signal()
+
+    # Tôlerie (Sheet Metal)
+    create_sheet_metal_requested = Signal()
+    flat_pattern_requested = Signal()
+    export_dxf_laser_requested = Signal()
 
     # Assemblage
     add_joint_requested = Signal()
@@ -135,6 +141,7 @@ class CADRibbonBar(QTabWidget):
         self._init_file_group()
         self._init_solid_tab()
         self._init_sketch_tab()
+        self._init_sheet_metal_tab()
         self._init_assembly_tab()
         self._init_simulation_tab()
         self._init_cam_tab()
@@ -143,7 +150,7 @@ class CADRibbonBar(QTabWidget):
         self._init_export_tab()
 
     def _init_file_group(self) -> None:
-        """Onglet PROJET / FICHIER."""
+        """Onglet PROJET & PARAMÈTRES FX."""
         tab = QWidget()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(4, 2, 4, 2)
@@ -154,8 +161,12 @@ class CADRibbonBar(QTabWidget):
         btn_save.clicked.connect(self.save_project_requested.emit)
         btn_open = RibbonButton("Ouvrir", "📂")
         btn_open.clicked.connect(self.load_project_requested.emit)
-
         layout.addWidget(_create_ribbon_group("Fichier Projet", [btn_save, btn_open]))
+
+        btn_fx = RibbonButton("Paramètres fx", "🧮")
+        btn_fx.clicked.connect(self.manage_parameters_requested.emit)
+        layout.addWidget(_create_ribbon_group("Équations", [btn_fx]))
+
         self.addTab(tab, "FICHIER")
 
     def _init_solid_tab(self) -> None:
@@ -220,6 +231,24 @@ class CADRibbonBar(QTabWidget):
         layout.addWidget(_create_ribbon_group("Solveur 2D", [btn_solv]))
 
         self.addTab(tab, "ESQUISSE")
+
+    def _init_sheet_metal_tab(self) -> None:
+        """Onglet TÔLERIE INDUSTRIELLE (SHEET METAL)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_sm = RibbonButton("Tôle Pliée", "📑")
+        btn_sm.clicked.connect(self.create_sheet_metal_requested.emit)
+        btn_flat = RibbonButton("Mise à Plat", "📄")
+        btn_flat.clicked.connect(self.flat_pattern_requested.emit)
+        btn_dxf = RibbonButton("Laser DXF", "⚡")
+        btn_dxf.clicked.connect(self.export_dxf_laser_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Tôlerie & Pliage", [btn_sm, btn_flat, btn_dxf]))
+        self.addTab(tab, "TÔLERIE")
 
     def _init_assembly_tab(self) -> None:
         """Onglet ASSEMBLAGE."""

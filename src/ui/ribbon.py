@@ -1,6 +1,6 @@
 """
 Ruban d'outils supérieur (Ribbon Bar) inspiré d'Autodesk Fusion 360.
-Organisé en onglets thématiques : SOLIDE, ESQUISSE, MODIFIER, EXPORT.
+Organisé en ateliers complets : CONCEPTION SOLIDE, ESQUISSE, ASSEMBLAGE, SIMULATION (FEA), FABRICATION (CAM), EXPORT.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QWidget, QTabWidget, QHBoxLayout, QVBoxLayout,
     QToolButton, QLabel, QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal
 
 
 class RibbonButton(QToolButton):
@@ -49,7 +49,6 @@ def _create_ribbon_group(title: str, buttons: list[QToolButton]) -> QWidget:
     vbox.setContentsMargins(4, 2, 4, 2)
     vbox.setSpacing(2)
 
-    # Ligne des boutons horizontaux
     btn_row = QHBoxLayout()
     btn_row.setContentsMargins(0, 0, 0, 0)
     btn_row.setSpacing(4)
@@ -57,13 +56,11 @@ def _create_ribbon_group(title: str, buttons: list[QToolButton]) -> QWidget:
         btn_row.addWidget(btn)
     vbox.addLayout(btn_row)
 
-    # Libellé de la section
     lbl = QLabel(title.upper())
     lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lbl.setStyleSheet("color: #7b8190; font-size: 9px; font-weight: bold; letter-spacing: 1px;")
     vbox.addWidget(lbl)
 
-    # Séparateur vertical à droite
     wrapper = QWidget()
     h_wrap = QHBoxLayout(wrapper)
     h_wrap.setContentsMargins(0, 0, 0, 0)
@@ -78,24 +75,45 @@ def _create_ribbon_group(title: str, buttons: list[QToolButton]) -> QWidget:
 
 
 class CADRibbonBar(QTabWidget):
-    """Barre de ruban principale avec onglets de fonctionnalités."""
+    """Barre de ruban principale avec tous les ateliers de Fusion 360."""
 
-    # Signaux émis pour les actions CAO
+    # Solide
     create_box_requested = Signal()
     create_cylinder_requested = Signal()
     create_sphere_requested = Signal()
     extrude_requested = Signal()
+    revolve_requested = Signal()
+    hole_requested = Signal()
+    shell_requested = Signal()
+    pattern_requested = Signal()
     combine_requested = Signal()
 
+    # Esquisse
     new_sketch_xy_requested = Signal()
     new_sketch_xz_requested = Signal()
     new_sketch_yz_requested = Signal()
     add_sketch_rect_requested = Signal()
     add_sketch_circle_requested = Signal()
+    solve_constraints_requested = Signal()
 
+    # Assemblage
+    add_joint_requested = Signal()
+    check_interference_requested = Signal()
+
+    # Simulation FEA
+    run_fea_requested = Signal()
+    material_selector_requested = Signal()
+
+    # CAM / Fabrication
+    cam_facing_requested = Signal()
+    cam_contour_requested = Signal()
+    export_gcode_requested = Signal()
+
+    # Affichage
     fit_view_requested = Signal()
     home_view_requested = Signal()
 
+    # Export
     export_stl_requested = Signal()
     export_obj_requested = Signal()
     export_ply_requested = Signal()
@@ -107,102 +125,153 @@ class CADRibbonBar(QTabWidget):
 
         self._init_solid_tab()
         self._init_sketch_tab()
+        self._init_assembly_tab()
+        self._init_simulation_tab()
+        self._init_cam_tab()
         self._init_tools_tab()
         self._init_export_tab()
 
     def _init_solid_tab(self) -> None:
-        """Onglet SOLIDE : Création de primitives, extrusions, booléens."""
+        """Onglet CONCEPTION SOLIDE."""
         tab = QWidget()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         btn_box = RibbonButton("Boîte", "📦")
         btn_box.clicked.connect(self.create_box_requested.emit)
-
         btn_cyl = RibbonButton("Cylindre", "🥫")
         btn_cyl.clicked.connect(self.create_cylinder_requested.emit)
-
         btn_sph = RibbonButton("Sphère", "🔮")
         btn_sph.clicked.connect(self.create_sphere_requested.emit)
-
         btn_ext = RibbonButton("Extrusion", "⬆️")
         btn_ext.clicked.connect(self.extrude_requested.emit)
+        btn_rev = RibbonButton("Révolution", "🔄")
+        btn_rev.clicked.connect(self.revolve_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Créer", [btn_box, btn_cyl, btn_sph, btn_ext]))
+        layout.addWidget(_create_ribbon_group("Créer", [btn_box, btn_cyl, btn_sph, btn_ext, btn_rev]))
 
+        btn_hole = RibbonButton("Perçage", "🕳️")
+        btn_hole.clicked.connect(self.hole_requested.emit)
+        btn_shell = RibbonButton("Évidement", "🐚")
+        btn_shell.clicked.connect(self.shell_requested.emit)
+        btn_pat = RibbonButton("Répétition", "🪞")
+        btn_pat.clicked.connect(self.pattern_requested.emit)
         btn_comb = RibbonButton("Combiner", "🔀")
         btn_comb.clicked.connect(self.combine_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Modifier", [btn_comb]))
-
-        self.addTab(tab, "SOLIDE")
+        layout.addWidget(_create_ribbon_group("Modifier", [btn_hole, btn_shell, btn_pat, btn_comb]))
+        self.addTab(tab, "CONCEPTION")
 
     def _init_sketch_tab(self) -> None:
-        """Onglet ESQUISSE : Choix du plan 2D, formes d'esquisse."""
+        """Onglet ESQUISSE & CONTRAINTES."""
         tab = QWidget()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         btn_xy = RibbonButton("Plan XY", "📐")
         btn_xy.clicked.connect(self.new_sketch_xy_requested.emit)
-
         btn_xz = RibbonButton("Plan XZ", "📐")
         btn_xz.clicked.connect(self.new_sketch_xz_requested.emit)
-
         btn_yz = RibbonButton("Plan YZ", "📐")
         btn_yz.clicked.connect(self.new_sketch_yz_requested.emit)
-
-        layout.addWidget(_create_ribbon_group("Nouveau Plan", [btn_xy, btn_xz, btn_yz]))
+        layout.addWidget(_create_ribbon_group("Plans", [btn_xy, btn_xz, btn_yz]))
 
         btn_rect = RibbonButton("Rectangle", "▭")
         btn_rect.clicked.connect(self.add_sketch_rect_requested.emit)
-
         btn_circ = RibbonButton("Cercle", "◯")
         btn_circ.clicked.connect(self.add_sketch_circle_requested.emit)
+        layout.addWidget(_create_ribbon_group("Dessiner", [btn_rect, btn_circ]))
 
-        layout.addWidget(_create_ribbon_group("Formes 2D", [btn_rect, btn_circ]))
+        btn_solv = RibbonButton("Résoudre", "⚡")
+        btn_solv.clicked.connect(self.solve_constraints_requested.emit)
+        layout.addWidget(_create_ribbon_group("Solveur 2D", [btn_solv]))
 
         self.addTab(tab, "ESQUISSE")
 
-    def _init_tools_tab(self) -> None:
-        """Onglet OUTILS : Caméra et affichage."""
+    def _init_assembly_tab(self) -> None:
+        """Onglet ASSEMBLAGE."""
         tab = QWidget()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_joint = RibbonButton("Liaison", "🔗")
+        btn_joint.clicked.connect(self.add_joint_requested.emit)
+        btn_interf = RibbonButton("Collisions", "⚠️")
+        btn_interf.clicked.connect(self.check_interference_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Cinématique & Contrôle", [btn_joint, btn_interf]))
+        self.addTab(tab, "ASSEMBLAGE")
+
+    def _init_simulation_tab(self) -> None:
+        """Onglet SIMULATION (FEA)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_mat = RibbonButton("Matériaux", "🧪")
+        btn_mat.clicked.connect(self.material_selector_requested.emit)
+        btn_fea = RibbonButton("Calcul FEA", "📊")
+        btn_fea.clicked.connect(self.run_fea_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Structure & Contraintes", [btn_mat, btn_fea]))
+        self.addTab(tab, "SIMULATION")
+
+    def _init_cam_tab(self) -> None:
+        """Onglet FABRICATION (CAM)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_face = RibbonButton("Surfaçage", "🪒")
+        btn_face.clicked.connect(self.cam_facing_requested.emit)
+        btn_cont = RibbonButton("Contour 2D", "✂️")
+        btn_cont.clicked.connect(self.cam_contour_requested.emit)
+        btn_gcode = RibbonButton("G-Code CNC", "💾")
+        btn_gcode.clicked.connect(self.export_gcode_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Usinage CNC", [btn_face, btn_cont, btn_gcode]))
+        self.addTab(tab, "FABRICATION")
+
+    def _init_tools_tab(self) -> None:
+        """Onglet AFFICHAGE & CAMÉRA."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         btn_fit = RibbonButton("Recadrer", "🎯")
         btn_fit.clicked.connect(self.fit_view_requested.emit)
-
         btn_home = RibbonButton("Vue Home", "🏠")
         btn_home.clicked.connect(self.home_view_requested.emit)
 
         layout.addWidget(_create_ribbon_group("Caméra", [btn_fit, btn_home]))
-
         self.addTab(tab, "AFFICHAGE")
 
     def _init_export_tab(self) -> None:
-        """Onglet EXPORT : Formats STL, OBJ, PLY."""
+        """Onglet EXPORT."""
         tab = QWidget()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         btn_stl = RibbonButton("STL (3D)", "🖨️")
         btn_stl.clicked.connect(self.export_stl_requested.emit)
-
         btn_obj = RibbonButton("Wavefront", "📄")
         btn_obj.clicked.connect(self.export_obj_requested.emit)
-
         btn_ply = RibbonButton("Polygon PLY", "📊")
         btn_ply.clicked.connect(self.export_ply_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Impression & Export", [btn_stl, btn_obj, btn_ply]))
-
+        layout.addWidget(_create_ribbon_group("Fichiers 3D", [btn_stl, btn_obj, btn_ply]))
         self.addTab(tab, "EXPORT")

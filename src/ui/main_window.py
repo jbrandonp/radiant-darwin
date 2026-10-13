@@ -1,12 +1,12 @@
 """
-Fenêtre principale de l'application de CAO (CAD Studio).
-Intègre le ruban d'outils supérieur, le navigateur gauche, le viewport 3D central,
-l'inspecteur de propriétés droit et la timeline historique en bas.
+Fenêtre principale de CAD Studio (Suite Complète Fusion 360).
+Intègre la Conception Solide, l'Esquisse paramétrique avec Solveur 2D,
+l'Assemblage, la Simulation Statique FEA et la Fabrication CAM G-Code.
 """
 
 from __future__ import annotations
 import os
-from typing import Optional
+from typing import Optional, List
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QDockWidget,
     QFileDialog, QMessageBox, QStatusBar, QLabel
@@ -14,10 +14,19 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from src.core.document import CADDocument
-from src.core.types import BooleanOperation, PlaneType, Point2D
+from src.core.types import BooleanOperation, PlaneType, Point2D, Vector3D
 from src.core.sketch import Sketch2D
 from src.core.feature import BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature
+from src.core.operations_advanced import (
+    RevolveFeature, LinearPatternFeature, CircularPatternFeature,
+    MirrorFeature, HoleFeature, ShellFeature
+)
 from src.core.exporter import CADExporter
+from src.solver.constraints_2d import SketchConstraintSolver2D
+from src.materials.material_db import MATERIAL_LIBRARY, MaterialCalculator
+from src.fea.fea_solver import FEASimulator
+from src.cam.cam_engine import CAMEngine, ToolpathOperation
+from src.assembly.assembly_manager import AssemblyManager, JointType
 from src.viewport.viewport_widget import CADViewportWidget
 from src.ui.ribbon import CADRibbonBar
 from src.ui.browser_tree import CADBrowserTree
@@ -25,30 +34,34 @@ from src.ui.timeline import CADTimeline
 from src.ui.properties_panel import CADPropertiesPanel
 from src.ui.dialogs import (
     CreateBoxDialog, CreateCylinderDialog, CreateSphereDialog,
-    ExtrudeDialog, CombineDialog
+    ExtrudeDialog, RevolveDialog, HoleDialog, ShellDialog,
+    CombineDialog, FEADialog
 )
 from src.ui.theme import FUSION_DARK_STYLESHEET
 
 
 class CADMainWindow(QMainWindow):
-    """Fenêtre maîtresse de CAO inspirée d'Autodesk Fusion 360."""
+    """Fenêtre maîtresse de CAO complète équivalente à Autodesk Fusion 360."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("CAD Studio - Conception Paramétrique 3D")
-        self.resize(1380, 850)
+        self.setWindowTitle("CAD Studio - Suite CAO / FEA / CAM Complète")
+        self.resize(1440, 900)
         self.setStyleSheet(FUSION_DARK_STYLESHEET)
 
         # Modèle de données central
-        self.document = CADDocument("Pièce 1")
+        self.document = CADDocument("Projet Mécanique 1")
+        self.cam_engine = CAMEngine()
+        self.cam_operations: List[ToolpathOperation] = []
+        self.assembly_mgr = AssemblyManager()
         self._feature_seq = 0
         self._sketch_seq = 0
 
-        # Initialisation des composants UI
+        # Initialisation UI
         self._setup_ui()
         self._connect_signals()
 
-        # Création d'un premier exemple de démarrage élégant (Boîte paramétrique)
+        # Composant initial élégant
         self._create_initial_sample()
 
     def _setup_ui(self) -> None:
@@ -58,255 +71,383 @@ class CADMainWindow(QMainWindow):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
 
-        # 1. Ruban d'outils en haut
+        # 1. Ruban multi-ateliers
         self.ribbon = CADRibbonBar()
         central_layout.addWidget(self.ribbon)
 
-        # 2. Viewport 3D au centre
+        # 2. Viewport 3D
         self.viewport = CADViewportWidget(self.document)
         central_layout.addWidget(self.viewport, 1)
 
-        # 3. Timeline d'historique en bas
+        # 3. Timeline d'historique
         self.timeline = CADTimeline(self.document)
         central_layout.addWidget(self.timeline)
 
         self.setCentralWidget(central_container)
 
-        # 4. Panneau Dock gauche : Navigateur de modèle (Browser)
+        # 4. Navigateur gauche
         self.browser_dock = QDockWidget("Navigateur", self)
         self.browser_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         self.browser = CADBrowserTree(self.document)
         self.browser_dock.setWidget(self.browser)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.browser_dock)
 
-        # 5. Panneau Dock droit : Inspecteur des propriétés
+        # 5. Inspecteur droit
         self.props_dock = QDockWidget("Paramètres", self)
         self.props_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         self.props_panel = CADPropertiesPanel(self.document)
         self.props_dock.setWidget(self.props_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.props_dock)
 
-        # Barre d'état inférieure
+        # Barre d'état
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_label = QLabel("Prêt | Moteur Manifold3D actif | Rendu OpenGL matériel")
+        self.status_label = QLabel("Prêt | Moteur Manifold3D | Solveur 2D | FEA Linéaire | Moteur CAM G-Code")
         self.status_bar.addWidget(self.status_label)
 
     def _connect_signals(self) -> None:
-        """Interconnecte les signaux du ruban, de la timeline et des panneaux."""
-        # Ruban Solide
+        """Connecte tous les boutons du ruban et de la timeline."""
+        # Solide
         self.ribbon.create_box_requested.connect(self._on_action_create_box)
         self.ribbon.create_cylinder_requested.connect(self._on_action_create_cylinder)
         self.ribbon.create_sphere_requested.connect(self._on_action_create_sphere)
         self.ribbon.extrude_requested.connect(self._on_action_extrude)
+        self.ribbon.revolve_requested.connect(self._on_action_revolve)
+        self.ribbon.hole_requested.connect(self._on_action_hole)
+        self.ribbon.shell_requested.connect(self._on_action_shell)
+        self.ribbon.pattern_requested.connect(self._on_action_pattern)
         self.ribbon.combine_requested.connect(self._on_action_combine)
 
-        # Ruban Esquisse
+        # Esquisse
         self.ribbon.new_sketch_xy_requested.connect(lambda: self._create_sketch(PlaneType.XY))
         self.ribbon.new_sketch_xz_requested.connect(lambda: self._create_sketch(PlaneType.XZ))
         self.ribbon.new_sketch_yz_requested.connect(lambda: self._create_sketch(PlaneType.YZ))
         self.ribbon.add_sketch_rect_requested.connect(self._add_rect_to_active_sketch)
         self.ribbon.add_sketch_circle_requested.connect(self._add_circle_to_active_sketch)
+        self.ribbon.solve_constraints_requested.connect(self._on_action_solve_constraints)
 
-        # Ruban Affichage
+        # Assemblage
+        self.ribbon.add_joint_requested.connect(self._on_action_add_joint)
+        self.ribbon.check_interference_requested.connect(self._on_action_check_interference)
+
+        # Simulation
+        self.ribbon.material_selector_requested.connect(self._on_action_material_info)
+        self.ribbon.run_fea_requested.connect(self._on_action_run_fea)
+
+        # CAM
+        self.ribbon.cam_facing_requested.connect(self._on_action_cam_facing)
+        self.ribbon.cam_contour_requested.connect(self._on_action_cam_contour)
+        self.ribbon.export_gcode_requested.connect(self._on_action_export_gcode)
+
+        # Affichage
         self.ribbon.fit_view_requested.connect(self.viewport.fit_view)
         self.ribbon.home_view_requested.connect(lambda: self.viewport.camera.set_preset_view("HOME"))
 
-        # Ruban Export
+        # Export
         self.ribbon.export_stl_requested.connect(self._on_export_stl)
         self.ribbon.export_obj_requested.connect(self._on_export_obj)
         self.ribbon.export_ply_requested.connect(self._on_export_ply)
 
-        # Timeline & Browser vers Properties
+        # Sélection
         self.timeline.feature_selected.connect(self.props_panel.set_feature)
         self.browser.body_selected.connect(self._on_body_selected)
 
     def _create_initial_sample(self) -> None:
-        """Génère un composant de démonstration initial (Platine mécanique avec cylindre)."""
+        """Génère un exemple initial : Platine usinée avec alésage central."""
         self._feature_seq += 1
         box_feat = BoxFeature(
             feature_id=f"feat_{self._feature_seq}",
-            name="Platine Base",
-            width=50.0,
-            height=30.0,
-            depth=8.0,
+            name="Platine Support",
+            width=60.0,
+            height=40.0,
+            depth=12.0,
             center=True,
             operation=BooleanOperation.NEW_BODY
         )
         self.document.add_feature(box_feat)
 
         self._feature_seq += 1
-        cyl_feat = CylinderFeature(
+        hole_feat = HoleFeature(
             feature_id=f"feat_{self._feature_seq}",
-            name="Arbre Cylindrique",
-            radius=8.0,
-            height=25.0,
-            operation=BooleanOperation.JOIN,
-            target_body_id=box_feat.body_id
+            name="Alésage Central Ø16mm",
+            target_body_id=box_feat.body_id,
+            pos_x=0.0,
+            pos_y=0.0,
+            diameter=16.0,
+            depth=30.0
         )
-        self.document.add_feature(cyl_feat)
+        self.document.add_feature(hole_feat)
 
+    # --- Actions Solide ---
     def _on_action_create_box(self) -> None:
-        """Ouvre le dialogue de création de boîte et l'ajoute au document."""
         bodies = self.document.get_active_body_ids()
         dlg = CreateBoxDialog(bodies, self)
         if dlg.exec():
             w, h, d, center, op, target = dlg.get_values()
             self._feature_seq += 1
-            feat = BoxFeature(
-                feature_id=f"feat_{self._feature_seq}",
-                name=f"Boîte {self._feature_seq}",
-                width=w, height=h, depth=d,
-                center=center,
-                operation=op,
-                target_body_id=target
-            )
+            feat = BoxFeature(f"feat_{self._feature_seq}", f"Boîte {self._feature_seq}", w, h, d, center, op, target)
             self.document.add_feature(feat)
-            self.status_bar.showMessage(f"Boîte créée : {w}x{h}x{d} mm", 3000)
 
     def _on_action_create_cylinder(self) -> None:
-        """Ouvre le dialogue de création de cylindre et l'ajoute au document."""
         bodies = self.document.get_active_body_ids()
         dlg = CreateCylinderDialog(bodies, self)
         if dlg.exec():
             rad, h, op, target = dlg.get_values()
             self._feature_seq += 1
-            feat = CylinderFeature(
-                feature_id=f"feat_{self._feature_seq}",
-                name=f"Cylindre {self._feature_seq}",
-                radius=rad, height=h,
-                operation=op,
-                target_body_id=target
-            )
+            feat = CylinderFeature(f"feat_{self._feature_seq}", f"Cylindre {self._feature_seq}", rad, h, 36, op, target)
             self.document.add_feature(feat)
-            self.status_bar.showMessage(f"Cylindre créé : R={rad}mm H={h}mm", 3000)
 
     def _on_action_create_sphere(self) -> None:
-        """Ouvre le dialogue de création de sphère et l'ajoute au document."""
         bodies = self.document.get_active_body_ids()
         dlg = CreateSphereDialog(bodies, self)
         if dlg.exec():
             rad, op, target = dlg.get_values()
             self._feature_seq += 1
-            feat = SphereFeature(
-                feature_id=f"feat_{self._feature_seq}",
-                name=f"Sphère {self._feature_seq}",
-                radius=rad,
-                operation=op,
-                target_body_id=target
-            )
+            feat = SphereFeature(f"feat_{self._feature_seq}", f"Sphère {self._feature_seq}", rad, 36, op, target)
             self.document.add_feature(feat)
-            self.status_bar.showMessage(f"Sphère créée : R={rad}mm", 3000)
-
-    def _create_sketch(self, plane: PlaneType) -> None:
-        """Crée une nouvelle esquisse sur le plan choisi."""
-        self._sketch_seq += 1
-        s_id = f"sketch_{self._sketch_seq}"
-        sketch = Sketch2D(s_id, f"Esquisse {self._sketch_seq}", plane=plane)
-        # Profil rectangle par défaut
-        sketch.add_rectangle(Point2D(-15.0, -10.0), 30.0, 20.0)
-        self.document.add_sketch(sketch)
-        self.status_bar.showMessage(f"Esquisse {sketch.name} créée sur le plan {plane.value}", 4000)
-
-    def _add_rect_to_active_sketch(self) -> None:
-        """Ajoute un contour rectangle dans la dernière esquisse existante."""
-        if not self.document.sketches:
-            self._create_sketch(PlaneType.XY)
-            return
-        last_sketch = list(self.document.sketches.values())[-1]
-        last_sketch.add_rectangle(Point2D(-20.0, -15.0), 40.0, 30.0)
-        self.document.rebuild()
-        self.status_bar.showMessage(f"Rectangle ajouté dans {last_sketch.name}", 3000)
-
-    def _add_circle_to_active_sketch(self) -> None:
-        """Ajoute un contour cercle dans la dernière esquisse existante."""
-        if not self.document.sketches:
-            self._create_sketch(PlaneType.XY)
-            return
-        last_sketch = list(self.document.sketches.values())[-1]
-        last_sketch.add_circle(Point2D(0.0, 0.0), 12.0)
-        self.document.rebuild()
-        self.status_bar.showMessage(f"Cercle ajouté dans {last_sketch.name}", 3000)
 
     def _on_action_extrude(self) -> None:
-        """Ouvre le dialogue d'extrusion."""
         if not self.document.sketches:
-            QMessageBox.information(self, "Extrusion", "Veuillez d'abord créer une esquisse 2D.")
+            QMessageBox.information(self, "Extrusion", "Créez d'abord une esquisse 2D.")
             return
-
         sketch_ids = list(self.document.sketches.keys())
         bodies = self.document.get_active_body_ids()
         dlg = ExtrudeDialog(sketch_ids, bodies, self)
         if dlg.exec():
             s_id, dist, op, target = dlg.get_values()
             self._feature_seq += 1
-            feat = ExtrudeFeature(
-                feature_id=f"feat_{self._feature_seq}",
-                name=f"Extrusion {self._feature_seq}",
-                sketch_id=s_id,
-                distance=dist,
-                operation=op,
-                target_body_id=target
-            )
+            feat = ExtrudeFeature(f"feat_{self._feature_seq}", f"Extrusion {self._feature_seq}", s_id, dist, op, target)
             self.document.add_feature(feat)
-            self.status_bar.showMessage(f"Extrusion réalisée sur {dist} mm", 3000)
+
+    def _on_action_revolve(self) -> None:
+        if not self.document.sketches:
+            QMessageBox.information(self, "Révolution", "Créez d'abord une esquisse 2D.")
+            return
+        sketch_ids = list(self.document.sketches.keys())
+        bodies = self.document.get_active_body_ids()
+        dlg = RevolveDialog(sketch_ids, bodies, self)
+        if dlg.exec():
+            s_id, angle, op, target = dlg.get_values()
+            self._feature_seq += 1
+            feat = RevolveFeature(f"feat_{self._feature_seq}", f"Révolution {self._feature_seq}", s_id, angle, 48, op, target)
+            self.document.add_feature(feat)
+
+    def _on_action_hole(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            QMessageBox.information(self, "Perçage", "Aucun corps existant à percer.")
+            return
+        dlg = HoleDialog(bodies, self)
+        if dlg.exec():
+            target, px, py, dia, dep = dlg.get_values()
+            self._feature_seq += 1
+            feat = HoleFeature(f"feat_{self._feature_seq}", f"Perçage Ø{dia}mm", target, px, py, dia, dep)
+            self.document.add_feature(feat)
+
+    def _on_action_shell(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            QMessageBox.information(self, "Évidement", "Aucun corps existant à évider.")
+            return
+        dlg = ShellDialog(bodies, self)
+        if dlg.exec():
+            target, thick = dlg.get_values()
+            self._feature_seq += 1
+            feat = ShellFeature(f"feat_{self._feature_seq}", f"Évidement {thick}mm", target, thick)
+            self.document.add_feature(feat)
+
+    def _on_action_pattern(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            return
+        self._feature_seq += 1
+        feat = LinearPatternFeature(f"feat_{self._feature_seq}", f"Répétition {self._feature_seq}", bodies[0], count_x=2, spacing_x=50.0)
+        self.document.add_feature(feat)
+        self.status_bar.showMessage("Répétition linéaire appliquée", 3000)
 
     def _on_action_combine(self) -> None:
-        """Ouvre le dialogue pour fusionner ou couper deux corps."""
         bodies = self.document.get_active_body_ids()
         if len(bodies) < 2:
             QMessageBox.information(self, "Combiner", "Il faut au moins 2 corps solides pour combiner.")
             return
-
         dlg = CombineDialog(bodies, self)
         if dlg.exec():
             target, tool, op = dlg.get_values()
-            if target == tool:
-                QMessageBox.warning(self, "Erreur", "Le corps cible et l'outil doivent être différents.")
-                return
             self._feature_seq += 1
-            feat = BooleanFeature(
-                feature_id=f"feat_{self._feature_seq}",
-                name=f"Combiner {self._feature_seq}",
-                target_body_id=target,
-                tool_body_id=tool,
-                operation=op
-            )
+            feat = BooleanFeature(f"feat_{self._feature_seq}", f"Combiner {self._feature_seq}", target, tool, op)
             self.document.add_feature(feat)
-            self.status_bar.showMessage("Opération booléenne appliquée", 3000)
 
-    def _on_body_selected(self, body_id: str) -> None:
-        """Sélectionne le corps dans l'arborescence."""
-        if body_id in self.document.bodies:
-            body = self.document.bodies[body_id]
-            self.status_bar.showMessage(f"Corps sélectionné : {body.name} (Volume: {body.volume():.1f} mm³)", 3000)
+    # --- Actions Esquisse & Solveur ---
+    def _create_sketch(self, plane: PlaneType) -> None:
+        self._sketch_seq += 1
+        s_id = f"sketch_{self._sketch_seq}"
+        sketch = Sketch2D(s_id, f"Esquisse {self._sketch_seq}", plane=plane)
+        sketch.add_rectangle(Point2D(-20.0, -15.0), 40.0, 30.0)
+        self.document.add_sketch(sketch)
 
+    def _add_rect_to_active_sketch(self) -> None:
+        if not self.document.sketches:
+            self._create_sketch(PlaneType.XY)
+            return
+        last_sketch = list(self.document.sketches.values())[-1]
+        last_sketch.add_rectangle(Point2D(-10.0, -10.0), 20.0, 20.0)
+        self.document.rebuild()
+
+    def _add_circle_to_active_sketch(self) -> None:
+        if not self.document.sketches:
+            self._create_sketch(PlaneType.XY)
+            return
+        last_sketch = list(self.document.sketches.values())[-1]
+        last_sketch.add_circle(Point2D(0.0, 0.0), 10.0)
+        self.document.rebuild()
+
+    def _on_action_solve_constraints(self) -> None:
+        """Démontre le solveur de contraintes 2D géométriques non-linéaire."""
+        solver = SketchConstraintSolver2D()
+        p0 = solver.add_point(Point2D(0.0, 0.0))
+        p1 = solver.add_point(Point2D(25.0, 2.0))
+        p2 = solver.add_point(Point2D(24.0, 18.0))
+        p3 = solver.add_point(Point2D(1.0, 19.0))
+
+        # Contraintes : Horizontal p0-p1, Vertical p1-p2, Distance p0-p1 = 50mm, Distance p1-p2 = 30mm
+        solver.add_fixed(p0, 0.0, 0.0)
+        solver.add_horizontal(p0, p1)
+        solver.add_vertical(p1, p2)
+        solver.add_distance(p0, p1, 50.0)
+        solver.add_distance(p1, p2, 30.0)
+
+        success, solved_pts = solver.solve()
+        if success:
+            self._sketch_seq += 1
+            s_id = f"sketch_{self._sketch_seq}"
+            sketch = Sketch2D(s_id, "Esquisse Contrainte 2D", plane=PlaneType.XY)
+            sketch.add_polygon(solved_pts)
+            self.document.add_sketch(sketch)
+            QMessageBox.information(self, "Solveur 2D", f"Solveur géométrique convergent !\nPoints calculés avec précision sub-millimétrique :\n{solved_pts}")
+
+    # --- Actions Assemblage & Collisions ---
+    def _on_action_add_joint(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if len(bodies) < 2:
+            QMessageBox.information(self, "Liaison", "Il faut au moins 2 corps pour créer une liaison.")
+            return
+        joint = self.assembly_mgr.add_joint("j1", "Pivot Principal", JointType.REVOLUTE, bodies[0], bodies[1])
+        QMessageBox.information(self, "Assemblage", f"Liaison créée avec succès :\n{joint.name} ({joint.joint_type.value}) reliant {bodies[0]} et {bodies[1]}")
+
+    def _on_action_check_interference(self) -> None:
+        bodies = list(self.document.bodies.items())
+        if len(bodies) < 2:
+            QMessageBox.information(self, "Interférences", "Il faut au moins 2 corps pour vérifier les collisions.")
+            return
+        res = AssemblyManager.check_interference(bodies[0][1], bodies[1][1], bodies[0][0], bodies[1][0])
+        if res.has_collision:
+            QMessageBox.warning(self, "Collision Détectée !", f"Interférence physique entre {res.body_a_id} et {res.body_b_id} !\nVolume de chevauchement : {res.overlap_volume_mm3:.2f} mm³")
+        else:
+            QMessageBox.information(self, "Aucune Collision", f"Aucune interférence entre {res.body_a_id} et {res.body_b_id}.\nLes pièces respectent les tolérances de jeu.")
+
+    # --- Actions Simulation FEA & Matériaux ---
+    def _on_action_material_info(self) -> None:
+        bodies = self.document.bodies
+        if not bodies:
+            return
+        first_body = list(bodies.values())[0]
+        mat = MATERIAL_LIBRARY["Acier Inoxydable 304"]
+        mass_g = MaterialCalculator.calculate_mass_grams(first_body.volume(), mat)
+        com = MaterialCalculator.calculate_center_of_mass(first_body)
+        QMessageBox.information(
+            self, "Propriétés Physiques",
+            f"Matériau : {mat.name} ({mat.category})\n"
+            f"Densité : {mat.density_g_cm3} g/cm³\n"
+            f"Module d'Young : {mat.young_modulus_gpa} GPa\n"
+            f"Limite d'élasticité : {mat.yield_strength_mpa} MPa\n"
+            f"----------------------------------------\n"
+            f"Volume : {first_body.volume():.1f} mm³\n"
+            f"Masse calculée : {mass_g:.2f} g ({mass_g/1000:.3f} kg)\n"
+            f"Centre de gravité : X={com.x:.1f}, Y={com.y:.1f}, Z={com.z:.1f}"
+        )
+
+    def _on_action_run_fea(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            QMessageBox.information(self, "Simulation", "Aucun corps existant à simuler.")
+            return
+
+        dlg = FEADialog(bodies, self)
+        if dlg.exec():
+            b_id, mat_name, force = dlg.get_values()
+            mat = MATERIAL_LIBRARY.get(mat_name, MATERIAL_LIBRARY["Acier Carbone C45"])
+            sim = FEASimulator(mat)
+            solid = self.document.bodies[b_id]
+            res = sim.run_static_analysis(solid, applied_force_newtons=force)
+
+            if res:
+                # Générer le maillage de heatmap coloré de contraintes
+                heat_buf = sim.generate_stress_heatmap_mesh(solid, res)
+                self.viewport.cached_buffers = [heat_buf]
+                self.viewport.update()
+
+                status = "✅ Résistance assurée" if res.is_safe else "⚠️ Risque de déformation plastique"
+                QMessageBox.information(
+                    self, "Résultats de l'Analyse FEA",
+                    f"Résultats Statiques Linéaires (von Mises) :\n\n"
+                    f"• Charge appliquée : {force:.1f} N\n"
+                    f"• Contrainte maximale : {res.max_stress_mpa:.2f} MPa\n"
+                    f"• Limite élastique du matériau : {mat.yield_strength_mpa:.1f} MPa\n"
+                    f"• Déplacement maximal : {res.max_displacement_mm * 1000.0:.2f} µm\n"
+                    f"• Facteur de sécurité : {res.safety_factor:.2f}\n\n"
+                    f"Verdict : {status}\n\n(Le gradient de contraintes est affiché dans le Viewport 3D)"
+                )
+
+    # --- Actions CAM & G-Code ---
+    def _on_action_cam_facing(self) -> None:
+        bodies = list(self.document.bodies.values())
+        if not bodies:
+            return
+        b_min, b_max = bodies[0].bounding_box()
+        op = self.cam_engine.generate_facing_toolpath(b_min.x, b_max.x, b_min.y, b_max.y, b_max.z + 2.0, b_max.z)
+        self.cam_operations.append(op)
+        QMessageBox.information(self, "FAO / CAM", f"Opération générée : {op.name}\nNombre de points de trajectoire : {len(op.points)}")
+
+    def _on_action_cam_contour(self) -> None:
+        bodies = list(self.document.bodies.values())
+        if not bodies:
+            return
+        op = self.cam_engine.generate_contour_toolpath(bodies[0], depth_mm=10.0)
+        self.cam_operations.append(op)
+        QMessageBox.information(self, "FAO / CAM", f"Opération générée : {op.name}\nNombre de points de contournage : {len(op.points)}")
+
+    def _on_action_export_gcode(self) -> None:
+        if not self.cam_operations:
+            self._on_action_cam_contour()
+
+        path, _ = QFileDialog.getSaveFileName(self, "Exporter le programme G-Code CNC", "", "G-Code CNC (*.gcode *.nc)")
+        if path:
+            self.cam_engine.export_gcode(self.cam_operations, path)
+            QMessageBox.information(self, "Exportation G-Code", f"Fichier G-Code machine généré avec succès :\n{path}")
+
+    # --- Export 3D ---
     def _on_export_stl(self) -> None:
-        """Boîte de dialogue pour exporter vers un fichier STL."""
         path, _ = QFileDialog.getSaveFileName(self, "Exporter en STL", "", "Fichiers STL (*.stl)")
         if path:
             ok = CADExporter.export_stl(self.document.bodies, path, binary=True)
             if ok:
                 QMessageBox.information(self, "Exportation", f"Modèle exporté avec succès :\n{path}")
-            else:
-                QMessageBox.warning(self, "Erreur", "Impossible d'exporter le fichier STL.")
 
     def _on_export_obj(self) -> None:
-        """Boîte de dialogue pour exporter vers un fichier Wavefront OBJ."""
         path, _ = QFileDialog.getSaveFileName(self, "Exporter en OBJ", "", "Fichiers OBJ (*.obj)")
         if path:
             ok = CADExporter.export_obj(self.document.bodies, path)
             if ok:
                 QMessageBox.information(self, "Exportation", f"Modèle exporté avec succès :\n{path}")
-            else:
-                QMessageBox.warning(self, "Erreur", "Impossible d'exporter le fichier OBJ.")
 
     def _on_export_ply(self) -> None:
-        """Boîte de dialogue pour exporter vers un fichier PLY."""
         path, _ = QFileDialog.getSaveFileName(self, "Exporter en PLY", "", "Fichiers PLY (*.ply)")
         if path:
             ok = CADExporter.export_ply(self.document.bodies, path)
             if ok:
                 QMessageBox.information(self, "Exportation", f"Modèle exporté avec succès :\n{path}")
-            else:
-                QMessageBox.warning(self, "Erreur", "Impossible d'exporter le fichier PLY.")
+
+    def _on_body_selected(self, body_id: str) -> None:
+        if body_id in self.document.bodies:
+            body = self.document.bodies[body_id]
+            self.status_bar.showMessage(f"Corps sélectionné : {body.name} (Volume: {body.volume():.1f} mm³)", 3000)

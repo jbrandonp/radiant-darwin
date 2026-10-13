@@ -1,7 +1,8 @@
 """
 Fenêtre principale de CAD Studio (Suite Complète Fusion 360).
 Intègre la Conception Solide, l'Esquisse paramétrique avec Solveur 2D,
-l'Assemblage, la Simulation Statique FEA et la Fabrication CAM G-Code.
+l'Assemblage, la Simulation Statique FEA, la Fabrication CAM G-Code,
+la Mise en Plan Technique 2D ISO et la Persistance de Projets (.cadproj).
 """
 
 from __future__ import annotations
@@ -22,12 +23,16 @@ from src.core.operations_advanced import (
     MirrorFeature, HoleFeature, ShellFeature
 )
 from src.core.exporter import CADExporter
+from src.core.serializer import ProjectSerializer
 from src.solver.constraints_2d import SketchConstraintSolver2D
 from src.materials.material_db import MATERIAL_LIBRARY, MaterialCalculator
 from src.fea.fea_solver import FEASimulator
 from src.cam.cam_engine import CAMEngine, ToolpathOperation
 from src.assembly.assembly_manager import AssemblyManager, JointType
+from src.drawing.drawing_generator import TechnicalDrawingGenerator, TechnicalSheet
+from src.drawing.svg_exporter import SVGDrawingExporter
 from src.viewport.viewport_widget import CADViewportWidget
+from src.viewport.sketch_mode import ViewportSketchController
 from src.ui.ribbon import CADRibbonBar
 from src.ui.browser_tree import CADBrowserTree
 from src.ui.timeline import CADTimeline
@@ -45,7 +50,7 @@ class CADMainWindow(QMainWindow):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("CAD Studio - Suite CAO / FEA / CAM Complète")
+        self.setWindowTitle("CAD Studio - Suite CAO / FEA / CAM / Dessin Complète")
         self.resize(1440, 900)
         self.setStyleSheet(FUSION_DARK_STYLESHEET)
 
@@ -54,6 +59,9 @@ class CADMainWindow(QMainWindow):
         self.cam_engine = CAMEngine()
         self.cam_operations: List[ToolpathOperation] = []
         self.assembly_mgr = AssemblyManager()
+        self.drawing_gen = TechnicalDrawingGenerator()
+        self.sketch_ctrl = ViewportSketchController()
+        self.active_sheet: Optional[TechnicalSheet] = None
         self._feature_seq = 0
         self._sketch_seq = 0
 
@@ -102,11 +110,15 @@ class CADMainWindow(QMainWindow):
         # Barre d'état
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_label = QLabel("Prêt | Moteur Manifold3D | Solveur 2D | FEA Linéaire | Moteur CAM G-Code")
+        self.status_label = QLabel("Prêt | Moteur Manifold3D | Solveur 2D | FEA Linéaire | Moteur CAM G-Code | Mise en Plan ISO")
         self.status_bar.addWidget(self.status_label)
 
     def _connect_signals(self) -> None:
         """Connecte tous les boutons du ruban et de la timeline."""
+        # Fichier
+        self.ribbon.save_project_requested.connect(self._on_save_project)
+        self.ribbon.load_project_requested.connect(self._on_load_project)
+
         # Solide
         self.ribbon.create_box_requested.connect(self._on_action_create_box)
         self.ribbon.create_cylinder_requested.connect(self._on_action_create_cylinder)
@@ -125,6 +137,7 @@ class CADMainWindow(QMainWindow):
         self.ribbon.add_sketch_rect_requested.connect(self._add_rect_to_active_sketch)
         self.ribbon.add_sketch_circle_requested.connect(self._add_circle_to_active_sketch)
         self.ribbon.solve_constraints_requested.connect(self._on_action_solve_constraints)
+        self.ribbon.toggle_sketch_mode_requested.connect(self._on_toggle_sketch_mode)
 
         # Assemblage
         self.ribbon.add_joint_requested.connect(self._on_action_add_joint)
@@ -137,13 +150,17 @@ class CADMainWindow(QMainWindow):
         # CAM
         self.ribbon.cam_facing_requested.connect(self._on_action_cam_facing)
         self.ribbon.cam_contour_requested.connect(self._on_action_cam_contour)
-        self.ribbon.export_gcode_requested.connect(self._on_action_export_gcode)
+        self.ribbon.export_gcode_requested.connect(self._on_export_gcode)
+
+        # Dessin 2D
+        self.ribbon.generate_drawing_requested.connect(self._on_generate_drawing)
+        self.ribbon.export_drawing_svg_requested.connect(self._on_export_drawing_svg)
 
         # Affichage
         self.ribbon.fit_view_requested.connect(self.viewport.fit_view)
         self.ribbon.home_view_requested.connect(lambda: self.viewport.camera.set_preset_view("HOME"))
 
-        # Export
+        # Export 3D
         self.ribbon.export_stl_requested.connect(self._on_export_stl)
         self.ribbon.export_obj_requested.connect(self._on_export_obj)
         self.ribbon.export_ply_requested.connect(self._on_export_ply)
@@ -177,6 +194,79 @@ class CADMainWindow(QMainWindow):
             depth=30.0
         )
         self.document.add_feature(hole_feat)
+
+    # --- Persistance Projet ---
+    def _on_save_project(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Sauvegarder le Projet CAO", "", "Projet CAD Studio (*.cadproj *.json)")
+        if path:
+            ok = ProjectSerializer.save_project(self.document, path)
+            if ok:
+                QMessageBox.information(self, "Sauvegarde", f"Projet sauvegardé avec succès :\n{path}")
+
+    def _on_load_project(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Ouvrir un Projet CAO", "", "Projet CAD Studio (*.cadproj *.json)")
+        if path:
+            new_doc = ProjectSerializer.load_project(path)
+            if new_doc:
+                self.document = new_doc
+                self.viewport.document = new_doc
+                self.timeline.document = new_doc
+                self.browser.document = new_doc
+                self.props_panel.document = new_doc
+                self.document.register_change_listener(self.viewport.on_document_changed)
+                self.document.register_change_listener(self.timeline.refresh)
+                self.document.register_change_listener(self.browser.refresh)
+                self.viewport.on_document_changed()
+                self.timeline.refresh()
+                self.browser.refresh()
+                QMessageBox.information(self, "Projet Ouvert", f"Projet chargé avec succès :\n{new_doc.name} ({len(new_doc.features)} opérations)")
+
+    # --- Mode Esquisse Interactif ---
+    def _on_toggle_sketch_mode(self) -> None:
+        if self.sketch_ctrl.state.is_active:
+            self.sketch_ctrl.finish_sketch()
+            self.status_bar.showMessage("Mode esquisse interactif désactivé", 3000)
+            QMessageBox.information(self, "Mode Esquisse", "Mode esquisse interactif terminé.")
+        else:
+            self.sketch_ctrl.start_sketch(PlaneType.XY)
+            self.viewport.camera.set_preset_view("TOP")
+            self.viewport.update()
+            self.status_bar.showMessage("Mode esquisse actif : Cliquez dans le viewport pour tracer", 5000)
+            QMessageBox.information(self, "Mode Esquisse", "Mode esquisse actif (Vue de dessus verrouillée).\nAccrochage sur grille activé.")
+
+    # --- Mise en Plan 2D ISO ---
+    def _on_generate_drawing(self) -> None:
+        bodies = list(self.document.bodies.values())
+        if not bodies:
+            QMessageBox.information(self, "Mise en Plan", "Aucun corps existant à projeter.")
+            return
+
+        sheet = self.drawing_gen.generate_sheet(
+            solid=bodies[0],
+            title=self.document.name,
+            author="Brandon",
+            material_name="Aluminium 6061-T6"
+        )
+        self.active_sheet = sheet
+        QMessageBox.information(
+            self, "Mise en Plan 2D (ISO 128)",
+            f"Planche technique générée avec succès !\n"
+            f"• Format : A3 Paysage ({sheet.width_mm} x {sheet.height_mm} mm)\n"
+            f"• 4 Projections : Face, Dessus, Droite, Isométrique 3D\n"
+            f"• Cotations : Largeur, Hauteur, Profondeur\n"
+            f"• Cartouche : Échelle {sheet.title_block.scale}, Norme ISO 128"
+        )
+
+    def _on_export_drawing_svg(self) -> None:
+        if not self.active_sheet:
+            self._on_generate_drawing()
+        if not self.active_sheet:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "Exporter la Planche Technique en SVG", "", "Vecteur SVG (*.svg)")
+        if path:
+            SVGDrawingExporter.export_svg(self.active_sheet, path)
+            QMessageBox.information(self, "Exportation SVG", f"Plan technique vectoriel exporté :\n{path}")
 
     # --- Actions Solide ---
     def _on_action_create_box(self) -> None:
@@ -302,14 +392,11 @@ class CADMainWindow(QMainWindow):
         self.document.rebuild()
 
     def _on_action_solve_constraints(self) -> None:
-        """Démontre le solveur de contraintes 2D géométriques non-linéaire."""
         solver = SketchConstraintSolver2D()
         p0 = solver.add_point(Point2D(0.0, 0.0))
         p1 = solver.add_point(Point2D(25.0, 2.0))
         p2 = solver.add_point(Point2D(24.0, 18.0))
-        p3 = solver.add_point(Point2D(1.0, 19.0))
 
-        # Contraintes : Horizontal p0-p1, Vertical p1-p2, Distance p0-p1 = 50mm, Distance p1-p2 = 30mm
         solver.add_fixed(p0, 0.0, 0.0)
         solver.add_horizontal(p0, p1)
         solver.add_vertical(p1, p2)
@@ -323,7 +410,7 @@ class CADMainWindow(QMainWindow):
             sketch = Sketch2D(s_id, "Esquisse Contrainte 2D", plane=PlaneType.XY)
             sketch.add_polygon(solved_pts)
             self.document.add_sketch(sketch)
-            QMessageBox.information(self, "Solveur 2D", f"Solveur géométrique convergent !\nPoints calculés avec précision sub-millimétrique :\n{solved_pts}")
+            QMessageBox.information(self, "Solveur 2D", f"Solveur géométrique convergent !\nPoints calculés :\n{solved_pts}")
 
     # --- Actions Assemblage & Collisions ---
     def _on_action_add_joint(self) -> None:
@@ -381,7 +468,6 @@ class CADMainWindow(QMainWindow):
             res = sim.run_static_analysis(solid, applied_force_newtons=force)
 
             if res:
-                # Générer le maillage de heatmap coloré de contraintes
                 heat_buf = sim.generate_stress_heatmap_mesh(solid, res)
                 self.viewport.cached_buffers = [heat_buf]
                 self.viewport.update()
@@ -392,7 +478,7 @@ class CADMainWindow(QMainWindow):
                     f"Résultats Statiques Linéaires (von Mises) :\n\n"
                     f"• Charge appliquée : {force:.1f} N\n"
                     f"• Contrainte maximale : {res.max_stress_mpa:.2f} MPa\n"
-                    f"• Limite élastique du matériau : {mat.yield_strength_mpa:.1f} MPa\n"
+                    f"• Limite élastique : {mat.yield_strength_mpa:.1f} MPa\n"
                     f"• Déplacement maximal : {res.max_displacement_mm * 1000.0:.2f} µm\n"
                     f"• Facteur de sécurité : {res.safety_factor:.2f}\n\n"
                     f"Verdict : {status}\n\n(Le gradient de contraintes est affiché dans le Viewport 3D)"
@@ -406,7 +492,7 @@ class CADMainWindow(QMainWindow):
         b_min, b_max = bodies[0].bounding_box()
         op = self.cam_engine.generate_facing_toolpath(b_min.x, b_max.x, b_min.y, b_max.y, b_max.z + 2.0, b_max.z)
         self.cam_operations.append(op)
-        QMessageBox.information(self, "FAO / CAM", f"Opération générée : {op.name}\nNombre de points de trajectoire : {len(op.points)}")
+        QMessageBox.information(self, "FAO / CAM", f"Opération générée : {op.name}\nNombre de points : {len(op.points)}")
 
     def _on_action_cam_contour(self) -> None:
         bodies = list(self.document.bodies.values())
@@ -414,9 +500,9 @@ class CADMainWindow(QMainWindow):
             return
         op = self.cam_engine.generate_contour_toolpath(bodies[0], depth_mm=10.0)
         self.cam_operations.append(op)
-        QMessageBox.information(self, "FAO / CAM", f"Opération générée : {op.name}\nNombre de points de contournage : {len(op.points)}")
+        QMessageBox.information(self, "FAO / CAM", f"Opération générée : {op.name}\nNombre de points : {len(op.points)}")
 
-    def _on_action_export_gcode(self) -> None:
+    def _on_export_gcode(self) -> None:
         if not self.cam_operations:
             self._on_action_cam_contour()
 

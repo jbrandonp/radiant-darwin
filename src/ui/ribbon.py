@@ -1,6 +1,6 @@
 """
 Ruban d'outils supérieur (Ribbon Bar) inspiré d'Autodesk Fusion 360.
-Organisé en ateliers complets : CONCEPTION SOLIDE, ESQUISSE, ASSEMBLAGE, SIMULATION (FEA), FABRICATION (CAM), EXPORT.
+Organisé en 8 ateliers : CONCEPTION, ESQUISSE, ASSEMBLAGE, SIMULATION, FABRICATION, DESSIN 2D, AFFICHAGE, EXPORT.
 """
 
 from __future__ import annotations
@@ -77,6 +77,10 @@ def _create_ribbon_group(title: str, buttons: list[QToolButton]) -> QWidget:
 class CADRibbonBar(QTabWidget):
     """Barre de ruban principale avec tous les ateliers de Fusion 360."""
 
+    # Fichier & Projet
+    save_project_requested = Signal()
+    load_project_requested = Signal()
+
     # Solide
     create_box_requested = Signal()
     create_cylinder_requested = Signal()
@@ -95,6 +99,7 @@ class CADRibbonBar(QTabWidget):
     add_sketch_rect_requested = Signal()
     add_sketch_circle_requested = Signal()
     solve_constraints_requested = Signal()
+    toggle_sketch_mode_requested = Signal()
 
     # Assemblage
     add_joint_requested = Signal()
@@ -109,11 +114,15 @@ class CADRibbonBar(QTabWidget):
     cam_contour_requested = Signal()
     export_gcode_requested = Signal()
 
+    # Mise en Plan 2D (Drawing)
+    generate_drawing_requested = Signal()
+    export_drawing_svg_requested = Signal()
+
     # Affichage
     fit_view_requested = Signal()
     home_view_requested = Signal()
 
-    # Export
+    # Export 3D
     export_stl_requested = Signal()
     export_obj_requested = Signal()
     export_ply_requested = Signal()
@@ -123,13 +132,31 @@ class CADRibbonBar(QTabWidget):
         self.setFixedHeight(105)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
+        self._init_file_group()
         self._init_solid_tab()
         self._init_sketch_tab()
         self._init_assembly_tab()
         self._init_simulation_tab()
         self._init_cam_tab()
+        self._init_drawing_tab()
         self._init_tools_tab()
         self._init_export_tab()
+
+    def _init_file_group(self) -> None:
+        """Onglet PROJET / FICHIER."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_save = RibbonButton("Sauvegarder", "💾")
+        btn_save.clicked.connect(self.save_project_requested.emit)
+        btn_open = RibbonButton("Ouvrir", "📂")
+        btn_open.clicked.connect(self.load_project_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Fichier Projet", [btn_save, btn_open]))
+        self.addTab(tab, "FICHIER")
 
     def _init_solid_tab(self) -> None:
         """Onglet CONCEPTION SOLIDE."""
@@ -184,7 +211,9 @@ class CADRibbonBar(QTabWidget):
         btn_rect.clicked.connect(self.add_sketch_rect_requested.emit)
         btn_circ = RibbonButton("Cercle", "◯")
         btn_circ.clicked.connect(self.add_sketch_circle_requested.emit)
-        layout.addWidget(_create_ribbon_group("Dessiner", [btn_rect, btn_circ]))
+        btn_draw = RibbonButton("Mode Stylet", "✏️")
+        btn_draw.clicked.connect(self.toggle_sketch_mode_requested.emit)
+        layout.addWidget(_create_ribbon_group("Dessin 2D", [btn_rect, btn_circ, btn_draw]))
 
         btn_solv = RibbonButton("Résoudre", "⚡")
         btn_solv.clicked.connect(self.solve_constraints_requested.emit)
@@ -242,6 +271,22 @@ class CADRibbonBar(QTabWidget):
         layout.addWidget(_create_ribbon_group("Usinage CNC", [btn_face, btn_cont, btn_gcode]))
         self.addTab(tab, "FABRICATION")
 
+    def _init_drawing_tab(self) -> None:
+        """Onglet MISE EN PLAN 2D (DRAWING ISO)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_draw = RibbonButton("Plan A3/A4", "📋")
+        btn_draw.clicked.connect(self.generate_drawing_requested.emit)
+        btn_svg = RibbonButton("Export SVG", "📐")
+        btn_svg.clicked.connect(self.export_drawing_svg_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Mise en Plan ISO 128", [btn_draw, btn_svg]))
+        self.addTab(tab, "DESSIN 2D")
+
     def _init_tools_tab(self) -> None:
         """Onglet AFFICHAGE & CAMÉRA."""
         tab = QWidget()
@@ -259,7 +304,7 @@ class CADRibbonBar(QTabWidget):
         self.addTab(tab, "AFFICHAGE")
 
     def _init_export_tab(self) -> None:
-        """Onglet EXPORT."""
+        """Onglet EXPORT 3D."""
         tab = QWidget()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(4, 2, 4, 2)

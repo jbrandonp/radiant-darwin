@@ -101,6 +101,10 @@ class ProjectSerializer:
                 f_dict["fastener_type"] = getattr(feat, "fastener_type")
             if hasattr(feat, "standard_size"):
                 f_dict["standard_size"] = getattr(feat, "standard_size")
+            if hasattr(feat, "join_bodies"):
+                f_dict["join_bodies"] = getattr(feat, "join_bodies")
+            if hasattr(feat, "join_with_source"):
+                f_dict["join_with_source"] = getattr(feat, "join_with_source")
 
             data["features"].append(f_dict)
 
@@ -219,6 +223,20 @@ class ProjectSerializer:
                         nx = int(params.get("count_x", 2))
                         dx = float(params.get("spacing_x", 30.0))
                         feat = LinearPatternFeature(f_id, f_name, src, nx, dx)
+
+                    elif f_cls == "CircularPatternFeature":
+                        src = str(f_data.get("source_body_id", ""))
+                        count = int(params.get("count", 6))
+                        total_ang = float(params.get("total_angle", 360.0))
+                        join_b = bool(f_data.get("join_bodies", True))
+                        feat = CircularPatternFeature(f_id, f_name, src, count, total_ang, join_b)
+
+                    elif f_cls == "MirrorFeature":
+                        src = str(f_data.get("source_body_id", ""))
+                        mp_str = str(f_data.get("mirror_plane", "YZ"))
+                        mp = PlaneType(mp_str) if mp_str in PlaneType._value2member_map_ else PlaneType.YZ
+                        join_s = bool(f_data.get("join_with_source", True))
+                        feat = MirrorFeature(f_id, f_name, src, mp, join_s)
 
                     elif f_cls == "BooleanFeature":
                         tool_id = str(f_data.get("tool_body_id", ""))

@@ -82,6 +82,18 @@ class SketchConstraintSolver2D:
             ConstraintType.FIXED, (pt_idx,), target_value=float(fixed_u), target_value_v=float(fixed_v)
         ))
 
+    def add_parallel(self, pt_a1_idx: int, pt_a2_idx: int, pt_b1_idx: int, pt_b2_idx: int) -> None:
+        """Contraint deux segments de droite (A1-A2 et B1-B2) à être parallèles."""
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.PARALLEL, (pt_a1_idx, pt_a2_idx, pt_b1_idx, pt_b2_idx)
+        ))
+
+    def add_perpendicular(self, pt_a1_idx: int, pt_a2_idx: int, pt_b1_idx: int, pt_b2_idx: int) -> None:
+        """Contraint deux segments de droite (A1-A2 et B1-B2) à être perpendiculaires."""
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.PERPENDICULAR, (pt_a1_idx, pt_a2_idx, pt_b1_idx, pt_b2_idx)
+        ))
+
     def solve(self, tolerance: float = 1e-6) -> Tuple[bool, List[Point2D]]:
         """
         Résout le système d'équations non-linéaires par moindres carrés amortis.
@@ -140,6 +152,22 @@ class SketchConstraintSolver2D:
                     ua, va = x[2 * i_a], x[2 * i_a + 1]
                     res.append(ua - c.target_value)
                     res.append(va - c.target_value_v)
+
+                elif c_type == ConstraintType.PARALLEL:
+                    i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+                    dx_a = x[2 * i_a2] - x[2 * i_a1]
+                    dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
+                    dx_b = x[2 * i_b2] - x[2 * i_b1]
+                    dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
+                    res.append(dx_a * dy_b - dy_a * dx_b)
+
+                elif c_type == ConstraintType.PERPENDICULAR:
+                    i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+                    dx_a = x[2 * i_a2] - x[2 * i_a1]
+                    dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
+                    dx_b = x[2 * i_b2] - x[2 * i_b1]
+                    dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
+                    res.append(dx_a * dx_b + dy_a * dy_b)
 
             return np.array(res, dtype=np.float64)
 

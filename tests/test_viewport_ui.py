@@ -74,3 +74,47 @@ def test_browser_tree_context_menu_setup(qapp: QApplication) -> None:
     tree = CADBrowserTree(doc)
     assert tree.tree.topLevelItemCount() == 1
     assert "TestDoc" in tree.tree.topLevelItem(0).text(0)
+
+
+def test_properties_panel_field_ranges(qapp: QApplication) -> None:
+    """Vérifie que le panneau de propriétés configure correctement les plages négatives, entières et angulaires."""
+    from src.ui.properties_panel import CADPropertiesPanel
+    from src.core.feature import BoxFeature, ConeFeature
+    from src.core.operations_advanced import HoleFeature, CircularPatternFeature
+
+    doc = CADDocument("TestDoc")
+    panel = CADPropertiesPanel(doc)
+
+    # 1. Feature avec coordonnées négatives
+    hole = HoleFeature("h1", "Trou Negatif", target_body_id="b1", pos_x=-50.0, pos_y=-25.0, diameter=8.0)
+    doc.add_feature(hole)
+    panel.set_feature("h1")
+    assert "pos_x" in panel.param_spinboxes
+    spin_x = panel.param_spinboxes["pos_x"]
+    assert spin_x.minimum() < 0.0
+    assert spin_x.value() == -50.0
+
+    # 2. Feature avec count entier et angle négatif
+    circ = CircularPatternFeature("c1", "Pattern Circulaire", source_body_id="b1", count=8, total_angle_deg=-120.0)
+    doc.add_feature(circ)
+    panel.set_feature("c1")
+    assert "count" in panel.param_spinboxes
+    spin_count = panel.param_spinboxes["count"]
+    assert spin_count.suffix() == ""
+    assert spin_count.value() == 8.0
+
+    assert "total_angle" in panel.param_spinboxes
+    spin_angle = panel.param_spinboxes["total_angle"]
+    assert spin_angle.minimum() < 0.0
+    assert spin_angle.value() == -120.0
+
+    # 3. Feature avec radius_top à 0.0 (cône pointu)
+    cone = ConeFeature("cone1", "Cone", radius_bottom=10.0, radius_top=0.0, height=20.0)
+    doc.add_feature(cone)
+    panel.set_feature("cone1")
+    assert "radius_top" in panel.param_spinboxes
+    assert panel.param_spinboxes["radius_top"].minimum() == 0.0
+    assert panel.param_spinboxes["radius_top"].value() == 0.0
+
+    panel.set_feature("")
+    assert len(panel.param_spinboxes) == 0

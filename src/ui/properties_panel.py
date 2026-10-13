@@ -47,6 +47,8 @@ class CADPropertiesPanel(QWidget):
         self.form_layout.setSpacing(6)
         self.main_layout.addWidget(self.form_widget)
 
+        self.param_spinboxes: Dict[str, QDoubleSpinBox] = {}
+
         # Bouton Supprimer l'opération
         self.btn_delete = QPushButton("🗑️ Supprimer l'opération")
         self.btn_delete.setStyleSheet("""
@@ -83,6 +85,7 @@ class CADPropertiesPanel(QWidget):
         self.lbl_title.setText("PROPRIÉTÉS PHYSIQUES (CAO)")
         self.lbl_info.setText("Propriétés géométriques globales du solide :")
         self.btn_delete.setVisible(False)
+        self.param_spinboxes.clear()
 
         while self.form_layout.rowCount() > 0:
             self.form_layout.removeRow(0)
@@ -146,21 +149,48 @@ class CADPropertiesPanel(QWidget):
         self.lbl_info.setText(f"Édition dynamique de l'opération [{feat.feature_id}] :")
         self.lbl_info.setVisible(True)
         self.btn_delete.setVisible(True)
+        self.param_spinboxes.clear()
 
-        # Générer dynamiquement les spinboxes pour chaque paramètre
+        # Générer dynamiquement les spinboxes adaptées pour chaque paramètre
         for param_name, param_val in feat.parameters.items():
             spin = QDoubleSpinBox()
-            spin.setRange(0.01, 10000.0)
-            spin.setDecimals(2)
+
+            # Paramètres de répétition / discrétisation (nombres entiers positifs)
+            if param_name in ("count", "count_x", "count_y", "segments", "num_segments", "num_steps", "turns"):
+                spin.setRange(1.0, 500.0)
+                spin.setDecimals(0)
+                spin.setSuffix("")
+            # Paramètres angulaires
+            elif param_name in ("angle", "total_angle", "draft_angle"):
+                spin.setRange(-360.0, 360.0)
+                spin.setDecimals(1)
+                spin.setSuffix(" °")
+            # Drapeaux booléens stockés en float (0.0 ou 1.0)
+            elif param_name in ("center", "has_washer", "join_bodies", "join_with_source"):
+                spin.setRange(0.0, 1.0)
+                spin.setDecimals(0)
+                spin.setSuffix("")
+            # Coordonnées et entraxes pouvant être négatifs
+            elif param_name in ("pos_x", "pos_y", "coordinate", "offset", "spacing_x", "spacing_y"):
+                spin.setRange(-10000.0, 10000.0)
+                spin.setDecimals(2)
+                spin.setSuffix(" mm")
+            # Dimensions positives (pouvant être nulles comme radius_top pour un cône pointu)
+            else:
+                spin.setRange(0.0, 10000.0)
+                spin.setDecimals(2)
+                spin.setSuffix(" mm")
+
             spin.setValue(float(param_val))
-            spin.setSuffix(" mm")
+            self.param_spinboxes[param_name] = spin
 
             def _make_handler(p_name: str) -> Callable[[float], None]:
                 return lambda val: self._on_param_changed(p_name, val)
 
             spin.valueChanged.connect(_make_handler(param_name))
 
-            label = QLabel(param_name.capitalize())
+            clean_label = param_name.replace("_", " ").capitalize()
+            label = QLabel(clean_label)
             label.setStyleSheet("color: #c0c4cc; font-weight: 500;")
             self.form_layout.addRow(label, spin)
 

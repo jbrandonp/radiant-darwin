@@ -8,7 +8,8 @@ import pytest
 
 from src.core.document import CADDocument
 from src.core.feature import BoxFeature, CylinderFeature
-from src.core.types import BooleanOperation
+from src.core.operations_advanced import CircularPatternFeature, MirrorFeature
+from src.core.types import BooleanOperation, PlaneType
 from src.core.serializer import ProjectSerializer
 
 
@@ -39,3 +40,46 @@ def test_save_and_load_project() -> None:
         assert len(reloaded_doc.features) == 2
         assert len(reloaded_doc.bodies) == 1
         assert pytest.approx(reloaded_doc.bodies[box.body_id].volume(), 0.1) == original_vol
+
+
+def test_save_and_load_patterns_and_mirror() -> None:
+    """Vérifie la persistance des répétitions circulaires et symétries miroir."""
+    doc = CADDocument("Test Pattern Mirror")
+    box = BoxFeature("f1", "Boite Source", width=10.0, height=10.0, depth=10.0)
+    doc.add_feature(box)
+
+    circ = CircularPatternFeature(
+        "f2", "Repetition Circulaire",
+        source_body_id=box.body_id,
+        count=3,
+        total_angle_deg=180.0,
+        join_bodies=False,
+    )
+    doc.add_feature(circ)
+
+    mirror = MirrorFeature(
+        "f3", "Symetrie Miroir",
+        source_body_id=box.body_id,
+        mirror_plane=PlaneType.XZ,
+        join_with_source=False,
+    )
+    doc.add_feature(mirror)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        proj_path = os.path.join(tmp_dir, "pattern_mirror.cadproj")
+        assert ProjectSerializer.save_project(doc, proj_path)
+
+        reloaded_doc = ProjectSerializer.load_project(proj_path)
+        assert reloaded_doc is not None
+        assert len(reloaded_doc.features) == 3
+
+        reloaded_circ = reloaded_doc.features[1]
+        assert isinstance(reloaded_circ, CircularPatternFeature)
+        assert reloaded_circ.parameters["count"] == 3.0
+        assert pytest.approx(reloaded_circ.parameters["total_angle"]) == 180.0
+        assert reloaded_circ.join_bodies is False
+
+        reloaded_mirror = reloaded_doc.features[2]
+        assert isinstance(reloaded_mirror, MirrorFeature)
+        assert reloaded_mirror.mirror_plane == PlaneType.XZ
+        assert reloaded_mirror.join_with_source is False

@@ -21,6 +21,37 @@ class UserParameter:
     comment: str = ""
 
 
+def _safe_pow(a: float, b: float) -> float:
+    """Calcul de puissance avec protection contre les dépassements et attaques DoS CPU."""
+    if abs(b) > 100.0 or abs(a) > 1e20:
+        raise ValueError("Exposant ou base hors limites de sécurité")
+    res = a ** b
+    if isinstance(res, complex):
+        raise ValueError("Résultat complexe non supporté")
+    return float(res)
+
+
+def _safe_div(a: float, b: float) -> float:
+    """Division arithmétique protégée contre la division par zéro."""
+    if abs(b) < 1e-15:
+        raise ValueError("Division par zéro")
+    return a / b
+
+
+def _safe_mod(a: float, b: float) -> float:
+    """Modulo arithmétique protégé contre le modulo par zéro."""
+    if abs(b) < 1e-15:
+        raise ValueError("Modulo par zéro")
+    return a % b
+
+
+def _safe_sqrt(x: float) -> float:
+    """Racine carrée protégée contre les valeurs négatives."""
+    if x < 0.0:
+        raise ValueError("Racine carrée d'un nombre négatif")
+    return math.sqrt(x)
+
+
 class SafeExpressionEvaluator:
     """
     Évaluateur d'expressions mathématiques sécurisé basé sur l'AST Python.
@@ -31,15 +62,15 @@ class SafeExpressionEvaluator:
         ast.Add: lambda a, b: a + b,
         ast.Sub: lambda a, b: a - b,
         ast.Mult: lambda a, b: a * b,
-        ast.Div: lambda a, b: a / b,
-        ast.Pow: lambda a, b: a ** b,
-        ast.Mod: lambda a, b: a % b,
+        ast.Div: _safe_div,
+        ast.Pow: _safe_pow,
+        ast.Mod: _safe_mod,
         ast.USub: lambda a: -a,
         ast.UAdd: lambda a: a,
     }
 
     ALLOWED_FUNCTIONS: Dict[str, Callable[..., float]] = {
-        "sqrt": math.sqrt,
+        "sqrt": _safe_sqrt,
         "sin": lambda x: math.sin(math.radians(x)),
         "cos": lambda x: math.cos(math.radians(x)),
         "tan": lambda x: math.tan(math.radians(x)),
@@ -58,15 +89,21 @@ class SafeExpressionEvaluator:
         if not clean_expr:
             return 0.0
 
+        if len(clean_expr) > 500:
+            raise ValueError("Expression trop longue (> 500 caractères)")
+
         try:
             node = ast.parse(clean_expr, mode='eval')
-            return float(cls._eval_node(node.body, context))
+            return float(cls._eval_node(node.body, context, depth=0))
         except Exception as e:
             raise ValueError(f"Expression invalide '{expression_str}' : {e}")
 
     @classmethod
-    def _eval_node(cls, node: ast.AST, context: Dict[str, float]) -> float:
+    def _eval_node(cls, node: ast.AST, context: Dict[str, float], depth: int = 0) -> float:
         """Parcourt récursivement l'arbre syntaxique pour évaluer l'expression."""
+        if depth > 30:
+            raise ValueError("Profondeur de récursion maximale dépassée (protection DoS)")
+
         if isinstance(node, ast.Constant):  # Nombre ou constante (Python 3.8+)
             if isinstance(node.value, (int, float)):
                 return float(node.value)
@@ -83,22 +120,22 @@ class SafeExpressionEvaluator:
         elif isinstance(node, ast.UnaryOp):  # Opération unaire (-x, +x)
             op_func = cls.ALLOWED_OPERATORS.get(type(node.op))
             if op_func:
-                operand = cls._eval_node(node.operand, context)
+                operand = cls._eval_node(node.operand, context, depth + 1)
                 return float(op_func(operand))
             raise ValueError(f"Opérateur unaire non supporté : {type(node.op)}")
 
         elif isinstance(node, ast.BinOp):  # Opération binaire (a + b, a * b)
             op_func = cls.ALLOWED_OPERATORS.get(type(node.op))
             if op_func:
-                left = cls._eval_node(node.left, context)
-                right = cls._eval_node(node.right, context)
+                left = cls._eval_node(node.left, context, depth + 1)
+                right = cls._eval_node(node.right, context, depth + 1)
                 return float(op_func(left, right))
             raise ValueError(f"Opérateur binaire non supporté : {type(node.op)}")
 
         elif isinstance(node, ast.Call):  # Appel de fonction mathématique (sqrt(x))
             func_name = getattr(node.func, 'id', '')
             if func_name in cls.ALLOWED_FUNCTIONS:
-                args = [cls._eval_node(arg, context) for arg in node.args]
+                args = [cls._eval_node(arg, context, depth + 1) for arg in node.args]
                 return float(cls.ALLOWED_FUNCTIONS[func_name](*args))
             raise ValueError(f"Fonction non autorisée '{func_name}'")
 

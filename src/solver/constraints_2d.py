@@ -73,7 +73,7 @@ class SketchConstraintSolver2D:
     def add_distance(self, pt_a_idx: int, pt_b_idx: int, distance: float) -> None:
         """Contraint la distance euclidienne entre deux points."""
         self.constraints.append(GeometricConstraint(
-            ConstraintType.DISTANCE, (pt_a_idx, pt_b_idx), target_value=float(distance)
+            ConstraintType.DISTANCE, (pt_a_idx, pt_b_idx), target_value=max(0.0, float(distance))
         ))
 
     def add_fixed(self, pt_idx: int, fixed_u: float, fixed_v: float) -> None:
@@ -104,6 +104,10 @@ class SketchConstraintSolver2D:
             for c in self.constraints:
                 c_type = c.constraint_type
                 indices = c.point_indices
+
+                if any(idx < 0 or idx >= num_pts for idx in indices):
+                    res.append(100.0)
+                    continue
 
                 if c_type == ConstraintType.COINCIDENT:
                     i_a, i_b = indices[0], indices[1]

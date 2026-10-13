@@ -211,6 +211,10 @@ class BooleanFeature(Feature):
             self.status = FeatureStatus.ERROR
             return updated
 
+        if self.target_body_id == self.tool_body_id:
+            self.status = FeatureStatus.ERROR
+            return updated
+
         target_solid = updated[self.target_body_id]
         tool_solid = updated[self.tool_body_id]
 

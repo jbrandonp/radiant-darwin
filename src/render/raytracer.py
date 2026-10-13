@@ -92,7 +92,8 @@ class PBRRaytracer:
         total_b = amb_b
 
         # Exposant de rugosité spéculaire
-        spec_power = max(2.0, (1.0 - material.roughness) ** 2.0 * 128.0)
+        safe_roughness = max(0.0, min(1.0, material.roughness))
+        spec_power = max(2.0, (1.0 - safe_roughness) ** 2.0 * 128.0)
 
         # 2. Somme sur chaque source de lumière du studio
         for light in self.env.lights:
@@ -112,7 +113,8 @@ class PBRRaytracer:
                 f_b = f0_b + (1.0 - f0_b) * fresnel
 
                 # Diffusion (les métaux absorbent la diffusion)
-                diffuse_factor = (1.0 - material.metallic) * n_dot_l
+                safe_metallic = max(0.0, min(1.0, material.metallic))
+                diffuse_factor = (1.0 - safe_metallic) * n_dot_l
                 diff_r = material.albedo[0] * light.color[0] * diffuse_factor
                 diff_g = material.albedo[1] * light.color[1] * diffuse_factor
                 diff_b = material.albedo[2] * light.color[2] * diffuse_factor
@@ -145,14 +147,16 @@ class PBRRaytracer:
         Effectue un rendu rasterisé haute fidélité du solide avec Z-buffer logiciel.
         Retourne une QImage prête pour affichage ou enregistrement PNG.
         """
+        safe_w = max(1, width)
+        safe_h = max(1, height)
         mesh = solid.to_mesh_buffer()
-        image = QImage(width, height, QImage.Format.Format_ARGB32)
+        image = QImage(safe_w, safe_h, QImage.Format.Format_ARGB32)
 
         # Fond studio en dégradé vertical
-        for y in range(height):
-            ratio = y / max(1, height)
+        for y in range(safe_h):
+            ratio = y / max(1, safe_h)
             bg_c = int(28 + 22 * ratio)
-            for x in range(width):
+            for x in range(safe_w):
                 image.setPixelColor(x, y, QColor(bg_c, bg_c + 2, bg_c + 5, 255))
 
         if mesh.is_empty():
@@ -189,12 +193,12 @@ class PBRRaytracer:
             y_rot = y_temp * sin_el + rel_z * cos_el
             depth = -y_temp * cos_el + rel_z * sin_el
 
-            screen_x = int(width * 0.5 + x_rot * scale)
-            screen_y = int(height * 0.5 - y_rot * scale)
+            screen_x = int(safe_w * 0.5 + x_rot * scale)
+            screen_y = int(safe_h * 0.5 - y_rot * scale)
             proj_pts.append((screen_x, screen_y, depth))
 
         # Z-Buffer de profondeur
-        z_buffer = np.full((height, width), -1e9, dtype=np.float32)
+        z_buffer = np.full((safe_h, safe_w), -1e9, dtype=np.float32)
 
         # Rendu des triangles avec ombrage PBR
         for face_idx, face in enumerate(faces):
@@ -209,9 +213,9 @@ class PBRRaytracer:
 
             # Dessin simple par rasterisation de triangle (Barycentrique)
             min_x = max(0, min(p0[0], p1[0], p2[0]))
-            max_x = min(width - 1, max(p0[0], p1[0], p2[0]))
+            max_x = min(safe_w - 1, max(p0[0], p1[0], p2[0]))
             min_y = max(0, min(p0[1], p1[1], p2[1]))
-            max_y = min(height - 1, max(p0[1], p1[1], p2[1]))
+            max_y = min(safe_h - 1, max(p0[1], p1[1], p2[1]))
 
             denom = (p1[1] - p2[1]) * (p0[0] - p2[0]) + (p2[0] - p1[0]) * (p0[1] - p2[1])
             if abs(denom) < 1e-5:

@@ -99,8 +99,11 @@ class LinearPatternFeature(Feature):
             return updated
 
         base_solid = updated[self.source_body_id]
-        nx = max(1, int(self.parameters["count_x"]))
-        ny = max(1, int(self.parameters["count_y"]))
+        nx = max(1, min(50, int(self.parameters["count_x"])))
+        ny = max(1, min(50, int(self.parameters["count_y"])))
+        if nx * ny > 500:
+            nx = min(nx, 25)
+            ny = min(ny, 20)
         dx = float(self.parameters["spacing_x"])
         dy = float(self.parameters["spacing_y"])
 
@@ -154,7 +157,7 @@ class CircularPatternFeature(Feature):
             return updated
 
         base_solid = updated[self.source_body_id]
-        n = max(1, int(self.parameters["count"]))
+        n = max(1, min(360, int(self.parameters["count"])))
         total_ang = float(self.parameters["total_angle"])
         step = total_ang / n if n > 0 else 0.0
 

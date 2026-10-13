@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import List, Tuple, Dict, Optional
+import os
 import numpy as np
 
 from src.core.types import Vector3D
@@ -139,8 +140,9 @@ class CAMEngine:
         x0, x1 = b_min.x - tool_r, b_max.x + tool_r
         y0, y1 = b_min.y - tool_r, b_max.y + tool_r
 
-        num_passes = max(1, int(np.ceil(depth_mm / self.stepdown_mm)))
-        z_step = depth_mm / num_passes
+        safe_depth = max(0.1, abs(depth_mm))
+        num_passes = max(1, int(np.ceil(safe_depth / self.stepdown_mm)))
+        z_step = safe_depth / num_passes
 
         # Position initiale rapide
         op.points.append(ToolpathPoint(Vector3D(x0, y0, self.safe_z), is_rapid=True))
@@ -213,6 +215,7 @@ class CAMEngine:
 
         gcode_content = "\n".join(lines)
         if filepath:
+            os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(gcode_content)
 

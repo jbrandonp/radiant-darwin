@@ -66,9 +66,9 @@ class SheetMetalPart:
         Calcule le développement de l'arc de pliage (Bend Allowance BA).
         Formule normalisée : BA = (pi / 180) * angle * (R + K * t)
         """
-        t = self.rule.thickness_mm
-        r = self.rule.bend_radius_mm
-        k = self.rule.k_factor
+        t = max(0.01, self.rule.thickness_mm)
+        r = max(0.0, self.rule.bend_radius_mm)
+        k = max(0.0, min(1.0, self.rule.k_factor))
         safe_angle = min(179.0, max(0.01, abs(angle_deg)))
         angle_rad = np.radians(safe_angle)
         return float(angle_rad * (r + k * t))
@@ -78,8 +78,8 @@ class SheetMetalPart:
         Calcule la perte au pli (Bend Deduction BD).
         Formule : BD = 2 * (R + t) * tan(angle / 2) - BA
         """
-        t = self.rule.thickness_mm
-        r = self.rule.bend_radius_mm
+        t = max(0.01, self.rule.thickness_mm)
+        r = max(0.0, self.rule.bend_radius_mm)
         safe_angle = min(179.0, max(0.01, abs(angle_deg)))
         angle_rad = np.radians(safe_angle)
         setback = (r + t) * np.tan(angle_rad / 2.0)

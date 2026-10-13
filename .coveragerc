@@ -1,9 +1,15 @@
 [run]
-source = src
-omit =
-    */__pycache__/*
-    */tests/*
+source =
+    src/assembly
+    src/cam
+    src/core
+    src/drawing
+    src/fea
+    src/materials
+    src/render
+    src/sheetmetal
+    src/solver
+    src/viewport
 
 [report]
-include = src/*
 show_missing = True

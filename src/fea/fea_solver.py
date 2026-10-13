@@ -67,10 +67,11 @@ class FEASimulator:
         height_ratio = (vertices[:, 2] - z_min) / z_range
         # Bras de levier / flexion : sigma ~ M * y / I
         lever_arm = np.abs(vertices[:, 0]) + np.abs(vertices[:, 1])
-        base_stress = (applied_force_newtons / (np.pi * 15.0 ** 2))  # MPa approx
+        force_mag = abs(applied_force_newtons)
+        base_stress = (force_mag / (np.pi * 15.0 ** 2))  # MPa approx
 
         # Contrainte de von Mises nodale synthétisée par loi de comportement
-        E_gpa = self.material.young_modulus_gpa
+        E_gpa = max(0.01, self.material.young_modulus_gpa)
         nodal_stresses = base_stress * (1.0 + 2.5 * (1.0 - height_ratio)) * (1.0 + 0.02 * lever_arm)
         nodal_stresses = np.maximum(0.0, nodal_stresses)
 
@@ -78,7 +79,7 @@ class FEASimulator:
         min_stress = float(np.min(nodal_stresses))
 
         # Facteur de sécurité = Limite élastique (Re) / Contrainte maximale
-        yield_limit = self.material.yield_strength_mpa
+        yield_limit = max(0.01, self.material.yield_strength_mpa)
         safety_factor = yield_limit / max(0.001, max_stress)
 
         # Déplacement maximal (loi de Hooke : delta ~ F * L / (E * S))

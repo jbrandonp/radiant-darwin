@@ -220,6 +220,7 @@ class CADMainWindow(QMainWindow):
             depth=30.0
         )
         self.document.add_feature(hole_feat)
+        self.viewport.fit_view()
 
     # --- Persistance Projet ---
     def _on_save_project(self) -> None:

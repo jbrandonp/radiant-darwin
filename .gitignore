@@ -9,3 +9,4 @@ __pycache__/
 *.ply
 .DS_Store
 demo_output/
+app_launch.log

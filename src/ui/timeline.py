@@ -81,29 +81,54 @@ class CADTimeline(QWidget):
         ctrl_box = QHBoxLayout()
         ctrl_box.setSpacing(2)
 
+        btn_ctrl_style = """
+            QPushButton {
+                background-color: #2a2d34;
+                color: #e0e2e8;
+                border: 1px solid #3d414b;
+                border-radius: 4px;
+                font-family: 'Segoe UI Symbol', 'Segoe UI', sans-serif;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #383c46;
+                border-color: #00a2ff;
+                color: #ffffff;
+            }
+            QPushButton:pressed {
+                background-color: #007acc;
+            }
+        """
+
         self.btn_first = QPushButton("⏮")
         self.btn_first.setFixedSize(28, 28)
-        self.btn_first.setToolTip("Aller au début")
+        self.btn_first.setStyleSheet(btn_ctrl_style)
+        self.btn_first.setToolTip("Aller au début (|◀)")
         self.btn_first.clicked.connect(self._goto_first)
 
         self.btn_prev = QPushButton("◀")
         self.btn_prev.setFixedSize(28, 28)
-        self.btn_prev.setToolTip("Étape précédente")
+        self.btn_prev.setStyleSheet(btn_ctrl_style)
+        self.btn_prev.setToolTip("Étape précédente (◀)")
         self.btn_prev.clicked.connect(self._step_backward)
 
         self.btn_play = QPushButton("⏯")
         self.btn_play.setFixedSize(28, 28)
-        self.btn_play.setToolTip("Rejouer / Pause")
+        self.btn_play.setStyleSheet(btn_ctrl_style)
+        self.btn_play.setToolTip("Rejouer / Pause (Lecture)")
         self.btn_play.clicked.connect(self._toggle_playback)
 
         self.btn_next = QPushButton("▶")
         self.btn_next.setFixedSize(28, 28)
-        self.btn_next.setToolTip("Étape suivante")
+        self.btn_next.setStyleSheet(btn_ctrl_style)
+        self.btn_next.setToolTip("Étape suivante (▶)")
         self.btn_next.clicked.connect(self._step_forward)
 
         self.btn_last = QPushButton("⏭")
         self.btn_last.setFixedSize(28, 28)
-        self.btn_last.setToolTip("Aller à la fin")
+        self.btn_last.setStyleSheet(btn_ctrl_style)
+        self.btn_last.setToolTip("Aller à la fin (▶|)")
         self.btn_last.clicked.connect(self._goto_last)
 
         ctrl_box.addWidget(self.btn_first)

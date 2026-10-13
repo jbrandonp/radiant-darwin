@@ -131,11 +131,22 @@ class GLRenderer:
 
     def _draw_mesh_edges(self, buffer: MeshBuffer) -> None:
         """Dessine les lignes de contour vives du solide."""
-        if buffer.is_empty() or len(buffer.edges) == 0:
+        if buffer.is_empty():
             return
 
-        GL.glColor4f(0.12, 0.12, 0.15, 0.85)  # Noir / Gris très sombre
+        GL.glColor4f(0.12, 0.12, 0.15, 0.90)  # Noir / Gris très sombre contrasté
         GL.glLineWidth(1.5)
+
+        # Tracé via edge_vertices directs (paires de points 3D pour chaque arête)
+        if buffer.edge_vertices is not None and len(buffer.edge_vertices) > 0:
+            GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
+            GL.glVertexPointer(3, GL.GL_FLOAT, 0, buffer.edge_vertices)
+            GL.glDrawArrays(GL.GL_LINES, 0, len(buffer.edge_vertices))
+            GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
+            return
+
+        if len(buffer.edges) == 0:
+            return
 
         GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
         GL.glVertexPointer(3, GL.GL_FLOAT, 0, buffer.vertices)

@@ -19,17 +19,17 @@ class RibbonButton(QToolButton):
         super().__init__(parent)
         self.setText(f"{emoji_icon}\n{text}")
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.setFixedSize(68, 64)
+        self.setFixedSize(84, 66)
         self.setStyleSheet("""
             QToolButton {
                 background-color: #26282e;
                 color: #e0e2e8;
                 border: 1px solid #363940;
                 border-radius: 4px;
-                font-size: 11px;
+                font-size: 10px;
                 font-weight: bold;
                 text-align: center;
-                padding: 4px;
+                padding: 2px 2px;
             }
             QToolButton:hover {
                 background-color: #32353d;

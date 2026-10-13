@@ -24,10 +24,21 @@ def main() -> int:
     app.setApplicationName("CAD Studio")
     app.setOrganizationName("Brandon CAD")
 
-    window = CADMainWindow()
-    window.show()
+    try:
+        window = CADMainWindow()
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
-    return app.exec()
+        with open("app_launch.log", "w", encoding="utf-8") as f:
+            f.write(f"App started successfully. Window handle: {int(window.winId())}\n")
+
+        return app.exec()
+    except Exception as e:
+        import traceback
+        with open("app_launch.log", "w", encoding="utf-8") as f:
+            f.write(f"Launch error:\n{traceback.format_exc()}\n")
+        raise
 
 
 if __name__ == "__main__":

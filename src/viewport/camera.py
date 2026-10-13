@@ -24,7 +24,7 @@ class CADCamera:
         self.target: Vector3D = Vector3D(0.0, 0.0, 0.0)
         self.distance: float = 120.0
         self.yaw_deg: float = 45.0      # Azimut
-        self.pitch_deg: float = 30.0    # Élévation
+        self.pitch_deg: float = 30.0    # Élévation isométrique standard (Fusion 360)
         self.fov_deg: float = 45.0
         self.near_plane: float = 0.5
         self.far_plane: float = 5000.0

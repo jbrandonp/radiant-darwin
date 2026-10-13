@@ -110,36 +110,49 @@ class Solid:
         # Extraire les coordonnées X, Y, Z
         positions: np.ndarray = vert_props[:, :3]
 
-        # Calculer les normales par face et les normales moyennes par sommet
-        normals: np.ndarray = np.zeros_like(positions)
+        # Calculer les normales exactes par face
         v0: np.ndarray = positions[tri_verts[:, 0]]
         v1: np.ndarray = positions[tri_verts[:, 1]]
         v2: np.ndarray = positions[tri_verts[:, 2]]
 
         face_normals: np.ndarray = np.cross(v1 - v0, v2 - v0)
         face_lengths: np.ndarray = np.linalg.norm(face_normals, axis=1, keepdims=True)
-        # Éviter la division par zéro
         face_lengths[face_lengths < 1e-9] = 1.0
         face_normals /= face_lengths
 
-        # Accumuler les normales sur les sommets
-        np.add.at(normals, tri_verts[:, 0], face_normals)
-        np.add.at(normals, tri_verts[:, 1], face_normals)
-        np.add.at(normals, tri_verts[:, 2], face_normals)
+        # Rendu CAO professionnel : sommets dépliés par facette avec normales exactes de face
+        # Élimine 100% des dégradés triangulaires disgracieux sur les faces planes
+        num_tris = len(tri_verts)
+        v_flat = np.empty((num_tris * 3, 3), dtype=np.float32)
+        v_flat[0::3] = v0
+        v_flat[1::3] = v1
+        v_flat[2::3] = v2
 
-        vert_lengths: np.ndarray = np.linalg.norm(normals, axis=1, keepdims=True)
-        vert_lengths[vert_lengths < 1e-9] = 1.0
-        normals /= vert_lengths
+        n_flat = np.empty((num_tris * 3, 3), dtype=np.float32)
+        n_flat[0::3] = face_normals
+        n_flat[1::3] = face_normals
+        n_flat[2::3] = face_normals
+
+        f_flat = np.arange(num_tris * 3, dtype=np.uint32).reshape(-1, 3)
 
         # Extraction des arêtes remarquables (style CAD : arêtes délimitant des faces avec angle marqué)
         edges: np.ndarray = _extract_sharp_edges(tri_verts, face_normals, angle_threshold_deg=20.0)
 
+        # Coordonnées réelles 3D des arêtes pour tracé direct
+        if len(edges) > 0:
+            edge_vertices = np.empty((len(edges) * 2, 3), dtype=np.float32)
+            edge_vertices[0::2] = positions[edges[:, 0]]
+            edge_vertices[1::2] = positions[edges[:, 1]]
+        else:
+            edge_vertices = np.zeros((0, 3), dtype=np.float32)
+
         buffer = MeshBuffer(
-            vertices=positions,
-            faces=tri_verts,
-            normals=normals,
+            vertices=v_flat,
+            faces=f_flat,
+            normals=n_flat,
             edges=edges,
-            color=self.color
+            color=self.color,
+            edge_vertices=edge_vertices
         )
         return buffer
 

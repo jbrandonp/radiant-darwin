@@ -96,8 +96,11 @@ class CADViewportWidget(QOpenGLWidget):
 
     def _on_viewcube_selected(self, view_name: str) -> None:
         """Applique l'orientation de vue demandée par le ViewCube."""
-        self.camera.set_preset_view(view_name)
-        self.update()
+        if view_name.upper() in ("FIT", "RECADRER"):
+            self.fit_view()
+        else:
+            self.camera.set_preset_view(view_name)
+            self.update()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Gère l'appui sur les boutons de la souris."""

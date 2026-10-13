@@ -119,6 +119,7 @@ class MeshBuffer:
     normals: np.ndarray       # Shape: (N, 3), dtype=float32
     edges: np.ndarray         # Shape: (K, 2), dtype=uint32 (pour le contour style CAD)
     color: ColorRGBA = field(default_factory=ColorRGBA)
+    edge_vertices: Optional[np.ndarray] = None  # Shape: (2K, 3), sommets 3D des lignes d'arêtes
 
     def is_empty(self) -> bool:
         """Vérifie si le maillage ne contient aucune géométrie."""
@@ -131,5 +132,6 @@ class MeshBuffer:
             vertices=np.zeros((0, 3), dtype=np.float32),
             faces=np.zeros((0, 3), dtype=np.uint32),
             normals=np.zeros((0, 3), dtype=np.float32),
-            edges=np.zeros((0, 2), dtype=np.uint32)
+            edges=np.zeros((0, 2), dtype=np.uint32),
+            edge_vertices=np.zeros((0, 3), dtype=np.float32)
         )

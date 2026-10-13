@@ -15,6 +15,7 @@ from src.core.types import MeshBuffer, Vector3D
 from src.viewport.camera import CADCamera
 from src.viewport.gl_renderer import GLRenderer
 from src.viewport.view_cube import ViewCubeOverlay
+from src.viewport.nav_bar import ViewportNavBar
 
 
 class CADViewportWidget(QOpenGLWidget):
@@ -44,9 +45,18 @@ class CADViewportWidget(QOpenGLWidget):
         fmt.setDepthBufferSize(24)
         self.setFormat(fmt)
 
-        # Widget ViewCube superposé
+        # Widget ViewCube superposé (en haut à droite)
         self.view_cube: ViewCubeOverlay = ViewCubeOverlay(self)
         self.view_cube.view_selected.connect(self._on_viewcube_selected)
+
+        # Barre de navigation flottante au bas du viewport (style Fusion 360)
+        self.nav_bar: ViewportNavBar = ViewportNavBar(self)
+        self.nav_bar.orbit_requested.connect(self._on_nav_orbit)
+        self.nav_bar.pan_requested.connect(self._on_nav_pan)
+        self.nav_bar.zoom_fit_requested.connect(self.fit_view)
+        self.nav_bar.toggle_grid_requested.connect(self._toggle_grid)
+        self.nav_bar.toggle_edges_requested.connect(self._toggle_edges)
+        self.nav_bar.snapshot_requested.connect(self._take_snapshot)
 
         # Écouter les modifications du modèle pour redessiner
         self.document.register_change_listener(self.on_document_changed)
@@ -62,6 +72,40 @@ class CADViewportWidget(QOpenGLWidget):
         self.renderer.resize_gl(w, h, self.camera)
         # Positionner le ViewCube dans le coin supérieur droit
         self.view_cube.move(w - self.view_cube.width() - 15, 15)
+        # Centrer la barre de navigation au bas du viewport
+        nav_x = max(10, (w - self.nav_bar.width()) // 2)
+        nav_y = max(10, h - self.nav_bar.height() - 12)
+        self.nav_bar.move(nav_x, nav_y)
+
+    def _on_nav_orbit(self) -> None:
+        """Réinitialise la vue en vue isométrique Fusion 360."""
+        self.camera.set_preset_view("HOME")
+        self.update()
+
+    def _on_nav_pan(self) -> None:
+        """Recentre légèrement la caméra."""
+        self.camera.target = Vector3D(0.0, 0.0, 0.0)
+        self.update()
+
+    def _toggle_grid(self) -> None:
+        """Bascule l'affichage de la grille de référence au sol."""
+        self.renderer.show_grid = not self.renderer.show_grid
+        self.nav_bar.btn_grid.setChecked(self.renderer.show_grid)
+        self.update()
+
+    def _toggle_edges(self) -> None:
+        """Bascule l'affichage des arêtes contrastées du modèle."""
+        self.renderer.show_edges = not self.renderer.show_edges
+        self.nav_bar.btn_edges.setChecked(self.renderer.show_edges)
+        self.update()
+
+    def _take_snapshot(self) -> None:
+        """Capture la vue 3D actuelle et la place dans le presse-papiers."""
+        from PySide6.QtGui import QGuiApplication
+        img = self.grabFramebuffer()
+        clipboard = QGuiApplication.clipboard()
+        if clipboard:
+            clipboard.setImage(img)
 
     def paintGL(self) -> None:
         """Effectue le rendu graphique de la scène."""

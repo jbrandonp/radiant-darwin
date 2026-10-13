@@ -123,11 +123,26 @@ class CADMainWindow(QMainWindow):
         self.props_dock.setWidget(self.props_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.props_dock)
 
-        # Barre d'état
+        # Barre d'état professionnelle avec badges d'information
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_label = QLabel("Prêt | Moteur Manifold3D | Solveur 2D | FEA Linéaire | Moteur CAM G-Code | Mise en Plan ISO")
-        self.status_bar.addWidget(self.status_label)
+
+        self.status_label = QLabel("Prêt | Moteur Volumique Manifold3D")
+        self.status_label.setStyleSheet("color: #a0a6b5; font-weight: 500;")
+        self.status_bar.addWidget(self.status_label, 1)
+
+        badge_style = "background-color: #252830; color: #00a2ff; border: 1px solid #363a45; border-radius: 3px; padding: 2px 6px; font-weight: bold; font-size: 10px;"
+        lbl_units = QLabel("📐 mm / deg")
+        lbl_units.setStyleSheet(badge_style)
+        self.status_bar.addPermanentWidget(lbl_units)
+
+        lbl_engine = QLabel("⚡ Manifold B-Rep")
+        lbl_engine.setStyleSheet(badge_style)
+        self.status_bar.addPermanentWidget(lbl_engine)
+
+        lbl_render = QLabel("✨ Rendu Studio")
+        lbl_render.setStyleSheet("background-color: #252830; color: #4ade80; border: 1px solid #363a45; border-radius: 3px; padding: 2px 6px; font-weight: bold; font-size: 10px;")
+        self.status_bar.addPermanentWidget(lbl_render)
 
     def _connect_signals(self) -> None:
         """Connecte tous les boutons du ruban et de la timeline."""
@@ -190,10 +205,12 @@ class CADMainWindow(QMainWindow):
         self.ribbon.export_obj_requested.connect(self._on_export_obj)
         self.ribbon.export_ply_requested.connect(self._on_export_ply)
 
-        # Sélection
+        # Sélection et navigateur
         self.timeline.feature_selected.connect(self.props_panel.set_feature)
         self.browser.body_selected.connect(self._on_body_selected)
         self.browser.sketch_selected.connect(self._on_sketch_selected)
+        self.browser.export_body_requested.connect(self._on_export_single_body_stl)
+        self.browser.delete_body_requested.connect(self._on_delete_single_body)
 
     def _create_initial_sample(self) -> None:
         """Génère un exemple initial : Platine usinée avec alésage central."""
@@ -668,3 +685,22 @@ class CADMainWindow(QMainWindow):
                 f"Esquisse sélectionnée : {sketch.name} [Plan: {sketch.plane.value}] ({ent_count} entités)",
                 3000
             )
+
+    def _on_export_single_body_stl(self, body_id: str) -> None:
+        """Exporte un corps solide individuel au format STL."""
+        if body_id not in self.document.bodies:
+            return
+        body = self.document.bodies[body_id]
+        path, _ = QFileDialog.getSaveFileName(self, f"Exporter {body.name} en STL", f"{body.name}.stl", "Fichiers STL (*.stl)")
+        if path:
+            ok = CADExporter.export_stl({body_id: body}, path, binary=True)
+            if ok:
+                QMessageBox.information(self, "Exportation", f"Corps '{body.name}' exporté avec succès :\n{path}")
+
+    def _on_delete_single_body(self, body_id: str) -> None:
+        """Supprime un corps solide spécifique du modèle."""
+        if body_id not in self.document.bodies:
+            return
+        del self.document.bodies[body_id]
+        self.document._notify_changes()
+        self.status_bar.showMessage(f"Corps {body_id} supprimé.", 3000)

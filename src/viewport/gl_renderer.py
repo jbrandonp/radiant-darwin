@@ -23,8 +23,8 @@ class GLRenderer:
         self.grid_spacing: float = 10.0
         self.show_grid: bool = True
         self.show_edges: bool = True
-        self.bg_color_top: Tuple[float, float, float] = (0.18, 0.20, 0.24)
-        self.bg_color_bottom: Tuple[float, float, float] = (0.12, 0.13, 0.16)
+        self.bg_color_top: Tuple[float, float, float] = (0.22, 0.24, 0.28)    # Ardoise studio claire
+        self.bg_color_bottom: Tuple[float, float, float] = (0.12, 0.13, 0.16) # Graphite sombre profond
 
     def initialize_gl(self) -> None:
         """Configure les états OpenGL initiaux (profondeur, antialiasing, éclairage)."""
@@ -37,24 +37,23 @@ class GLRenderer:
         GL.glEnable(GL.GL_LINE_SMOOTH)
         GL.glHint(GL.GL_LINE_SMOOTH_HINT, GL.GL_NICEST)
 
-        # Éclairage de base
+        # Éclairage métallique Fusion 360
         GL.glEnable(GL.GL_LIGHTING)
         GL.glEnable(GL.GL_LIGHT0)
         GL.glEnable(GL.GL_LIGHT1)
         GL.glEnable(GL.GL_COLOR_MATERIAL)
         GL.glColorMaterial(GL.GL_FRONT_AND_BACK, GL.GL_AMBIENT_AND_DIFFUSE)
 
-        # Lumière principale (orientée depuis le haut)
-        GL.glLightfv(GL.GL_LIGHT0, GL.GL_POSITION, [100.0, 100.0, 200.0, 0.0])
-        GL.glLightfv(GL.GL_LIGHT0, GL.GL_DIFFUSE, [0.85, 0.85, 0.88, 1.0])
-        GL.glLightfv(GL.GL_LIGHT0, GL.GL_SPECULAR, [0.3, 0.3, 0.3, 1.0])
+        # Lumière clé principale (orientée depuis le haut droit)
+        GL.glLightfv(GL.GL_LIGHT0, GL.GL_POSITION, [150.0, 150.0, 250.0, 0.0])
+        GL.glLightfv(GL.GL_LIGHT0, GL.GL_DIFFUSE, [0.90, 0.90, 0.92, 1.0])
+        GL.glLightfv(GL.GL_LIGHT0, GL.GL_SPECULAR, [0.45, 0.45, 0.50, 1.0])
 
-        # Lumière de remplissage (douce par le dessous)
-        GL.glLightfv(GL.GL_LIGHT1, GL.GL_POSITION, [-100.0, -100.0, -100.0, 0.0])
-        GL.glLightfv(GL.GL_LIGHT1, GL.GL_DIFFUSE, [0.35, 0.35, 0.38, 1.0])
+        # Lumière de débouchage (douce par le dessous)
+        GL.glLightfv(GL.GL_LIGHT1, GL.GL_POSITION, [-120.0, -120.0, -80.0, 0.0])
+        GL.glLightfv(GL.GL_LIGHT1, GL.GL_DIFFUSE, [0.40, 0.40, 0.45, 1.0])
 
-        # Couleur de fond sombre Fusion 360
-        GL.glClearColor(0.15, 0.16, 0.18, 1.0)
+        GL.glClearColor(self.bg_color_bottom[0], self.bg_color_bottom[1], self.bg_color_bottom[2], 1.0)
 
     def resize_gl(self, width: int, height: int, camera: CADCamera) -> None:
         """Met à jour la matrice de projection lors d'un redimensionnement."""
@@ -67,9 +66,50 @@ class GLRenderer:
         gluPerspective(camera.fov_deg, aspect, camera.near_plane, camera.far_plane)
         GL.glMatrixMode(GL.GL_MODELVIEW)
 
+    def _draw_gradient_background(self, width: int, height: int) -> None:
+        """Dessine un dégradé de fond vertical studio CAO élégant (style Fusion 360)."""
+        if width <= 0 or height <= 0:
+            return
+
+        GL.glDisable(GL.GL_LIGHTING)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glDepthMask(GL.GL_FALSE)
+
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glPushMatrix()
+        GL.glLoadIdentity()
+        GL.glOrtho(0.0, float(width), float(height), 0.0, -1.0, 1.0)
+
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+        GL.glPushMatrix()
+        GL.glLoadIdentity()
+
+        GL.glBegin(GL.GL_QUADS)
+        # Haut
+        GL.glColor3f(self.bg_color_top[0], self.bg_color_top[1], self.bg_color_top[2])
+        GL.glVertex2f(0.0, 0.0)
+        GL.glVertex2f(float(width), 0.0)
+        # Bas
+        GL.glColor3f(self.bg_color_bottom[0], self.bg_color_bottom[1], self.bg_color_bottom[2])
+        GL.glVertex2f(float(width), float(height))
+        GL.glVertex2f(0.0, float(height))
+        GL.glEnd()
+
+        GL.glPopMatrix()
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glPopMatrix()
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+
+        GL.glDepthMask(GL.GL_TRUE)
+        GL.glEnable(GL.GL_DEPTH_TEST)
+
     def render_scene(self, camera: CADCamera, mesh_buffers: List[MeshBuffer], width: int, height: int) -> None:
         """Effectue le rendu complet de la scène 3D."""
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+
+        # 0. Fond d'écran dégradé studio
+        self._draw_gradient_background(width, height)
+
         GL.glLoadIdentity()
 
         # Positionner la vue caméra
@@ -85,7 +125,7 @@ class GLRenderer:
         if self.show_grid:
             self._draw_grid_and_axes()
 
-        # 2. Rendu des corps solides (Faces ombrées)
+        # 2. Rendu des corps solides (Faces ombrées avec brillance métallique)
         GL.glEnable(GL.GL_LIGHTING)
         GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
         GL.glPolygonOffset(1.0, 1.0)  # Évite le z-fighting avec les arêtes
@@ -106,12 +146,16 @@ class GLRenderer:
         self._draw_orientation_triad(camera, width, height)
 
     def _draw_shaded_mesh(self, buffer: MeshBuffer) -> None:
-        """Dessine les faces du maillage avec éclairage et normales."""
+        """Dessine les faces du maillage avec éclairage, normales et reflet spéculaire."""
         if buffer.is_empty():
             return
 
         c = buffer.color
         GL.glColor4f(c.r, c.g, c.b, c.a)
+
+        # Brillance métallique satinée type usinage CAO
+        GL.glMaterialfv(GL.GL_FRONT_AND_BACK, GL.GL_SPECULAR, [0.35, 0.35, 0.40, 1.0])
+        GL.glMaterialf(GL.GL_FRONT_AND_BACK, GL.GL_SHININESS, 32.0)
 
         GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
         GL.glEnableClientState(GL.GL_NORMAL_ARRAY)
@@ -161,52 +205,79 @@ class GLRenderer:
         GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
 
     def _draw_grid_and_axes(self) -> None:
-        """Dessine la grille au sol XY et les axes de coordonnées colorés."""
+        """Dessine la grille au sol XY avec lignes maîtresses et repère d'origine."""
         GL.glDisable(GL.GL_LIGHTING)
-        GL.glLineWidth(1.0)
 
         half = self.grid_size / 2.0
-        step = self.grid_spacing
+        step_minor = self.grid_spacing          # 10 mm
+        step_major = self.grid_spacing * 5.0    # 50 mm
 
-        # Lignes secondaires de la grille
-        GL.glColor4f(0.24, 0.26, 0.30, 0.5)
+        # 1. Lignes secondaires (fines et discrètes)
+        GL.glLineWidth(1.0)
+        GL.glColor4f(0.25, 0.27, 0.32, 0.35)
         GL.glBegin(GL.GL_LINES)
         x = -half
         while x <= half:
-            if abs(x) > 1e-4:  # Éviter l'axe central
+            if abs(x) > 1e-4 and abs(x % step_major) > 1e-4:
                 GL.glVertex3f(float(x), -half, 0.0)
                 GL.glVertex3f(float(x), half, 0.0)
-            x += step
+            x += step_minor
 
         y = -half
         while y <= half:
-            if abs(y) > 1e-4:
+            if abs(y) > 1e-4 and abs(y % step_major) > 1e-4:
                 GL.glVertex3f(-half, float(y), 0.0)
                 GL.glVertex3f(half, float(y), 0.0)
-            y += step
+            y += step_minor
         GL.glEnd()
 
-        # Axes principaux colorés (X = Rouge, Y = Vert, Z = Bleu)
-        GL.glLineWidth(2.0)
+        # 2. Lignes majeures tous les 50 mm
+        GL.glLineWidth(1.2)
+        GL.glColor4f(0.32, 0.35, 0.42, 0.65)
         GL.glBegin(GL.GL_LINES)
-        # Axe X (Rouge)
-        GL.glColor4f(0.95, 0.25, 0.25, 0.9)
+        x = -half
+        while x <= half:
+            if abs(x) > 1e-4 and abs(x % step_major) < 1e-4:
+                GL.glVertex3f(float(x), -half, 0.0)
+                GL.glVertex3f(float(x), half, 0.0)
+            x += step_minor
+
+        y = -half
+        while y <= half:
+            if abs(y) > 1e-4 and abs(y % step_major) < 1e-4:
+                GL.glVertex3f(-half, float(y), 0.0)
+                GL.glVertex3f(half, float(y), 0.0)
+            y += step_minor
+        GL.glEnd()
+
+        # 3. Axes principaux colorés (X = Rouge, Y = Vert, Z = Bleu)
+        GL.glLineWidth(2.2)
+        GL.glBegin(GL.GL_LINES)
+        # Axe X (Rouge éclatant)
+        GL.glColor4f(0.95, 0.25, 0.25, 0.95)
         GL.glVertex3f(-half, 0.0, 0.0)
         GL.glVertex3f(half, 0.0, 0.0)
 
-        # Axe Y (Vert)
-        GL.glColor4f(0.25, 0.85, 0.35, 0.9)
+        # Axe Y (Vert forêt)
+        GL.glColor4f(0.25, 0.85, 0.35, 0.95)
         GL.glVertex3f(0.0, -half, 0.0)
         GL.glVertex3f(0.0, half, 0.0)
 
-        # Axe Z (Bleu - court repère d'élévation)
-        GL.glColor4f(0.25, 0.55, 0.95, 0.9)
+        # Axe Z (Bleu - repère d'élévation vertical)
+        GL.glColor4f(0.25, 0.55, 0.95, 0.95)
         GL.glVertex3f(0.0, 0.0, 0.0)
-        GL.glVertex3f(0.0, 0.0, float(step * 3))
+        GL.glVertex3f(0.0, 0.0, float(step_minor * 3))
+        GL.glEnd()
+
+        # 4. Point d'origine central (0, 0, 0)
+        GL.glPointSize(5.0)
+        GL.glColor4f(1.0, 0.85, 0.2, 1.0)
+        GL.glBegin(GL.GL_POINTS)
+        GL.glVertex3f(0.0, 0.0, 0.0)
         GL.glEnd()
 
     def _draw_orientation_triad(self, camera: CADCamera, width: int, height: int) -> None:
-        """Affiche le trièdre de repère 3D compact dans le coin inférieur gauche."""
+        """Affiche le trièdre de repère 3D avec flèches et libellés vectoriels X, Y, Z."""
         if width <= 0 or height <= 0:
             return
 
@@ -217,7 +288,7 @@ class GLRenderer:
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glPushMatrix()
         GL.glLoadIdentity()
-        GL.glViewport(10, 10, 90, 90)
+        GL.glViewport(12, 12, 95, 95)
         gluPerspective(45.0, 1.0, 0.1, 100.0)
 
         GL.glMatrixMode(GL.GL_MODELVIEW)
@@ -239,15 +310,55 @@ class GLRenderer:
         # Axe X
         GL.glColor3f(0.95, 0.25, 0.25)
         GL.glVertex3f(0.0, 0.0, 0.0)
-        GL.glVertex3f(1.8, 0.0, 0.0)
+        GL.glVertex3f(1.7, 0.0, 0.0)
         # Axe Y
         GL.glColor3f(0.25, 0.85, 0.35)
         GL.glVertex3f(0.0, 0.0, 0.0)
-        GL.glVertex3f(0.0, 1.8, 0.0)
+        GL.glVertex3f(0.0, 1.7, 0.0)
         # Axe Z
         GL.glColor3f(0.25, 0.55, 0.95)
         GL.glVertex3f(0.0, 0.0, 0.0)
-        GL.glVertex3f(0.0, 0.0, 1.8)
+        GL.glVertex3f(0.0, 0.0, 1.7)
+        GL.glEnd()
+
+        # Marqueurs aux extrémités
+        GL.glPointSize(6.0)
+        GL.glBegin(GL.GL_POINTS)
+        GL.glColor3f(0.95, 0.25, 0.25)
+        GL.glVertex3f(1.7, 0.0, 0.0)
+        GL.glColor3f(0.25, 0.85, 0.35)
+        GL.glVertex3f(0.0, 1.7, 0.0)
+        GL.glColor3f(0.25, 0.55, 0.95)
+        GL.glVertex3f(0.0, 0.0, 1.7)
+        GL.glEnd()
+
+        # Tracé des lettres vectorielles X, Y, Z
+        GL.glLineWidth(1.8)
+        GL.glBegin(GL.GL_LINES)
+        # X
+        GL.glColor3f(1.0, 0.45, 0.45)
+        GL.glVertex3f(2.0, -0.12, -0.12)
+        GL.glVertex3f(2.0, 0.12, 0.12)
+        GL.glVertex3f(2.0, -0.12, 0.12)
+        GL.glVertex3f(2.0, 0.12, -0.12)
+
+        # Y
+        GL.glColor3f(0.45, 1.0, 0.55)
+        GL.glVertex3f(-0.12, 2.0, 0.12)
+        GL.glVertex3f(0.0, 2.0, 0.0)
+        GL.glVertex3f(0.12, 2.0, 0.12)
+        GL.glVertex3f(0.0, 2.0, 0.0)
+        GL.glVertex3f(0.0, 2.0, 0.0)
+        GL.glVertex3f(0.0, 2.0, -0.12)
+
+        # Z
+        GL.glColor3f(0.45, 0.75, 1.0)
+        GL.glVertex3f(-0.12, 0.0, 2.0)
+        GL.glVertex3f(0.12, 0.0, 2.0)
+        GL.glVertex3f(0.12, 0.0, 2.0)
+        GL.glVertex3f(-0.12, 0.0, 1.8)
+        GL.glVertex3f(-0.12, 0.0, 1.8)
+        GL.glVertex3f(0.12, 0.0, 1.8)
         GL.glEnd()
 
         # Restaurer matrices et viewport

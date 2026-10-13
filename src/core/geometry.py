@@ -144,6 +144,26 @@ class Solid:
         res.color = self.color
         return res
 
+    def slice_cross_section(self, height: float = 0.0) -> List[List[Point2D]]:
+        """
+        Extrait les contours fermés 2D de la section plane du solide à la hauteur Z donnée.
+        Utilise la méthode native slice de Manifold3D (parallèle au plan XY).
+        """
+        if self._manifold.is_empty():
+            return []
+        cs = self._manifold.slice(height)
+        if cs.is_empty():
+            return []
+        polys = cs.to_polygons()
+        result: List[List[Point2D]] = []
+        for poly in polys:
+            contour: List[Point2D] = []
+            for pt in poly:
+                contour.append(Point2D(float(pt[0]), float(pt[1])))
+            if len(contour) >= 3:
+                result.append(contour)
+        return result
+
     def to_mesh_buffer(self) -> MeshBuffer:
         """
         Convertit le solide en MeshBuffer optimisé pour le rendu OpenGL.
@@ -262,6 +282,21 @@ def make_cone(radius_bottom: float, radius_top: float, height: float, segments: 
     safe_height = max(0.001, height)
     manifold_cone = m.Manifold.cylinder(safe_height, safe_r_bottom, safe_r_top, segments, False)
     return Solid(manifold_cone, name)
+
+
+def make_torus(major_radius: float, minor_radius: float, segments: int = 36, name: str = "Torus") -> Solid:
+    """
+    Crée un tore solide paramétrique (forme d'anneau / donut).
+    - major_radius : rayon majeur (distance du centre au tube)
+    - minor_radius : rayon mineur (rayon de la section circulaire du tube)
+    - segments : résolution angulaire
+    """
+    safe_major = max(0.1, major_radius)
+    safe_minor = max(0.01, min(safe_major * 0.99, minor_radius))
+    segs = max(12, segments)
+    cs = m.CrossSection.circle(safe_minor, segs).translate([safe_major, 0.0])
+    manifold_torus = m.Manifold.revolve(cs, segs, 360.0)
+    return Solid(manifold_torus, name)
 
 
 def extrude_polygon(

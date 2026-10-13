@@ -16,13 +16,15 @@ from src.core.document import CADDocument
 from src.core.types import PlaneType, BooleanOperation, Point2D
 from src.core.sketch import Sketch2D
 from src.core.feature import (
-    Feature, BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature
+    Feature, BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature,
+    ConeFeature, TorusFeature
 )
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature,
     LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature
 )
+from src.core.fasteners import FastenerFeature
 from src.sheetmetal.sheet_metal import SheetMetalFeature
 
 
@@ -95,6 +97,10 @@ class ProjectSerializer:
                 f_dict["edges_mode"] = getattr(feat, "edges_mode")
             if hasattr(feat, "pull_axis"):
                 f_dict["pull_axis"] = getattr(feat, "pull_axis")
+            if hasattr(feat, "fastener_type"):
+                f_dict["fastener_type"] = getattr(feat, "fastener_type")
+            if hasattr(feat, "standard_size"):
+                f_dict["standard_size"] = getattr(feat, "standard_size")
 
             data["features"].append(f_dict)
 
@@ -259,6 +265,23 @@ class ProjectSerializer:
                         angle = float(params.get("draft_angle", 3.0))
                         axis = str(f_data.get("pull_axis", "Z"))
                         feat = DraftFeature(f_id, f_name, target_id or "", angle, axis)
+
+                    elif f_cls == "ConeFeature":
+                        r_bot = float(params.get("radius_bottom", 15.0))
+                        r_top = float(params.get("radius_top", 0.0))
+                        h = float(params.get("height", 30.0))
+                        feat = ConeFeature(f_id, f_name, r_bot, r_top, h, 36, op, target_id)
+
+                    elif f_cls == "TorusFeature":
+                        r_maj = float(params.get("major_radius", 25.0))
+                        r_min = float(params.get("minor_radius", 6.0))
+                        feat = TorusFeature(f_id, f_name, r_maj, r_min, 36, op, target_id)
+
+                    elif f_cls == "FastenerFeature":
+                        ftype = str(f_data.get("fastener_type", "hex_bolt"))
+                        size = str(f_data.get("standard_size", "M6"))
+                        length = float(params.get("length", 30.0))
+                        feat = FastenerFeature(f_id, f_name, ftype, size, length, op, target_id)
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

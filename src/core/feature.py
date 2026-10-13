@@ -10,7 +10,7 @@ from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass, field
 
 from src.core.types import BooleanOperation, FeatureStatus, Vector3D, Point2D, PlaneType
-from src.core.geometry import Solid, make_box, make_cylinder, make_sphere, extrude_polygon
+from src.core.geometry import Solid, make_box, make_cylinder, make_sphere, make_cone, make_torus, extrude_polygon
 from src.core.sketch import Sketch2D
 
 
@@ -45,6 +45,17 @@ class Feature(ABC):
     def get_parameter(self, param_name: str, default: float = 0.0) -> float:
         """Récupère la valeur d'un paramètre."""
         return self.parameters.get(param_name, default)
+
+    def get_parameters(self) -> Dict[str, float]:
+        """Récupère l'ensemble des paramètres géométriques sous forme de dictionnaire."""
+        return dict(self.parameters)
+
+    def set_parameters(self, new_params: Dict[str, float]) -> None:
+        """Met à jour plusieurs paramètres géométriques simultanément."""
+        for name, val in new_params.items():
+            if name in self.parameters:
+                self.parameters[name] = float(val)
+                self.status = FeatureStatus.OUTDATED
 
 
 class BoxFeature(Feature):
@@ -143,6 +154,75 @@ class SphereFeature(Feature):
         segs = max(12, int(self.parameters.get("segments", 36)))
 
         new_solid = make_sphere(rad, segments=segs, name=self.name)
+        return _apply_boolean_operation(existing_bodies, new_solid, self.operation, self.body_id, self.target_body_id)
+
+
+class ConeFeature(Feature):
+    """Fonctionnalité paramétrique de création de cône ou tronc de cône."""
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Cone",
+        radius_bottom: float = 15.0,
+        radius_top: float = 0.0,
+        height: float = 30.0,
+        segments: int = 36,
+        operation: BooleanOperation = BooleanOperation.NEW_BODY,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.parameters = {
+            "radius_bottom": float(radius_bottom),
+            "radius_top": float(radius_top),
+            "height": float(height),
+            "segments": float(segments),
+        }
+        self.operation = operation
+        self.target_body_id = target_body_id
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère le cône et applique l'opération booléenne demandée."""
+        r_bot = max(0.0, self.parameters["radius_bottom"])
+        r_top = max(0.0, self.parameters["radius_top"])
+        h = max(0.001, self.parameters["height"])
+        segs = max(12, int(self.parameters.get("segments", 36)))
+
+        new_solid = make_cone(r_bot, r_top, h, segments=segs, name=self.name)
+        return _apply_boolean_operation(existing_bodies, new_solid, self.operation, self.body_id, self.target_body_id)
+
+
+class TorusFeature(Feature):
+    """Fonctionnalité paramétrique de création de tore (donut)."""
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Torus",
+        major_radius: float = 25.0,
+        minor_radius: float = 6.0,
+        segments: int = 36,
+        operation: BooleanOperation = BooleanOperation.NEW_BODY,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.parameters = {
+            "major_radius": float(major_radius),
+            "minor_radius": float(minor_radius),
+            "segments": float(segments),
+        }
+        self.operation = operation
+        self.target_body_id = target_body_id
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère le tore et applique l'opération booléenne demandée."""
+        r_maj = max(0.1, self.parameters["major_radius"])
+        r_min = max(0.01, self.parameters["minor_radius"])
+        segs = max(12, int(self.parameters.get("segments", 36)))
+
+        new_solid = make_torus(r_maj, r_min, segments=segs, name=self.name)
         return _apply_boolean_operation(existing_bodies, new_solid, self.operation, self.body_id, self.target_body_id)
 
 

@@ -147,6 +147,10 @@ class Sketch2D:
             return points
         return None
 
+    def is_closed_profile(self) -> bool:
+        """Indique si l'esquisse possède au moins un contour fermé valide pour extrusion/révolution."""
+        return self.get_primary_profile() is not None
+
     def to_3d_coordinates(self, pt2d: Point2D) -> Vector3D:
         """Projette un point 2D local d'esquisse dans le repère 3D global selon le plan."""
         if self.plane == PlaneType.XY:

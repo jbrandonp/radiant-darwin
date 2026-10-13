@@ -57,6 +57,12 @@ class CADExporter:
         return True
 
     @staticmethod
+    def export_step(bodies: Dict[str, Solid], filepath: str) -> bool:
+        """Exporte les corps solides au format standard d'échange STEP (ISO 10303-21 AP203)."""
+        from src.core.step_exporter import STEPExporter
+        return STEPExporter.export_multiple_solids(bodies, filepath)
+
+    @staticmethod
     def _combine_solids_to_trimesh(bodies: Dict[str, Solid]) -> Optional[trimesh.Trimesh]:
         """Combine tous les solides du dictionnaire en une seule structure trimesh."""
         sub_meshes: List[trimesh.Trimesh] = []

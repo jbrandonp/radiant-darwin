@@ -86,6 +86,8 @@ class CADRibbonBar(QTabWidget):
     create_box_requested = Signal()
     create_cylinder_requested = Signal()
     create_sphere_requested = Signal()
+    create_cone_requested = Signal()
+    create_torus_requested = Signal()
     extrude_requested = Signal()
     revolve_requested = Signal()
     loft_requested = Signal()
@@ -98,8 +100,12 @@ class CADRibbonBar(QTabWidget):
     chamfer_requested = Signal()
     draft_requested = Signal()
 
-    # Inspection & Métrologie 3D (FreeCAD Measure Workbench)
+    # Quincaillerie & Visserie ISO (FreeCAD Fasteners Workbench)
+    create_fastener_requested = Signal(str)
+
+    # Inspection & Métrologie 3D (FreeCAD Measure & Section Workbench)
     measure_requested = Signal()
+    section_cut_requested = Signal()
 
     # Analyse & Réparation de Maillage (FreeCAD Mesh Workbench)
     mesh_analysis_requested = Signal()
@@ -146,6 +152,7 @@ class CADRibbonBar(QTabWidget):
     export_stl_requested = Signal()
     export_obj_requested = Signal()
     export_ply_requested = Signal()
+    export_step_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -156,6 +163,7 @@ class CADRibbonBar(QTabWidget):
         self._init_solid_tab()
         self._init_sketch_tab()
         self._init_sheet_metal_tab()
+        self._init_fasteners_tab()
         self._init_assembly_tab()
         self._init_simulation_tab()
         self._init_render_tab()
@@ -204,12 +212,16 @@ class CADRibbonBar(QTabWidget):
         btn_ext.clicked.connect(self.extrude_requested.emit)
         btn_rev = RibbonButton("Révolution", "🔄")
         btn_rev.clicked.connect(self.revolve_requested.emit)
+        btn_cone = RibbonButton("Cône", "📐")
+        btn_cone.clicked.connect(self.create_cone_requested.emit)
+        btn_torus = RibbonButton("Tore", "🍩")
+        btn_torus.clicked.connect(self.create_torus_requested.emit)
         btn_loft = RibbonButton("Lissage", "🏺")
         btn_loft.clicked.connect(self.loft_requested.emit)
         btn_swp = RibbonButton("Balayage", "➰")
         btn_swp.clicked.connect(self.sweep_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Créer (PartDesign)", [btn_box, btn_cyl, btn_sph, btn_ext, btn_rev, btn_loft, btn_swp]))
+        layout.addWidget(_create_ribbon_group("Créer (PartDesign)", [btn_box, btn_cyl, btn_sph, btn_cone, btn_torus, btn_ext, btn_rev, btn_loft, btn_swp]))
 
         btn_hole = RibbonButton("Perçage", "🕳️")
         btn_hole.clicked.connect(self.hole_requested.emit)
@@ -276,6 +288,28 @@ class CADRibbonBar(QTabWidget):
 
         layout.addWidget(_create_ribbon_group("Tôlerie & Pliage", [btn_sm, btn_flat, btn_dxf]))
         self.addTab(tab, "TÔLERIE")
+
+    def _init_fasteners_tab(self) -> None:
+        """Onglet QUINCAILLERIE & VISSERIE NORMALISÉE (FreeCAD Fasteners WB)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_hex = RibbonButton("Vis Hex", "🔩")
+        btn_hex.clicked.connect(lambda: self.create_fastener_requested.emit("hex_bolt"))
+        btn_chc = RibbonButton("Vis CHC", "🔩")
+        btn_chc.clicked.connect(lambda: self.create_fastener_requested.emit("socket_cap"))
+        layout.addWidget(_create_ribbon_group("Vis Métriques ISO", [btn_hex, btn_chc]))
+
+        btn_nut = RibbonButton("Écrou Hex", "⚙️")
+        btn_nut.clicked.connect(lambda: self.create_fastener_requested.emit("hex_nut"))
+        btn_wsh = RibbonButton("Rondelle", "🔘")
+        btn_wsh.clicked.connect(lambda: self.create_fastener_requested.emit("washer"))
+        layout.addWidget(_create_ribbon_group("Écrous & Rondelles", [btn_nut, btn_wsh]))
+
+        self.addTab(tab, "QUINCAILLERIE")
 
     def _init_assembly_tab(self) -> None:
         """Onglet ASSEMBLAGE."""
@@ -371,8 +405,10 @@ class CADRibbonBar(QTabWidget):
         btn_clear.clicked.connect(self.measure_requested.emit)
         btn_audit = RibbonButton("Bilan Masse", "📊")
         btn_audit.clicked.connect(self.measure_requested.emit)
+        btn_cut = RibbonButton("Coupe 2D", "✂️")
+        btn_cut.clicked.connect(self.section_cut_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Métrologie & Contrôle", [btn_meas, btn_clear, btn_audit]))
+        layout.addWidget(_create_ribbon_group("Métrologie & Contrôle", [btn_meas, btn_clear, btn_audit, btn_cut]))
         self.addTab(tab, "INSPECTION")
 
     def _init_mesh_tab(self) -> None:
@@ -423,6 +459,8 @@ class CADRibbonBar(QTabWidget):
         btn_obj.clicked.connect(self.export_obj_requested.emit)
         btn_ply = RibbonButton("Polygon PLY", "📊")
         btn_ply.clicked.connect(self.export_ply_requested.emit)
+        btn_step = RibbonButton("STEP (ISO)", "📦")
+        btn_step.clicked.connect(self.export_step_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Fichiers 3D", [btn_stl, btn_obj, btn_ply]))
+        layout.addWidget(_create_ribbon_group("Fichiers 3D", [btn_stl, btn_obj, btn_ply, btn_step]))
         self.addTab(tab, "EXPORT")

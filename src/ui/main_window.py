@@ -18,7 +18,12 @@ from src.core.document import CADDocument
 from src.core.types import BooleanOperation, PlaneType, Point2D, Vector3D
 from src.core.sketch import Sketch2D
 from src.core.geometry import Solid
-from src.core.feature import BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature
+from src.core.feature import (
+    BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature,
+    ConeFeature, TorusFeature
+)
+from src.core.fasteners import FastenerFeature
+from src.core.section_tools import slice_solid_contours, create_sketch_from_cross_section
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature,
@@ -47,7 +52,8 @@ from src.ui.dialogs import (
     ExtrudeDialog, RevolveDialog, HoleDialog, ShellDialog,
     CombineDialog, FEADialog, ParametersDialog, SheetMetalDialog,
     RenderDialog, LoftDialog, SweepDialog, FilletDialog,
-    ChamferDialog, DraftDialog, MeasureDialog, MeshAnalysisDialog
+    ChamferDialog, DraftDialog, MeasureDialog, MeshAnalysisDialog,
+    CreateConeDialog, CreateTorusDialog, FastenerDialog, SectionCutDialog
 )
 from src.ui.theme import FUSION_DARK_STYLESHEET
 
@@ -158,6 +164,8 @@ class CADMainWindow(QMainWindow):
         self.ribbon.create_box_requested.connect(self._on_action_create_box)
         self.ribbon.create_cylinder_requested.connect(self._on_action_create_cylinder)
         self.ribbon.create_sphere_requested.connect(self._on_action_create_sphere)
+        self.ribbon.create_cone_requested.connect(self._on_action_create_cone)
+        self.ribbon.create_torus_requested.connect(self._on_action_create_torus)
         self.ribbon.extrude_requested.connect(self._on_action_extrude)
         self.ribbon.revolve_requested.connect(self._on_action_revolve)
         self.ribbon.loft_requested.connect(self._on_action_loft)
@@ -170,8 +178,12 @@ class CADMainWindow(QMainWindow):
         self.ribbon.chamfer_requested.connect(self._on_action_chamfer)
         self.ribbon.draft_requested.connect(self._on_action_draft)
 
+        # Quincaillerie ISO (FreeCAD Fasteners WB)
+        self.ribbon.create_fastener_requested.connect(self._on_action_create_fastener)
+
         # Inspection & Métrologie (FreeCAD Measure WB)
         self.ribbon.measure_requested.connect(self._on_action_measure)
+        self.ribbon.section_cut_requested.connect(self._on_action_section_cut)
 
         # Maillage & Diagnostic (FreeCAD Mesh WB)
         self.ribbon.mesh_analysis_requested.connect(self._on_action_mesh_analysis)
@@ -218,6 +230,7 @@ class CADMainWindow(QMainWindow):
         self.ribbon.export_stl_requested.connect(self._on_export_stl)
         self.ribbon.export_obj_requested.connect(self._on_export_obj)
         self.ribbon.export_ply_requested.connect(self._on_export_ply)
+        self.ribbon.export_step_requested.connect(self._on_export_step)
 
         # Sélection et navigateur
         self.timeline.feature_selected.connect(self.props_panel.set_feature)
@@ -438,6 +451,41 @@ class CADMainWindow(QMainWindow):
             feat = SphereFeature(f"feat_{self._feature_seq}", f"Sphère {self._feature_seq}", rad, 36, op, target)
             self.document.add_feature(feat)
 
+    def _on_action_create_cone(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        dlg = CreateConeDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            feat = ConeFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Cône {self._feature_seq}",
+                radius_bottom=float(vals["radius_bottom"]),
+                radius_top=float(vals["radius_top"]),
+                height=float(vals["height"]),
+                segments=int(float(vals["segments"])),
+                operation=vals["operation"],
+                target_body_id=vals["target_body_id"]
+            )
+            self.document.add_feature(feat)
+
+    def _on_action_create_torus(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        dlg = CreateTorusDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            feat = TorusFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Tore {self._feature_seq}",
+                major_radius=float(vals["major_radius"]),
+                minor_radius=float(vals["minor_radius"]),
+                segments=int(float(vals["segments"])),
+                operation=vals["operation"],
+                target_body_id=vals["target_body_id"]
+            )
+            self.document.add_feature(feat)
+
     def _on_action_extrude(self) -> None:
         if not self.document.sketches:
             QMessageBox.information(self, "Extrusion", "Créez d'abord une esquisse 2D.")
@@ -614,9 +662,65 @@ class CADMainWindow(QMainWindow):
             )
             self.document.add_feature(feat)
 
+    def _on_action_create_fastener(self, fastener_type: str = "hex_bolt") -> None:
+        dlg = FastenerDialog(fastener_type=fastener_type, parent=self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            feat = FastenerFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"{vals['fastener_type'].replace('_', ' ').title()} {vals['thread_size']}",
+                fastener_type=str(vals["fastener_type"]),
+                thread_size=str(vals["thread_size"]),
+                length=float(vals["length"]),
+                has_washer=bool(vals.get("has_washer", False))
+            )
+            self.document.add_feature(feat)
+            self.status_bar.showMessage(f"Composant standard ISO {feat.name} ajouté", 3000)
+
     def _on_action_measure(self) -> None:
         dlg = MeasureDialog(self.document.bodies, self)
         dlg.exec()
+
+    def _on_action_section_cut(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            QMessageBox.information(self, "Coupe 2D", "Aucun corps solide disponible pour la coupe.")
+            return
+        dlg = SectionCutDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            body_id = str(vals["body_id"])
+            solid = self.document.bodies.get(body_id)
+            if not solid:
+                return
+            axis = str(vals["axis"])
+            coord = float(vals["coordinate"])
+            create_sketch = bool(vals["create_sketch"])
+
+            contours = slice_solid_contours(solid, axis=axis, coordinate=coord)
+            if not contours:
+                QMessageBox.warning(self, "Coupe 2D", f"Aucune section intersectée sur le plan {axis}={coord:.1f} mm.")
+                return
+
+            if create_sketch:
+                self._sketch_seq += 1
+                sk_name = f"Coupe_{axis}_{coord:.0f}mm"
+                plane = PlaneType.XY if axis == "Z" else (PlaneType.XZ if axis == "Y" else PlaneType.YZ)
+                sketch = create_sketch_from_cross_section(
+                    contours=contours,
+                    sketch_id=f"sketch_{self._sketch_seq}",
+                    name=sk_name,
+                    plane=plane
+                )
+                self.document.add_sketch(sketch)
+                self.status_bar.showMessage(f"Esquisse '{sk_name}' générée avec succès ({len(contours)} contour(s))", 4000)
+                QMessageBox.information(
+                    self, "Coupe 2D Réussie",
+                    f"Coupe 2D extraite sur le plan {axis}={coord:.2f} mm !\n"
+                    f"• Contours détectés : {len(contours)}\n"
+                    f"• Nouvelle esquisse 2D créée : '{sk_name}'"
+                )
 
     def _on_action_mesh_analysis(self) -> None:
         dlg = MeshAnalysisDialog(self.document.bodies, on_repair_callback=self._on_mesh_repaired, parent=self)
@@ -803,6 +907,13 @@ class CADMainWindow(QMainWindow):
             if ok:
                 QMessageBox.information(self, "Exportation", f"Modèle exporté avec succès :\n{path}")
 
+    def _on_export_step(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Exporter en STEP (ISO 10303-21)", "", "Fichiers STEP (*.step *.stp)")
+        if path:
+            ok = CADExporter.export_step(self.document.bodies, path)
+            if ok:
+                QMessageBox.information(self, "Exportation STEP", f"Modèle STEP B-Rep exporté avec succès :\n{path}")
+
     def _on_body_selected(self, body_id: str) -> None:
         """Affiche les informations d'un corps solide sélectionné dans le navigateur."""
         if body_id in self.document.bodies:
@@ -835,5 +946,5 @@ class CADMainWindow(QMainWindow):
         if body_id not in self.document.bodies:
             return
         del self.document.bodies[body_id]
-        self.document._notify_changes()
+        self.document._notify_change()
         self.status_bar.showMessage(f"Corps {body_id} supprimé.", 3000)

@@ -20,8 +20,10 @@ from src.core.parameters import ParameterTable
 from src.materials.material_db import MATERIAL_LIBRARY, PhysicalMaterial
 from src.render.pbr_material import PBR_LIBRARY, PBRMaterial
 from src.render.raytracer import PBRRaytracer
+from src.core.sketch import Sketch2D
 from src.core.inspector import measure_points, compute_clearance, compute_interference, generate_inspection_report
 from src.core.mesh_tools import diagnose_mesh, repair_mesh, simplify_mesh, flip_mesh_normals, MeshDiagnostic
+from src.core.section_tools import slice_solid_contours, create_sketch_from_cross_section, create_cutaway_solid
 
 
 class CreateBoxDialog(QDialog):
@@ -1292,4 +1294,314 @@ class MeshAnalysisDialog(QDialog):
             flipped = flip_mesh_normals(self.bodies[k])
             self.on_repair_callback(k, flipped)
             self._update_diagnostic()
+
+
+class CreateConeDialog(QDialog):
+    """Dialogue de création d'un cône ou tronc de cône paramétrique."""
+
+    def __init__(self, existing_bodies: List[str], parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Créer un Cône / Tronc de Cône")
+        self.setFixedSize(320, 240)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.spin_r_bot = QDoubleSpinBox()
+        self.spin_r_bot.setRange(0.0, 5000.0)
+        self.spin_r_bot.setValue(15.0)
+        self.spin_r_bot.setSuffix(" mm")
+        form.addRow("Rayon Base (R1) :", self.spin_r_bot)
+
+        self.spin_r_top = QDoubleSpinBox()
+        self.spin_r_top.setRange(0.0, 5000.0)
+        self.spin_r_top.setValue(0.0)
+        self.spin_r_top.setSuffix(" mm")
+        form.addRow("Rayon Sommet (R2) :", self.spin_r_top)
+
+        self.spin_h = QDoubleSpinBox()
+        self.spin_h.setRange(0.1, 5000.0)
+        self.spin_h.setValue(30.0)
+        self.spin_h.setSuffix(" mm")
+        form.addRow("Hauteur :", self.spin_h)
+
+        self.combo_op = QComboBox()
+        self.combo_op.addItems(["Nouveau Corps", "Joindre (Union)", "Couper (Différence)", "Intersection"])
+        form.addRow("Opération Booléenne :", self.combo_op)
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Créer le Cône")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[float, int, BooleanOperation, Optional[str]]]:
+        """Retourne les paramètres validés pour le cône."""
+        ops = [
+            BooleanOperation.NEW_BODY,
+            BooleanOperation.JOIN,
+            BooleanOperation.CUT,
+            BooleanOperation.INTERSECT
+        ]
+        target = self.combo_target.currentText()
+        return {
+            "radius_bottom": self.spin_r_bot.value(),
+            "radius_top": self.spin_r_top.value(),
+            "height": self.spin_h.value(),
+            "segments": 36,
+            "operation": ops[self.combo_op.currentIndex()],
+            "target_body_id": None if target == "Aucun corps" else target
+        }
+
+
+class CreateTorusDialog(QDialog):
+    """Dialogue de création d'un tore (donut) paramétrique."""
+
+    def __init__(self, existing_bodies: List[str], parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Créer un Tore (Torus)")
+        self.setFixedSize(320, 220)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.spin_r_maj = QDoubleSpinBox()
+        self.spin_r_maj.setRange(0.5, 5000.0)
+        self.spin_r_maj.setValue(25.0)
+        self.spin_r_maj.setSuffix(" mm")
+        form.addRow("Rayon Majeur (R) :", self.spin_r_maj)
+
+        self.spin_r_min = QDoubleSpinBox()
+        self.spin_r_min.setRange(0.1, 500.0)
+        self.spin_r_min.setValue(6.0)
+        self.spin_r_min.setSuffix(" mm")
+        form.addRow("Rayon Tube (r) :", self.spin_r_min)
+
+        self.combo_op = QComboBox()
+        self.combo_op.addItems(["Nouveau Corps", "Joindre (Union)", "Couper (Différence)", "Intersection"])
+        form.addRow("Opération Booléenne :", self.combo_op)
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Créer le Tore")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[float, int, BooleanOperation, Optional[str]]]:
+        """Retourne les paramètres validés pour le tore."""
+        ops = [
+            BooleanOperation.NEW_BODY,
+            BooleanOperation.JOIN,
+            BooleanOperation.CUT,
+            BooleanOperation.INTERSECT
+        ]
+        target = self.combo_target.currentText()
+        return {
+            "major_radius": self.spin_r_maj.value(),
+            "minor_radius": self.spin_r_min.value(),
+            "segments": 36,
+            "operation": ops[self.combo_op.currentIndex()],
+            "target_body_id": None if target == "Aucun corps" else target
+        }
+
+
+class FastenerDialog(QDialog):
+    """Dialogue de création de quincaillerie et visserie ISO normalisée."""
+
+    def __init__(
+        self,
+        existing_bodies: Optional[Union[Sequence[str], str]] = None,
+        fastener_type: str = "hex_bolt",
+        parent: Optional[QWidget] = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Visserie Métrique Normalisée (Fasteners)")
+        self.setFixedSize(360, 260)
+
+        resolved_type = fastener_type
+        resolved_bodies: List[str] = []
+        if isinstance(existing_bodies, str):
+            resolved_type = existing_bodies
+        elif existing_bodies:
+            resolved_bodies = list(existing_bodies)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.combo_type = QComboBox()
+        self.combo_type.addItems([
+            "Vis Tête Hexagonale (ISO 4017)",
+            "Vis CHC / BTR Six Pans (ISO 4762)",
+            "Écrou Hexagonal (ISO 4032)",
+            "Rondelle Plate (ISO 7089)"
+        ])
+        type_indices = {
+            "hex_bolt": 0,
+            "socket_cap": 1,
+            "socket_screw": 1,
+            "hex_nut": 2,
+            "washer": 3
+        }
+        if resolved_type in type_indices:
+            self.combo_type.setCurrentIndex(type_indices[resolved_type])
+
+        form.addRow("Type de Quincaillerie :", self.combo_type)
+
+        self.combo_size = QComboBox()
+        self.combo_size.addItems(["M3", "M4", "M5", "M6", "M8", "M10", "M12", "M16", "M20"])
+        self.combo_size.setCurrentText("M8")
+        form.addRow("Taille Métrique :", self.combo_size)
+
+        self.spin_len = QDoubleSpinBox()
+        self.spin_len.setRange(2.0, 500.0)
+        self.spin_len.setValue(30.0)
+        self.spin_len.setSuffix(" mm")
+        form.addRow("Longueur Sous Tête :", self.spin_len)
+
+        self.combo_op = QComboBox()
+        self.combo_op.addItems(["Nouveau Corps", "Joindre (Union)", "Couper (Différence)", "Intersection"])
+        form.addRow("Opération Booléenne :", self.combo_op)
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(resolved_bodies if resolved_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Générer la Pièce")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[str, float, BooleanOperation, Optional[str], bool]]:
+        """Retourne les paramètres de la quincaillerie."""
+        types_map = {0: "hex_bolt", 1: "socket_screw", 2: "hex_nut", 3: "washer"}
+        ops = [
+            BooleanOperation.NEW_BODY,
+            BooleanOperation.JOIN,
+            BooleanOperation.CUT,
+            BooleanOperation.INTERSECT
+        ]
+        target = self.combo_target.currentText()
+        selected_type = types_map.get(self.combo_type.currentIndex(), "hex_bolt")
+        return {
+            "fastener_type": selected_type,
+            "standard_size": self.combo_size.currentText(),
+            "thread_size": self.combo_size.currentText(),
+            "length": self.spin_len.value(),
+            "operation": ops[self.combo_op.currentIndex()],
+            "target_body_id": None if target == "Aucun corps" else target,
+            "has_washer": False
+        }
+
+
+class SectionCutDialog(QDialog):
+    """Dialogue de coupe dynamique et extraction d'esquisse de section (Part_Section)."""
+
+    def __init__(
+        self,
+        bodies: Union[Sequence[str], Dict[str, Solid]],
+        on_create_sketch_callback: Optional[Callable[[Sketch2D], None]] = None,
+        parent: Optional[QWidget] = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Plan de Coupe Dynamique & Extraction 2D (Section)")
+        self.setFixedSize(400, 260)
+        self.on_create_sketch_callback = on_create_sketch_callback
+
+        if isinstance(bodies, dict):
+            self.bodies: Dict[str, Solid] = bodies
+            body_keys = list(bodies.keys())
+        else:
+            self.bodies = {}
+            body_keys = list(bodies)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.combo_body = QComboBox()
+        self.combo_body.addItems(body_keys if body_keys else ["Aucun corps"])
+        form.addRow("Corps Tranché :", self.combo_body)
+
+        self.combo_plane = QComboBox()
+        self.combo_plane.addItems(["Plan XY (Axe Z)", "Plan XZ (Axe Y)", "Plan YZ (Axe X)"])
+        form.addRow("Plan de Coupe :", self.combo_plane)
+
+        self.spin_offset = QDoubleSpinBox()
+        self.spin_offset.setRange(-5000.0, 5000.0)
+        self.spin_offset.setValue(0.0)
+        self.spin_offset.setSuffix(" mm")
+        form.addRow("Décalage (Offset) :", self.spin_offset)
+
+        layout.addLayout(form)
+
+        self.lbl_info = QLabel("Sélectionnez le corps et le plan de coupe.")
+        self.lbl_info.setStyleSheet("color: #00a2ff; font-weight: bold;")
+        layout.addWidget(self.lbl_info)
+
+        btn_sketch = QPushButton("📐 Créer Esquisse 2D depuis cette Coupe")
+        btn_sketch.clicked.connect(self._on_create_sketch)
+        layout.addWidget(btn_sketch)
+
+        btn_close = QPushButton("Fermer")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close)
+
+    def _on_create_sketch(self) -> None:
+        """Génère l'esquisse 2D à partir de la coupe courante."""
+        k = self.combo_body.currentText()
+        if k not in self.bodies:
+            self.lbl_info.setText("Aucun solide sélectionné.")
+            return
+
+        solid = self.bodies[k]
+        axes = ["Z", "Y", "X"]
+        axis = axes[self.combo_plane.currentIndex()]
+        offset = self.spin_offset.value()
+
+        sk = create_sketch_from_cross_section(
+            solid=solid,
+            sketch_id=f"sketch_cut_{k}_{int(offset)}",
+            name=f"Coupe {axis}={offset}mm",
+            axis=axis,
+            offset=offset
+        )
+        if sk and self.on_create_sketch_callback:
+            self.on_create_sketch_callback(sk)
+            self.lbl_info.setText(f"✅ Esquisse '{sk.name}' créée avec {len(sk.entities)} contours !")
+        else:
+            self.lbl_info.setText("⚠️ Aucun contour fermé trouvé à cette altitude.")
+
+    def get_values(self) -> Dict[str, Union[str, float, bool]]:
+        """Retourne les paramètres de coupe sélectionnés."""
+        axes = ["Z", "Y", "X"]
+        return {
+            "body_id": self.combo_body.currentText(),
+            "axis": axes[self.combo_plane.currentIndex()],
+            "coordinate": self.spin_offset.value(),
+            "offset": self.spin_offset.value(),
+            "create_sketch": True
+        }
 

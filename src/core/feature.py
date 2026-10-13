@@ -6,7 +6,7 @@ sa géométrie dans le contexte du document.
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass, field
 
 from src.core.types import BooleanOperation, FeatureStatus, Vector3D, Point2D, PlaneType

@@ -5,7 +5,7 @@ de la fonctionnalité actuellement sélectionnée.
 """
 
 from __future__ import annotations
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLabel, QDoubleSpinBox,
     QPushButton, QFrame, QMessageBox
@@ -91,10 +91,10 @@ class CADPropertiesPanel(QWidget):
             spin.setSuffix(" mm")
 
             # Connexion au changement
-            def _make_handler(p_name: str, sp: QDoubleSpinBox):
+            def _make_handler(p_name: str) -> Callable[[float], None]:
                 return lambda val: self._on_param_changed(p_name, val)
 
-            spin.valueChanged.connect(_make_handler(param_name, spin))
+            spin.valueChanged.connect(_make_handler(param_name))
 
             label = QLabel(param_name.capitalize())
             label.setStyleSheet("color: #c0c4cc; font-weight: 500;")

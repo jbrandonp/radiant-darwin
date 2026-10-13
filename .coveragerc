@@ -1,0 +1,9 @@
+[run]
+source = src
+omit =
+    */__pycache__/*
+    */tests/*
+
+[report]
+include = src/*
+show_missing = True

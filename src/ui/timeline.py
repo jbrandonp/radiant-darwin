@@ -91,13 +91,12 @@ class CADTimeline(QWidget):
         self.btn_prev.setToolTip("Étape précédente")
         self.btn_prev.clicked.connect(self._step_backward)
 
-        self.btn_play = QPushButton("▶")
+        self.btn_play = QPushButton("⏯")
         self.btn_play.setFixedSize(28, 28)
-        self.btn_play.setToolTip("Rejouer la construction")
+        self.btn_play.setToolTip("Rejouer / Pause")
         self.btn_play.clicked.connect(self._toggle_playback)
 
         self.btn_next = QPushButton("▶")
-        self.btn_next.setText("▶")
         self.btn_next.setFixedSize(28, 28)
         self.btn_next.setToolTip("Étape suivante")
         self.btn_next.clicked.connect(self._step_forward)

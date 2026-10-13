@@ -193,6 +193,7 @@ class CADMainWindow(QMainWindow):
         # Sélection
         self.timeline.feature_selected.connect(self.props_panel.set_feature)
         self.browser.body_selected.connect(self._on_body_selected)
+        self.browser.sketch_selected.connect(self._on_sketch_selected)
 
     def _create_initial_sample(self) -> None:
         """Génère un exemple initial : Platine usinée avec alésage central."""
@@ -652,6 +653,17 @@ class CADMainWindow(QMainWindow):
                 QMessageBox.information(self, "Exportation", f"Modèle exporté avec succès :\n{path}")
 
     def _on_body_selected(self, body_id: str) -> None:
+        """Affiche les informations d'un corps solide sélectionné dans le navigateur."""
         if body_id in self.document.bodies:
             body = self.document.bodies[body_id]
             self.status_bar.showMessage(f"Corps sélectionné : {body.name} (Volume: {body.volume():.1f} mm³)", 3000)
+
+    def _on_sketch_selected(self, sketch_id: str) -> None:
+        """Affiche les informations d'une esquisse sélectionnée dans le navigateur."""
+        if sketch_id in self.document.sketches:
+            sketch = self.document.sketches[sketch_id]
+            ent_count = len(sketch.entities)
+            self.status_bar.showMessage(
+                f"Esquisse sélectionnée : {sketch.name} [Plan: {sketch.plane.value}] ({ent_count} entités)",
+                3000
+            )

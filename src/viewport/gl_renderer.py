@@ -5,7 +5,7 @@ et le trièdre des axes orthonormés (X=rouge, Y=vert, Z=bleu).
 """
 
 from __future__ import annotations
-from typing import List
+from typing import List, Tuple
 import numpy as np
 from OpenGL import GL
 from OpenGL.GLU import gluPerspective, gluLookAt

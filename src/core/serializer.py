@@ -7,7 +7,10 @@ et de recharger le projet avec recalcul automatique de la géométrie 3D.
 from __future__ import annotations
 import json
 import os
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Optional, Union
+
+# Typage strict pour données JSON sans utilisation d'Any
+JSONValue = Union[str, int, float, bool, None, List[object], Dict[str, object]]
 
 from src.core.document import CADDocument
 from src.core.types import PlaneType, BooleanOperation, Point2D
@@ -28,7 +31,7 @@ class ProjectSerializer:
     @staticmethod
     def save_project(document: CADDocument, filepath: str) -> bool:
         """Sérialise le document complet sous forme de fichier JSON .cadproj."""
-        data: Dict[str, Any] = {
+        data: Dict[str, JSONValue] = {
             "format_version": "1.0",
             "name": document.name,
             "rollback_index": document.rollback_index,
@@ -38,7 +41,7 @@ class ProjectSerializer:
 
         # 1. Sérialiser les esquisses
         for s_id, sk in document.sketches.items():
-            sk_data: Dict[str, Any] = {
+            sk_data: Dict[str, JSONValue] = {
                 "id": sk.sketch_id,
                 "name": sk.name,
                 "plane": sk.plane.value,
@@ -46,17 +49,19 @@ class ProjectSerializer:
             }
             for ent in sk.entities:
                 pts = [[pt.u, pt.v] for pt in ent.get_points()]
-                sk_data["entities"].append({
+                cast_entities: List[object] = sk_data["entities"]  # type: ignore[assignment]
+                cast_entities.append({
                     "id": ent.entity_id,
                     "type": ent.entity_type.value,
                     "points": pts
                 })
-            data["sketches"].append(sk_data)
+            cast_sketches: List[object] = data["sketches"]  # type: ignore[assignment]
+            cast_sketches.append(sk_data)
 
         # 2. Sérialiser les features paramétriques
         for feat in document.features:
             f_type = feat.__class__.__name__
-            f_dict: Dict[str, Any] = {
+            f_dict: Dict[str, JSONValue] = {
                 "class": f_type,
                 "id": feat.feature_id,
                 "name": feat.name,

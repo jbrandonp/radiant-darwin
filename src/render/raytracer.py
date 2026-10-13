@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict
 import numpy as np
-from PySide6.QtGui import QImage, QColor
+from PySide6.QtGui import QImage, QColor, QPainter, QLinearGradient
 
 from src.core.types import Vector3D, MeshBuffer
 from src.core.geometry import Solid
@@ -152,12 +152,13 @@ class PBRRaytracer:
         mesh = solid.to_mesh_buffer()
         image = QImage(safe_w, safe_h, QImage.Format.Format_ARGB32)
 
-        # Fond studio en dégradé vertical
-        for y in range(safe_h):
-            ratio = y / max(1, safe_h)
-            bg_c = int(28 + 22 * ratio)
-            for x in range(safe_w):
-                image.setPixelColor(x, y, QColor(bg_c, bg_c + 2, bg_c + 5, 255))
+        # Fond studio en dégradé vertical vectorisé ultra-rapide (QPainter)
+        painter = QPainter(image)
+        grad = QLinearGradient(0.0, 0.0, 0.0, float(safe_h))
+        grad.setColorAt(0.0, QColor(28, 30, 35, 255))
+        grad.setColorAt(1.0, QColor(50, 52, 58, 255))
+        painter.fillRect(0, 0, safe_w, safe_h, grad)
+        painter.end()
 
         if mesh.is_empty():
             return image
@@ -173,29 +174,28 @@ class PBRRaytracer:
 
         # Matrice de vue isométrique
         # Angle azimut 45°, élévation 30°
-        cos_az = np.cos(np.radians(45.0))
-        sin_az = np.sin(np.radians(45.0))
-        cos_el = np.cos(np.radians(30.0))
-        sin_el = np.sin(np.radians(30.0))
+        cos_az = float(np.cos(np.radians(45.0)))
+        sin_az = float(np.sin(np.radians(45.0)))
+        cos_el = float(np.cos(np.radians(30.0)))
+        sin_el = float(np.sin(np.radians(30.0)))
 
         view_dir = Vector3D(float(cos_az * cos_el), float(sin_az * cos_el), float(sin_el)).normalized()
 
-        # Projection 3D vers 2D
-        proj_pts: List[Tuple[int, int, float]] = []
-        for v in verts:
-            rel_x = float(v[0]) - center.x
-            rel_y = float(v[1]) - center.y
-            rel_z = float(v[2]) - center.z
+        # Projection vectorisée 3D vers 2D en une seule passe NumPy
+        v_rel = verts[:, :3] - np.array([center.x, center.y, center.z], dtype=np.float32)
+        x_rot = v_rel[:, 0] * cos_az - v_rel[:, 1] * sin_az
+        y_temp = v_rel[:, 0] * sin_az + v_rel[:, 1] * cos_az
+        y_rot = y_temp * sin_el + v_rel[:, 2] * cos_el
+        depths = -y_temp * cos_el + v_rel[:, 2] * sin_el
 
-            # Rotation
-            x_rot = rel_x * cos_az - rel_y * sin_az
-            y_temp = rel_x * sin_az + rel_y * cos_az
-            y_rot = y_temp * sin_el + rel_z * cos_el
-            depth = -y_temp * cos_el + rel_z * sin_el
+        screen_xs = (safe_w * 0.5 + x_rot * scale).astype(np.int32)
+        screen_ys = (safe_h * 0.5 - y_rot * scale).astype(np.int32)
 
-            screen_x = int(safe_w * 0.5 + x_rot * scale)
-            screen_y = int(safe_h * 0.5 - y_rot * scale)
-            proj_pts.append((screen_x, screen_y, depth))
+        # Liste projetée pour rasterisation
+        proj_pts: List[Tuple[int, int, float]] = [
+            (int(screen_xs[i]), int(screen_ys[i]), float(depths[i]))
+            for i in range(len(verts))
+        ]
 
         # Z-Buffer de profondeur
         z_buffer = np.full((safe_h, safe_w), -1e9, dtype=np.float32)

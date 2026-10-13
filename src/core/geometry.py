@@ -22,6 +22,7 @@ class Solid:
         self._manifold: m.Manifold = internal_manifold
         self.name: str = name
         self.color: ColorRGBA = ColorRGBA(0.72, 0.76, 0.82, 1.0)  # Gris aluminium Fusion 360
+        self._cached_buffer: Optional[MeshBuffer] = None
 
     @property
     def manifold(self) -> m.Manifold:
@@ -95,8 +96,12 @@ class Solid:
     def to_mesh_buffer(self) -> MeshBuffer:
         """
         Convertit le solide en MeshBuffer optimisé pour le rendu OpenGL.
-        Calcule les normales douces et extrait les arêtes nettes (dihedral edges).
+        Calcule les normales de faces et extrait les arêtes nettes (dihedral edges).
+        Met en cache le résultat pour des performances O(1) lors des rappels de rendu.
         """
+        if self._cached_buffer is not None:
+            return self._cached_buffer
+
         if self._manifold.is_empty():
             return MeshBuffer.empty()
 
@@ -154,6 +159,7 @@ class Solid:
             color=self.color,
             edge_vertices=edge_vertices
         )
+        self._cached_buffer = buffer
         return buffer
 
 
@@ -245,34 +251,44 @@ def _extract_sharp_edges(
 ) -> np.ndarray:
     """
     Extrait les arêtes vives du maillage pour l'affichage des lignes de contour CAO.
-    Compare l'angle dièdre entre les faces partageant chaque arête.
+    Algorithme vectorisé NumPy ultra-rapide basé sur le tri lexical des paires de sommets.
     """
-    # Création d'une table d'arêtes vers les faces associées
-    edge_to_faces: dict[Tuple[int, int], List[int]] = {}
+    if len(tri_verts) == 0:
+        return np.zeros((0, 2), dtype=np.uint32)
 
-    for face_idx, tri in enumerate(tri_verts):
-        i0, i1, i2 = int(tri[0]), int(tri[1]), int(tri[2])
-        edges_in_tri = [
-            (min(i0, i1), max(i0, i1)),
-            (min(i1, i2), max(i1, i2)),
-            (min(i2, i0), max(i2, i0))
-        ]
-        for edge in edges_in_tri:
-            if edge not in edge_to_faces:
-                edge_to_faces[edge] = []
-            edge_to_faces[edge].append(face_idx)
+    # 1. Extraction vectorisée de toutes les arêtes orientées de tous les triangles
+    e0 = np.sort(tri_verts[:, [0, 1]], axis=1)
+    e1 = np.sort(tri_verts[:, [1, 2]], axis=1)
+    e2 = np.sort(tri_verts[:, [2, 0]], axis=1)
+    all_edges = np.vstack([e0, e1, e2])  # (3N, 2)
+    face_indices = np.repeat(np.arange(len(tri_verts), dtype=np.int32), 3)
 
-    sharp_edges: List[Tuple[int, int]] = []
+    # 2. Tri lexical pour regrouper les arêtes identiques contiguës
+    order = np.lexsort((all_edges[:, 1], all_edges[:, 0]))
+    sorted_edges = all_edges[order]
+    sorted_faces = face_indices[order]
+
+    # 3. Détection vectorisée des changements d'arêtes
+    diff = np.any(sorted_edges[1:] != sorted_edges[:-1], axis=1)
+    split_indices = np.concatenate(([0], np.where(diff)[0] + 1, [len(sorted_edges)]))
+
     cos_threshold = float(np.cos(np.radians(angle_threshold_deg)))
+    sharp_edges: List[Tuple[int, int]] = []
 
-    for edge, faces in edge_to_faces.items():
-        if len(faces) == 1:
-            # Arête frontière (arête nue)
+    # 4. Évaluation dièdre uniquement aux transitions
+    for i in range(len(split_indices) - 1):
+        start = split_indices[i]
+        count = split_indices[i + 1] - start
+        edge = (int(sorted_edges[start, 0]), int(sorted_edges[start, 1]))
+
+        if count == 1:
+            # Arête frontière libre
             sharp_edges.append(edge)
-        elif len(faces) == 2:
-            n0 = face_normals[faces[0]]
-            n1 = face_normals[faces[1]]
-            dot_val = float(np.dot(n0, n1))
+        elif count == 2:
+            # Arête partagée entre deux facettes
+            f0 = sorted_faces[start]
+            f1 = sorted_faces[start + 1]
+            dot_val = float(np.dot(face_normals[f0], face_normals[f1]))
             if dot_val < cos_threshold:
                 sharp_edges.append(edge)
 

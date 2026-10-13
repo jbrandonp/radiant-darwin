@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from src.core.geometry import Solid
 from src.core.sketch import Sketch2D
 from src.core.feature import Feature
-from src.core.types import MeshBuffer
+from src.core.types import MeshBuffer, FeatureStatus
 
 
 class CADDocument:
@@ -30,6 +30,8 @@ class CADDocument:
         self.rollback_index: int = -1
         self._counter: int = 0
         self._on_change_callbacks: List[Callable[[], None]] = []
+        # Cache des instantanés d'étapes (Timeline checkpoint snapshots) pour rejeu O(1)
+        self._timeline_snapshots: Dict[int, Dict[str, Solid]] = {}
 
     def register_change_listener(self, callback: Callable[[], None]) -> None:
         """Enregistre un écouteur appelé à chaque modification du modèle."""
@@ -43,9 +45,14 @@ class CADDocument:
             except Exception as e:
                 print(f"Erreur callback document : {e}")
 
+    def invalidate_cache(self) -> None:
+        """Invalide les instantanés d'historique lors d'une modification paramétrique."""
+        self._timeline_snapshots.clear()
+
     def add_sketch(self, sketch: Sketch2D) -> None:
         """Ajoute une esquisse au document."""
         self.sketches[sketch.sketch_id] = sketch
+        self.invalidate_cache()
         self._notify_change()
 
     def get_sketch(self, sketch_id: str) -> Optional[Sketch2D]:
@@ -63,12 +70,13 @@ class CADDocument:
         self.features = [f for f in self.features if f.feature_id != feature_id]
         if self.rollback_index >= len(self.features):
             self.rollback_index = len(self.features) - 1
+        self.invalidate_cache()
         self.rebuild()
 
     def set_rollback_index(self, index: int) -> None:
         """
         Déplace le curseur de rollback de l'historique (comme la barre en bas de Fusion 360).
-        Évalue uniquement les fonctionnalités jusqu'à cet index.
+        Restauration instantanée O(1) si l'étape est déjà présente en cache.
         """
         clamped_idx = max(-1, min(index, len(self.features) - 1))
         self.rollback_index = clamped_idx
@@ -76,22 +84,55 @@ class CADDocument:
 
     def rebuild(self) -> None:
         """
-        Recalcule séquentiellement l'intégralité du modèle 3D
-        depuis la première feature jusqu'à l'index de rollback actuel.
+        Recalcule séquentiellement le modèle 3D avec mise en cache des étapes (Snapshots).
+        Si un instantané est déjà valide à l'index de rollback demandé et qu'aucune opération n'est
+        périmée (OUTDATED), restauration instantanée O(1).
         """
-        current_bodies: Dict[str, Solid] = {}
         max_idx = len(self.features) - 1 if self.rollback_index == -1 else self.rollback_index
 
-        for idx, feat in enumerate(self.features):
-            if idx > max_idx:
-                break
-            if feat.is_suppressed:
-                continue
+        if max_idx < 0 or len(self.features) == 0:
+            self.bodies = {}
+            self._notify_change()
+            return
 
-            try:
-                current_bodies = feat.evaluate(current_bodies, self.sketches)
-            except Exception as err:
-                print(f"Erreur lors de l'évaluation de la feature {feat.name} ({feat.feature_id}) : {err}")
+        # Détecter la première feature marquée comme périmée (OUTDATED)
+        first_outdated_idx = max_idx + 1
+        for idx in range(max_idx + 1):
+            if getattr(self.features[idx], "status", None) == FeatureStatus.OUTDATED:
+                first_outdated_idx = idx
+                break
+
+        # Si une opération a été modifiée, purger les snapshots à partir d'elle
+        if first_outdated_idx <= max_idx:
+            for snap_idx in list(self._timeline_snapshots.keys()):
+                if snap_idx >= first_outdated_idx:
+                    del self._timeline_snapshots[snap_idx]
+        elif max_idx in self._timeline_snapshots:
+            # Aucune opération modifiée et snapshot disponible : Restauration O(1)
+            self.bodies = dict(self._timeline_snapshots[max_idx])
+            self._notify_change()
+            return
+
+        # Trouver le dernier point d'arrêt en cache valide
+        start_idx = 0
+        current_bodies: Dict[str, Solid] = {}
+        for prev_idx in range(max_idx - 1, -1, -1):
+            if prev_idx in self._timeline_snapshots:
+                current_bodies = dict(self._timeline_snapshots[prev_idx])
+                start_idx = prev_idx + 1
+                break
+
+        for idx in range(start_idx, max_idx + 1):
+            feat = self.features[idx]
+            if not feat.is_suppressed:
+                try:
+                    if getattr(feat, "status", None) == FeatureStatus.OUTDATED:
+                        feat.status = FeatureStatus.OK
+                    current_bodies = feat.evaluate(current_bodies, self.sketches)
+                except Exception as err:
+                    feat.status = FeatureStatus.ERROR
+                    print(f"Erreur lors de l'évaluation de la feature {feat.name} ({feat.feature_id}) : {err}")
+            self._timeline_snapshots[idx] = dict(current_bodies)
 
         self.bodies = current_bodies
         self._notify_change()

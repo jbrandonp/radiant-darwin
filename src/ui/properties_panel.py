@@ -168,6 +168,7 @@ class CADPropertiesPanel(QWidget):
         """Met à jour le paramètre et recalcule le modèle 3D."""
         if self.current_feature:
             self.current_feature.set_parameter(param_name, new_val)
+            self.document.invalidate_cache()
             self.document.rebuild()
 
     def _on_delete_clicked(self) -> None:

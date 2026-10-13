@@ -25,6 +25,41 @@ class GLRenderer:
         self.show_edges: bool = True
         self.bg_color_top: Tuple[float, float, float] = (0.22, 0.24, 0.28)    # Ardoise studio claire
         self.bg_color_bottom: Tuple[float, float, float] = (0.12, 0.13, 0.16) # Graphite sombre profond
+        self._grid_minor_pts: Optional[np.ndarray] = None
+        self._grid_major_pts: Optional[np.ndarray] = None
+        self._rebuild_grid_geometry()
+
+    def _rebuild_grid_geometry(self) -> None:
+        """Précalcule les coordonnées 3D de la grille sous forme de tampons NumPy optimisés."""
+        half = self.grid_size / 2.0
+        step_minor = self.grid_spacing          # 10 mm
+        step_major = self.grid_spacing * 5.0    # 50 mm
+
+        minor_lines: List[float] = []
+        major_lines: List[float] = []
+
+        # Lignes le long de X (parallèles à Y)
+        x = -half
+        while x <= half:
+            is_center = abs(x) < 1e-4
+            is_major = abs(x % step_major) < 1e-4 or is_center
+            target_list = major_lines if is_major else minor_lines
+            if not is_center:
+                target_list.extend([float(x), -half, 0.0, float(x), half, 0.0])
+            x += step_minor
+
+        # Lignes le long de Y (parallèles à X)
+        y = -half
+        while y <= half:
+            is_center = abs(y) < 1e-4
+            is_major = abs(y % step_major) < 1e-4 or is_center
+            target_list = major_lines if is_major else minor_lines
+            if not is_center:
+                target_list.extend([-half, float(y), 0.0, half, float(y), 0.0])
+            y += step_minor
+
+        self._grid_minor_pts = np.array(minor_lines, dtype=np.float32).reshape(-1, 3) if minor_lines else np.zeros((0, 3), dtype=np.float32)
+        self._grid_major_pts = np.array(major_lines, dtype=np.float32).reshape(-1, 3) if major_lines else np.zeros((0, 3), dtype=np.float32)
 
     def initialize_gl(self) -> None:
         """Configure les états OpenGL initiaux (profondeur, antialiasing, éclairage)."""
@@ -205,52 +240,33 @@ class GLRenderer:
         GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
 
     def _draw_grid_and_axes(self) -> None:
-        """Dessine la grille au sol XY avec lignes maîtresses et repère d'origine."""
+        """Dessine la grille au sol XY avec tracé de tampons précalculés (Zéro boucle par frame)."""
         GL.glDisable(GL.GL_LIGHTING)
 
-        half = self.grid_size / 2.0
-        step_minor = self.grid_spacing          # 10 mm
-        step_major = self.grid_spacing * 5.0    # 50 mm
+        if self._grid_minor_pts is None or self._grid_major_pts is None:
+            self._rebuild_grid_geometry()
+
+        GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
 
         # 1. Lignes secondaires (fines et discrètes)
-        GL.glLineWidth(1.0)
-        GL.glColor4f(0.25, 0.27, 0.32, 0.35)
-        GL.glBegin(GL.GL_LINES)
-        x = -half
-        while x <= half:
-            if abs(x) > 1e-4 and abs(x % step_major) > 1e-4:
-                GL.glVertex3f(float(x), -half, 0.0)
-                GL.glVertex3f(float(x), half, 0.0)
-            x += step_minor
-
-        y = -half
-        while y <= half:
-            if abs(y) > 1e-4 and abs(y % step_major) > 1e-4:
-                GL.glVertex3f(-half, float(y), 0.0)
-                GL.glVertex3f(half, float(y), 0.0)
-            y += step_minor
-        GL.glEnd()
+        if self._grid_minor_pts is not None and len(self._grid_minor_pts) > 0:
+            GL.glLineWidth(1.0)
+            GL.glColor4f(0.25, 0.27, 0.32, 0.35)
+            GL.glVertexPointer(3, GL.GL_FLOAT, 0, self._grid_minor_pts)
+            GL.glDrawArrays(GL.GL_LINES, 0, len(self._grid_minor_pts))
 
         # 2. Lignes majeures tous les 50 mm
-        GL.glLineWidth(1.2)
-        GL.glColor4f(0.32, 0.35, 0.42, 0.65)
-        GL.glBegin(GL.GL_LINES)
-        x = -half
-        while x <= half:
-            if abs(x) > 1e-4 and abs(x % step_major) < 1e-4:
-                GL.glVertex3f(float(x), -half, 0.0)
-                GL.glVertex3f(float(x), half, 0.0)
-            x += step_minor
+        if self._grid_major_pts is not None and len(self._grid_major_pts) > 0:
+            GL.glLineWidth(1.2)
+            GL.glColor4f(0.32, 0.35, 0.42, 0.65)
+            GL.glVertexPointer(3, GL.GL_FLOAT, 0, self._grid_major_pts)
+            GL.glDrawArrays(GL.GL_LINES, 0, len(self._grid_major_pts))
 
-        y = -half
-        while y <= half:
-            if abs(y) > 1e-4 and abs(y % step_major) < 1e-4:
-                GL.glVertex3f(-half, float(y), 0.0)
-                GL.glVertex3f(half, float(y), 0.0)
-            y += step_minor
-        GL.glEnd()
+        GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
 
         # 3. Axes principaux colorés (X = Rouge, Y = Vert, Z = Bleu)
+        half = self.grid_size / 2.0
+        step_minor = self.grid_spacing
         GL.glLineWidth(2.2)
         GL.glBegin(GL.GL_LINES)
         # Axe X (Rouge éclatant)

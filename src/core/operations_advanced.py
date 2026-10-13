@@ -302,16 +302,17 @@ class ShellFeature(Feature):
         dx = b_max.x - b_min.x
         dy = b_max.y - b_min.y
         dz = b_max.z - b_min.z
-        t = self.parameters["wall_thickness"]
+        t = self.parameters.get("wall_thickness", 2.0)
 
-        if dx <= 2 * t or dy <= 2 * t or dz <= 2 * t:
+        # Vérification de sécurité géométrique
+        if t <= 0.001 or dx <= 2.0 * t or dy <= 2.0 * t or dz <= 2.0 * t or dx <= 0.01 or dy <= 0.01 or dz <= 0.01:
             self.status = FeatureStatus.ERROR
             return updated
 
         # Calculer les facteurs de réduction homothétique
-        sx = max(0.01, (dx - 2 * t) / dx)
-        sy = max(0.01, (dy - 2 * t) / dy)
-        sz = max(0.01, (dz - 2 * t) / dz)
+        sx = max(0.01, (dx - 2.0 * t) / dx)
+        sy = max(0.01, (dy - 2.0 * t) / dy)
+        sz = max(0.01, (dz - 2.0 * t) / dz)
 
         center = Vector3D((b_min.x + b_max.x) * 0.5, (b_min.y + b_max.y) * 0.5, (b_min.z + b_max.z) * 0.5)
         # Déplacer à l'origine, mettre à l'échelle, replacer

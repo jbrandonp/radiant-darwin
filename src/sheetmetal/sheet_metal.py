@@ -69,7 +69,8 @@ class SheetMetalPart:
         t = self.rule.thickness_mm
         r = self.rule.bend_radius_mm
         k = self.rule.k_factor
-        angle_rad = np.radians(abs(angle_deg))
+        safe_angle = min(179.0, max(0.01, abs(angle_deg)))
+        angle_rad = np.radians(safe_angle)
         return float(angle_rad * (r + k * t))
 
     def calculate_bend_deduction(self, angle_deg: float) -> float:
@@ -79,9 +80,10 @@ class SheetMetalPart:
         """
         t = self.rule.thickness_mm
         r = self.rule.bend_radius_mm
-        angle_rad = np.radians(abs(angle_deg))
+        safe_angle = min(179.0, max(0.01, abs(angle_deg)))
+        angle_rad = np.radians(safe_angle)
         setback = (r + t) * np.tan(angle_rad / 2.0)
-        ba = self.calculate_bend_allowance(angle_deg)
+        ba = self.calculate_bend_allowance(safe_angle)
         return float(2.0 * setback - ba)
 
     def add_flange(self, length_mm: float, angle_deg: float = 90.0) -> BendInfo:

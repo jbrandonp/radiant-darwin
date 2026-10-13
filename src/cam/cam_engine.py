@@ -83,33 +83,40 @@ class CAMEngine:
         active_tool = tool or self.default_tool
         op = ToolpathOperation("Surfaçage (Face Milling)", active_tool)
 
-        stepover = active_tool.diameter_mm * 0.7
+        x0, x1 = min(min_x, max_x), max(min_x, max_x)
+        y0, y1 = min(min_y, max_y), max(min_y, max_y)
+        stepover = max(0.1, active_tool.diameter_mm * 0.7)
+        stepdown = max(0.1, self.stepdown_mm)
         current_z = stock_z
 
+        if current_z <= target_z:
+            current_z = target_z + stepdown
+
         while current_z > target_z:
-            current_z = max(target_z, current_z - self.stepdown_mm)
-            y = min_y
+            current_z = max(target_z, current_z - stepdown)
+            y = y0
             direction = 1
 
             # Dégagement rapide vers le point de départ
-            op.points.append(ToolpathPoint(Vector3D(min_x, min_y, self.safe_z), is_rapid=True))
-            op.points.append(ToolpathPoint(Vector3D(min_x, min_y, current_z), is_rapid=False))
+            op.points.append(ToolpathPoint(Vector3D(x0, y0, self.safe_z), is_rapid=True))
+            op.points.append(ToolpathPoint(Vector3D(x0, y0, current_z), is_rapid=False))
 
-            while y <= max_y:
+            while y <= y1:
                 if direction == 1:
-                    op.points.append(ToolpathPoint(Vector3D(max_x, y, current_z), is_rapid=False))
+                    op.points.append(ToolpathPoint(Vector3D(x1, y, current_z), is_rapid=False))
                 else:
-                    op.points.append(ToolpathPoint(Vector3D(min_x, y, current_z), is_rapid=False))
+                    op.points.append(ToolpathPoint(Vector3D(x0, y, current_z), is_rapid=False))
 
                 y += stepover
-                if y <= max_y:
+                if y <= y1:
                     if direction == 1:
-                        op.points.append(ToolpathPoint(Vector3D(max_x, y, current_z), is_rapid=False))
+                        op.points.append(ToolpathPoint(Vector3D(x1, y, current_z), is_rapid=False))
                     else:
-                        op.points.append(ToolpathPoint(Vector3D(min_x, y, current_z), is_rapid=False))
+                        op.points.append(ToolpathPoint(Vector3D(x0, y, current_z), is_rapid=False))
                 direction = -direction
 
-            op.points.append(ToolpathPoint(Vector3D(op.points[-1].pos.x, op.points[-1].pos.y, self.safe_z), is_rapid=True))
+            if op.points:
+                op.points.append(ToolpathPoint(Vector3D(op.points[-1].pos.x, op.points[-1].pos.y, self.safe_z), is_rapid=True))
 
         return op
 

@@ -92,8 +92,14 @@ class ProjectSerializer:
         if not os.path.exists(filepath):
             return None
 
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return None
+
+        if not isinstance(data, dict):
+            return None
 
         doc = CADDocument(name=data.get("name", "Projet Chargé"))
 

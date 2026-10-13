@@ -162,5 +162,7 @@ class SketchConstraintSolver2D:
                 float(solved_x[2 * i + 1])
             ))
 
-        success = bool(opt_result.success or opt_result.cost < 1e-4)
+        final_residuals = residuals(solved_x)
+        max_residual = float(np.max(np.abs(final_residuals))) if len(final_residuals) > 0 else 0.0
+        success = bool(opt_result.success and max_residual < 0.01)
         return (success, solved_points)

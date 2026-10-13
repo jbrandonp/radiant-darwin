@@ -43,7 +43,8 @@ from src.ui.properties_panel import CADPropertiesPanel
 from src.ui.dialogs import (
     CreateBoxDialog, CreateCylinderDialog, CreateSphereDialog,
     ExtrudeDialog, RevolveDialog, HoleDialog, ShellDialog,
-    CombineDialog, FEADialog, ParametersDialog, SheetMetalDialog
+    CombineDialog, FEADialog, ParametersDialog, SheetMetalDialog,
+    RenderDialog
 )
 from src.ui.theme import FUSION_DARK_STYLESHEET
 
@@ -167,6 +168,9 @@ class CADMainWindow(QMainWindow):
         # Simulation
         self.ribbon.material_selector_requested.connect(self._on_action_material_info)
         self.ribbon.run_fea_requested.connect(self._on_action_run_fea)
+
+        # Rendu Photoréaliste PBR
+        self.ribbon.open_render_studio_requested.connect(self._on_action_open_render_studio)
 
         # CAM
         self.ribbon.cam_facing_requested.connect(self._on_action_cam_facing)
@@ -588,6 +592,15 @@ class CADMainWindow(QMainWindow):
                     f"• Facteur de sécurité : {res.safety_factor:.2f}\n\n"
                     f"Verdict : {status}\n\n(Le gradient de contraintes est affiché dans le Viewport 3D)"
                 )
+
+    # --- Atelier Rendu Photoréaliste PBR (Render Studio) ---
+    def _on_action_open_render_studio(self) -> None:
+        """Ouvre le studio de rendu photoréaliste PBR."""
+        if not self.document.bodies:
+            QMessageBox.information(self, "Rendu Studio", "Aucun corps existant à rendre.")
+            return
+        dlg = RenderDialog(self.document.bodies, self)
+        dlg.exec()
 
     # --- Actions CAM & G-Code ---
     def _on_action_cam_facing(self) -> None:

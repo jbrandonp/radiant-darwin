@@ -115,6 +115,9 @@ class CADRibbonBar(QTabWidget):
     run_fea_requested = Signal()
     material_selector_requested = Signal()
 
+    # Rendu Photoréaliste PBR (Render Studio)
+    open_render_studio_requested = Signal()
+
     # CAM / Fabrication
     cam_facing_requested = Signal()
     cam_contour_requested = Signal()
@@ -144,6 +147,7 @@ class CADRibbonBar(QTabWidget):
         self._init_sheet_metal_tab()
         self._init_assembly_tab()
         self._init_simulation_tab()
+        self._init_render_tab()
         self._init_cam_tab()
         self._init_drawing_tab()
         self._init_tools_tab()
@@ -281,6 +285,20 @@ class CADRibbonBar(QTabWidget):
 
         layout.addWidget(_create_ribbon_group("Structure & Contraintes", [btn_mat, btn_fea]))
         self.addTab(tab, "SIMULATION")
+
+    def _init_render_tab(self) -> None:
+        """Onglet RENDU RÉALISTE & MATÉRIAUX PBR (RENDER STUDIO)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_studio = RibbonButton("Studio Rendu", "📸")
+        btn_studio.clicked.connect(self.open_render_studio_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Rendu Photoréaliste PBR", [btn_studio]))
+        self.addTab(tab, "RENDU")
 
     def _init_cam_tab(self) -> None:
         """Onglet FABRICATION (CAM)."""

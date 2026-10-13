@@ -8,13 +8,17 @@ from typing import Optional, List, Tuple, Dict
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout,
     QDoubleSpinBox, QComboBox, QPushButton, QLabel, QCheckBox,
-    QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit
+    QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit, QFileDialog
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QImage
 
 from src.core.types import BooleanOperation, PlaneType, Vector3D
+from src.core.geometry import Solid
 from src.core.parameters import ParameterTable
 from src.materials.material_db import MATERIAL_LIBRARY, PhysicalMaterial
+from src.render.pbr_material import PBR_LIBRARY, PBRMaterial
+from src.render.raytracer import PBRRaytracer
 
 
 class CreateBoxDialog(QDialog):
@@ -588,3 +592,123 @@ class SheetMetalDialog(QDialog):
             self.spin_r.value(),
             self.spin_flange.value()
         )
+
+
+class RenderDialog(QDialog):
+    """Dialogue de rendu photoréaliste PBR (Render Studio) style Fusion 360."""
+
+    def __init__(
+        self,
+        bodies: Dict[str, Solid],
+        parent: Optional[QDialog] = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Atelier de Rendu Photoréaliste (Render Studio)")
+        self.resize(720, 560)
+        self.bodies = bodies
+        self.raytracer = PBRRaytracer()
+        self.rendered_image: Optional[QImage] = None
+
+        layout = QVBoxLayout(self)
+
+        # Barre supérieure de configuration
+        form = QHBoxLayout()
+
+        form.addWidget(QLabel("Corps à rendre :"))
+        self.combo_body = QComboBox()
+        for b_id in bodies.keys():
+            self.combo_body.addItem(b_id, b_id)
+        form.addWidget(self.combo_body)
+
+        form.addWidget(QLabel("Finition PBR :"))
+        self.combo_mat = QComboBox()
+        for mat_name in PBR_LIBRARY.keys():
+            self.combo_mat.addItem(mat_name, mat_name)
+        form.addWidget(self.combo_mat)
+
+        form.addWidget(QLabel("Résolution :"))
+        self.combo_res = QComboBox()
+        self.combo_res.addItem("Aperçu (400x300)", (400, 300))
+        self.combo_res.addItem("Standard (640x480)", (640, 480))
+        self.combo_res.addItem("HD (1280x720)", (1280, 720))
+        form.addWidget(self.combo_res)
+
+        btn_render = QPushButton("Lancer le Rendu")
+        btn_render.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 6px 12px;")
+        btn_render.clicked.connect(self._on_start_render)
+        form.addWidget(btn_render)
+
+        layout.addLayout(form)
+
+        # Zone d'aperçu de l'image
+        self.lbl_preview = QLabel("Cliquez sur 'Lancer le Rendu' pour générer l'image réaliste.")
+        self.lbl_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_preview.setStyleSheet("""
+            QLabel {
+                background-color: #1a1c20;
+                border: 2px dashed #3a3d45;
+                border-radius: 6px;
+                color: #8c92a4;
+                font-size: 13px;
+            }
+        """)
+        layout.addWidget(self.lbl_preview, 1)
+
+        # Barre inférieure
+        bottom_bar = QHBoxLayout()
+        self.lbl_info = QLabel("Prêt | Moteur PBR Blinn-Phong & Fresnel Schlick")
+        self.lbl_info.setStyleSheet("color: #7a8090; font-size: 11px;")
+        bottom_bar.addWidget(self.lbl_info)
+
+        bottom_bar.addStretch(1)
+
+        self.btn_export = QPushButton("Exporter l'Image PNG...")
+        self.btn_export.setEnabled(False)
+        self.btn_export.clicked.connect(self._on_export_png)
+        bottom_bar.addWidget(self.btn_export)
+
+        btn_close = QPushButton("Fermer")
+        btn_close.clicked.connect(self.accept)
+        bottom_bar.addWidget(btn_close)
+
+        layout.addLayout(bottom_bar)
+
+        # Lancer un premier rendu si un corps existe
+        if bodies:
+            self._on_start_render()
+
+    def _on_start_render(self) -> None:
+        """Déclenche le calcul du lancer de rayons."""
+        body_id = self.combo_body.currentData()
+        if not body_id or body_id not in self.bodies:
+            return
+
+        mat_name = self.combo_mat.currentData()
+        material = PBR_LIBRARY.get(mat_name, list(PBR_LIBRARY.values())[0])
+        res_val = self.combo_res.currentData()
+        w, h = res_val if isinstance(res_val, tuple) else (400, 300)
+
+        solid = self.bodies[body_id]
+        self.lbl_info.setText(f"Calcul du rendu en cours ({w}x{h}, {material.name})...")
+
+        img = self.raytracer.render_solid_to_image(solid, material, width=w, height=h)
+        self.rendered_image = img
+
+        pixmap = QPixmap.fromImage(img)
+        self.lbl_preview.setPixmap(pixmap.scaled(
+            self.lbl_preview.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ))
+        self.lbl_info.setText(f"Rendu terminé avec succès ({w}x{h}) | Matériau : {material.name}")
+        self.btn_export.setEnabled(True)
+
+    def _on_export_png(self) -> None:
+        """Sauvegarde l'image rendue sur disque."""
+        if not self.rendered_image:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "Enregistrer le Rendu Studio", "", "Image PNG (*.png)")
+        if path:
+            self.rendered_image.save(path, "PNG")
+            self.lbl_info.setText(f"Image enregistrée : {path}")

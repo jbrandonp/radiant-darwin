@@ -105,7 +105,7 @@ class STEPExporter:
 
         # Représentation de forme (Shape Representation)
         rep_id = eid
-        lines.append(f"#{rep_id}=MANIFOLD_SURFACE_SHAPE_REPRESENTATION('{part_name}',(#{brep_id}),#1);")
+        lines.append(f"#{rep_id}=FACETED_BREP_SHAPE_REPRESENTATION('{part_name}',(#{brep_id}),#1);")
         eid += 1
 
         lines.append("ENDSEC;")

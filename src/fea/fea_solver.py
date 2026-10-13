@@ -120,12 +120,20 @@ class FEASimulator:
         mean_ratio = float(np.mean(normalized))
         r, g, b = _colormap_jet(mean_ratio)
 
+        # Couleurs par sommet réparties sur toute la géométrie
+        v_colors = np.zeros((len(vertices), 4), dtype=np.float32)
+        for i in range(len(vertices)):
+            norm_val = float(normalized[i]) if i < len(normalized) else mean_ratio
+            cr, cg, cb = _colormap_jet(norm_val)
+            v_colors[i] = [cr, cg, cb, 1.0]
+
         colored_buf = MeshBuffer(
             vertices=vertices.astype(np.float32),
             faces=mesh_buf.faces,
             normals=mesh_buf.normals,
             edges=mesh_buf.edges,
-            color=ColorRGBA(r, g, b, 1.0)
+            color=ColorRGBA(r, g, b, 1.0),
+            vertex_colors=v_colors
         )
         return colored_buf
 

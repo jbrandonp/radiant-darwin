@@ -815,7 +815,16 @@ class PipeFeature(Feature):
 
         solid_pipe = self._build_pipe_solid(pts, r_out, self.name)
         if r_in > 0.05:
-            inner_pipe = self._build_pipe_solid(pts, r_in, f"{self.name}_inner")
+            v_start = (pts[0] - pts[1])
+            len_start = float(np.linalg.norm(v_start))
+            p_start_ext = pts[0] + (v_start / len_start) * (r_out * 1.5) if len_start > 1e-4 else pts[0]
+
+            v_end = (pts[-1] - pts[-2])
+            len_end = float(np.linalg.norm(v_end))
+            p_end_ext = pts[-1] + (v_end / len_end) * (r_out * 1.5) if len_end > 1e-4 else pts[-1]
+
+            inner_pts = [p_start_ext] + pts[1:-1] + [p_end_ext]
+            inner_pipe = self._build_pipe_solid(inner_pts, r_in, f"{self.name}_inner")
             solid_pipe = solid_pipe.difference(inner_pipe)
 
         self.status = FeatureStatus.OK

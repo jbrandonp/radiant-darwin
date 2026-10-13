@@ -303,7 +303,9 @@ class ExtrudeFeature(Feature):
             self.status = FeatureStatus.ERROR
             return dict(existing_bodies)
 
-        dist = max(0.001, self.parameters["distance"])
+        dist = float(self.parameters["distance"])
+        if abs(dist) < 0.001:
+            dist = 0.001
         new_solid = extrude_polygon(profile, dist, plane=sketch.plane, name=self.name)
         self.status = FeatureStatus.OK
         return _apply_boolean_operation(existing_bodies, new_solid, self.operation, self.body_id, self.target_body_id)
@@ -363,14 +365,17 @@ def _apply_boolean_operation(
 ) -> Dict[str, Solid]:
     """Applique l'opération booléenne spécifiée sur la liste active des corps."""
     updated = dict(current_bodies)
+    resolved_target = target_body_id
+    if resolved_target and resolved_target not in updated and f"body_{resolved_target}" in updated:
+        resolved_target = f"body_{resolved_target}"
 
-    if operation == BooleanOperation.NEW_BODY or not target_body_id or target_body_id not in updated:
+    if operation == BooleanOperation.NEW_BODY or not resolved_target or resolved_target not in updated:
         updated[new_body_id] = new_solid
     elif operation == BooleanOperation.JOIN:
-        updated[target_body_id] = updated[target_body_id].union(new_solid)
+        updated[resolved_target] = updated[resolved_target].union(new_solid)
     elif operation == BooleanOperation.CUT:
-        updated[target_body_id] = updated[target_body_id].difference(new_solid)
+        updated[resolved_target] = updated[resolved_target].difference(new_solid)
     elif operation == BooleanOperation.INTERSECT:
-        updated[target_body_id] = updated[target_body_id].intersection(new_solid)
+        updated[resolved_target] = updated[resolved_target].intersection(new_solid)
 
     return updated

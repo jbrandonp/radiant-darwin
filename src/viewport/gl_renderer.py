@@ -185,8 +185,15 @@ class GLRenderer:
         if buffer.is_empty():
             return
 
-        c = buffer.color
-        GL.glColor4f(c.r, c.g, c.b, c.a)
+        has_v_colors = bool(buffer.vertex_colors is not None and len(buffer.vertex_colors) == len(buffer.vertices))
+        if has_v_colors:
+            GL.glEnableClientState(GL.GL_COLOR_ARRAY)
+            GL.glColorPointer(4, GL.GL_FLOAT, 0, buffer.vertex_colors)
+            GL.glEnable(GL.GL_COLOR_MATERIAL)
+            GL.glColorMaterial(GL.GL_FRONT_AND_BACK, GL.GL_AMBIENT_AND_DIFFUSE)
+        else:
+            c = buffer.color
+            GL.glColor4f(c.r, c.g, c.b, c.a)
 
         # Brillance métallique satinée type usinage CAO
         GL.glMaterialfv(GL.GL_FRONT_AND_BACK, GL.GL_SPECULAR, [0.35, 0.35, 0.40, 1.0])
@@ -207,6 +214,9 @@ class GLRenderer:
 
         GL.glDisableClientState(GL.GL_NORMAL_ARRAY)
         GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
+        if has_v_colors:
+            GL.glDisableClientState(GL.GL_COLOR_ARRAY)
+            GL.glDisable(GL.GL_COLOR_MATERIAL)
 
     def _draw_mesh_edges(self, buffer: MeshBuffer) -> None:
         """Dessine les lignes de contour vives du solide."""

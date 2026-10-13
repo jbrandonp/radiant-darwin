@@ -244,7 +244,11 @@ class SketchConstraintSolver2D:
                     dy_l = x[2 * i_l2 + 1] - x[2 * i_l1 + 1]
                     dx_p = x[2 * i_p] - x[2 * i_l1]
                     dy_p = x[2 * i_p + 1] - x[2 * i_l1 + 1]
-                    res.append(dx_l * dy_p - dy_l * dx_p)
+                    len_l = float(np.hypot(dx_l, dy_l))
+                    if len_l > 1e-9:
+                        res.append((dx_l * dy_p - dy_l * dx_p) / len_l)
+                    else:
+                        res.append(0.0)
 
                 elif c_type == ConstraintType.TANGENT:
                     i_l1, i_l2, i_c = indices[0], indices[1], indices[2]

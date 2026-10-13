@@ -17,6 +17,7 @@ class CADBrowserTree(QWidget):
     sketch_selected = Signal(str)
     export_body_requested = Signal(str)
     delete_body_requested = Signal(str)
+    delete_sketch_requested = Signal(str)
 
     def __init__(self, document: CADDocument, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -119,6 +120,10 @@ class CADBrowserTree(QWidget):
         elif item_type == "sketch":
             act_edit = menu.addAction("✏️ Éditer l'esquisse")
             act_edit.triggered.connect(lambda: self.sketch_selected.emit(item_id))
+
+            menu.addSeparator()
+            act_del_sk = menu.addAction("🗑️ Supprimer l'esquisse")
+            act_del_sk.triggered.connect(lambda: self.delete_sketch_requested.emit(item_id))
 
         global_pos = self.tree.mapToGlobal(pos)
         menu.exec(global_pos)

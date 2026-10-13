@@ -248,6 +248,7 @@ class CADMainWindow(QMainWindow):
         self.browser.sketch_selected.connect(self._on_sketch_selected)
         self.browser.export_body_requested.connect(self._on_export_single_body_stl)
         self.browser.delete_body_requested.connect(self._on_delete_single_body)
+        self.browser.delete_sketch_requested.connect(self._on_delete_single_sketch)
 
     def _create_initial_sample(self) -> None:
         """Génère un exemple initial : Platine usinée avec alésage central."""
@@ -1032,9 +1033,26 @@ class CADMainWindow(QMainWindow):
                 QMessageBox.information(self, "Exportation", f"Corps '{body.name}' exporté avec succès :\n{path}")
 
     def _on_delete_single_body(self, body_id: str) -> None:
-        """Supprime un corps solide spécifique du modèle."""
-        if body_id not in self.document.bodies:
-            return
-        del self.document.bodies[body_id]
-        self.document._notify_change()
+        """Supprime un corps solide spécifique du modèle et ses fonctionnalités associées pour éviter les corps zombies au rebuild."""
+        to_remove = []
+        for feat in self.document.features:
+            f_body = getattr(feat, "body_id", None)
+            f_target = getattr(feat, "target_body_id", None)
+            if f_body == body_id or f_target == body_id or feat.feature_id in body_id or body_id.endswith(feat.feature_id):
+                to_remove.append(feat.feature_id)
+
+        if to_remove:
+            for fid in to_remove:
+                self.document.remove_feature(fid)
+        else:
+            if body_id in self.document.bodies:
+                del self.document.bodies[body_id]
+                self.document.invalidate_cache()
+                self.document._notify_change()
         self.status_bar.showMessage(f"Corps {body_id} supprimé.", 3000)
+
+    def _on_delete_single_sketch(self, sketch_id: str) -> None:
+        """Supprime une esquisse 2D du document et recalcule."""
+        if sketch_id in self.document.sketches:
+            self.document.remove_sketch(sketch_id)
+            self.status_bar.showMessage(f"Esquisse {sketch_id} supprimée.", 3000)

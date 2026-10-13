@@ -33,6 +33,10 @@ class Solid:
         """Vérifie si le solide ne contient aucun volume."""
         return self._manifold.is_empty()
 
+    def is_manifold(self) -> bool:
+        """Vérifie si le solide est une variété topologique fermée étanche (2-manifold)."""
+        return not self._manifold.is_empty() and self.volume() > 0.0
+
     def volume(self) -> float:
         """Calcule le volume exact du solide en unités cubiques."""
         if self._manifold.is_empty():
@@ -382,8 +386,12 @@ def extrude_polygon(
 
     poly_coords: List[List[float]] = [[pt.u, pt.v] for pt in points]
     cs = m.CrossSection([poly_coords])
-    safe_height = max(0.001, height)
-    solid_manifold = m.Manifold.extrude(cs, safe_height)
+    if height < 0.0:
+        abs_h = max(0.001, abs(height))
+        solid_manifold = m.Manifold.extrude(cs, abs_h).translate([0.0, 0.0, -abs_h])
+    else:
+        safe_height = max(0.001, height)
+        solid_manifold = m.Manifold.extrude(cs, safe_height)
 
     # Réorienter selon le plan choisi
     if plane == PlaneType.XZ:

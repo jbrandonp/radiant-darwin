@@ -5,12 +5,13 @@ Perçages/Alésages (Holes) et Évidement (Shell).
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple, Callable
 import numpy as np
 import manifold3d as m
+from scipy.interpolate import interp1d
 
 from src.core.types import BooleanOperation, FeatureStatus, Vector3D, Point2D, PlaneType
-from src.core.geometry import Solid, make_cylinder, _extract_sharp_edges
+from src.core.geometry import Solid, make_cylinder, make_sphere, make_box, _extract_sharp_edges
 from src.core.feature import Feature, _apply_boolean_operation
 from src.core.sketch import Sketch2D
 
@@ -321,5 +322,402 @@ class ShellFeature(Feature):
         # Déplacer à l'origine, mettre à l'échelle, replacer
         inner = target.translate(center.scale(-1.0)).scale(sx, sy, sz).translate(center)
         updated[self.target_body_id] = target.difference(inner)
+        self.status = FeatureStatus.OK
+        return updated
+
+
+def _resample_profile(profile: Sequence[Point2D], target_count: int) -> np.ndarray:
+    """Rééchantillonne uniformément un polygone 2D fermé en un nombre fixé de points."""
+    if not profile or len(profile) < 3:
+        theta = np.linspace(0, 2 * np.pi, target_count, endpoint=False)
+        return np.column_stack([10.0 * np.cos(theta), 10.0 * np.sin(theta)])
+    pts = np.array([[pt.u, pt.v] for pt in profile], dtype=np.float64)
+    if not np.allclose(pts[0], pts[-1]):
+        pts = np.vstack([pts, pts[0:1]])
+    deltas = np.diff(pts, axis=0)
+    seg_lens = np.linalg.norm(deltas, axis=1)
+    cum_lens = np.insert(np.cumsum(seg_lens), 0, 0.0)
+    total_len = cum_lens[-1]
+    if total_len < 1e-6:
+        theta = np.linspace(0, 2 * np.pi, target_count, endpoint=False)
+        return np.column_stack([10.0 * np.cos(theta), 10.0 * np.sin(theta)])
+    target_dists = np.linspace(0.0, total_len, target_count, endpoint=False)
+    fx = interp1d(cum_lens, pts[:, 0], kind="linear", assume_sorted=True)
+    fy = interp1d(cum_lens, pts[:, 1], kind="linear", assume_sorted=True)
+    return np.column_stack([fx(target_dists), fy(target_dists)])
+
+
+class LoftFeature(Feature):
+    """
+    Lissage volumique paramétrique (Loft) reliant deux profils d'esquisse.
+    Permet de créer des corps aérodynamiques, des carénages et des conduits de transition.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Loft",
+        start_sketch_id: str = "",
+        end_sketch_id: str = "",
+        height_offset: float = 30.0,
+        scale_top: float = 1.0,
+        num_segments: int = 36,
+        operation: BooleanOperation = BooleanOperation.NEW_BODY,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.start_sketch_id = start_sketch_id
+        self.end_sketch_id = end_sketch_id
+        self.parameters = {
+            "height_offset": float(height_offset),
+            "scale_top": float(scale_top),
+            "num_segments": float(num_segments),
+        }
+        self.operation = operation
+        self.target_body_id = target_body_id
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère le solide lissé étanche entre les deux sections."""
+        if self.start_sketch_id not in sketches:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        start_sketch = sketches[self.start_sketch_id]
+        prof1 = start_sketch.get_primary_profile()
+        if not prof1 or len(prof1) < 3:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        target_count = max(8, min(120, int(self.parameters.get("num_segments", 36))))
+        pts1 = _resample_profile(prof1, target_count)
+
+        if self.end_sketch_id in sketches and self.end_sketch_id != self.start_sketch_id:
+            end_sketch = sketches[self.end_sketch_id]
+            prof2 = end_sketch.get_primary_profile()
+            pts2 = _resample_profile(prof2, target_count) if prof2 and len(prof2) >= 3 else None
+        else:
+            pts2 = None
+
+        h_off = max(0.1, float(self.parameters.get("height_offset", 30.0)))
+        if pts2 is None:
+            scale = max(0.01, float(self.parameters.get("scale_top", 1.0)))
+            c1x = float(np.mean(pts1[:, 0]))
+            c1y = float(np.mean(pts1[:, 1]))
+            pts2 = np.column_stack([c1x + (pts1[:, 0] - c1x) * scale, c1y + (pts1[:, 1] - c1y) * scale])
+
+        p1_3d = np.column_stack([pts1, np.zeros(target_count)])
+        p2_3d = np.column_stack([pts2, np.full(target_count, h_off)])
+        all_pts = np.vstack([p1_3d, p2_3d])
+
+        tris: List[List[int]] = []
+        for i in range(target_count):
+            next_i = (i + 1) % target_count
+            tris.append([i, next_i, target_count + next_i])
+            tris.append([i, target_count + next_i, target_count + i])
+
+        c1 = np.array([float(np.mean(pts1[:, 0])), float(np.mean(pts1[:, 1])), 0.0])
+        c2 = np.array([float(np.mean(pts2[:, 0])), float(np.mean(pts2[:, 1])), h_off])
+        c1_idx = len(all_pts)
+        c2_idx = c1_idx + 1
+        all_pts = np.vstack([all_pts, c1[None, :], c2[None, :]])
+
+        for i in range(target_count):
+            next_i = (i + 1) % target_count
+            tris.append([c1_idx, next_i, i])
+            tris.append([c2_idx, target_count + i, target_count + next_i])
+
+        mesh = m.Mesh(vert_properties=all_pts.astype(np.float32), tri_verts=np.array(tris, dtype=np.uint32))
+        loft_manifold = m.Manifold(mesh)
+        solid = Solid(loft_manifold, self.name)
+        self.status = FeatureStatus.OK
+        return _apply_boolean_operation(existing_bodies, solid, self.operation, self.body_id, self.target_body_id)
+
+
+class SweepFeature(Feature):
+    """
+    Balayage volumique paramétrique (Sweep / Pipe) d'un profil 2D le long d'une trajectoire 3D.
+    Idéal pour conduites, câbles, tuyauteries et rails.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Sweep",
+        profile_sketch_id: str = "",
+        trajectory_type: str = "arc",
+        radius: float = 30.0,
+        height: float = 40.0,
+        turns: float = 1.0,
+        num_steps: int = 24,
+        segments: int = 24,
+        operation: BooleanOperation = BooleanOperation.NEW_BODY,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.profile_sketch_id = profile_sketch_id
+        self.trajectory_type = trajectory_type
+        self.parameters = {
+            "radius": float(radius),
+            "height": float(height),
+            "turns": float(turns),
+            "num_steps": float(num_steps),
+            "segments": float(segments),
+        }
+        self.operation = operation
+        self.target_body_id = target_body_id
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère le solide balayé le long du chemin."""
+        prof: Optional[Sequence[Point2D]] = None
+        if self.profile_sketch_id in sketches:
+            sk = sketches[self.profile_sketch_id]
+            prof = sk.get_primary_profile()
+
+        k_steps = max(4, min(100, int(self.parameters.get("num_steps", 24))))
+        n_segs = max(6, min(60, int(self.parameters.get("segments", 24))))
+        prof_2d = _resample_profile(prof if prof else [], n_segs)
+        prof_2d -= np.mean(prof_2d, axis=0)
+
+        rad = max(1.0, float(self.parameters.get("radius", 30.0)))
+        h = max(1.0, float(self.parameters.get("height", 40.0)))
+        turns = max(0.1, float(self.parameters.get("turns", 1.0)))
+
+        # Construction de la trajectoire
+        if self.trajectory_type == "helix":
+            t = np.linspace(0.0, 1.0, k_steps)
+            ang = 2.0 * np.pi * turns * t
+            path_pts = np.column_stack([rad * np.cos(ang), rad * np.sin(ang), h * t])
+        elif self.trajectory_type == "s_curve":
+            t = np.linspace(0.0, 1.0, k_steps)
+            path_pts = np.column_stack([t * h, rad * np.sin(2.0 * np.pi * t), np.zeros(k_steps)])
+        elif self.trajectory_type == "linear":
+            t = np.linspace(0.0, 1.0, k_steps)
+            path_pts = np.column_stack([np.zeros(k_steps), np.zeros(k_steps), h * t])
+        else:  # arc par défaut
+            ang = np.linspace(0.0, np.pi * 0.5, k_steps)
+            path_pts = np.column_stack([rad * np.cos(ang), rad * np.sin(ang), (h / max(1.0, k_steps)) * np.arange(k_steps)])
+
+        tangents = np.gradient(path_pts, axis=0)
+        norm_t = np.linalg.norm(tangents, axis=1, keepdims=True)
+        norm_t[norm_t < 1e-9] = 1.0
+        tangents /= norm_t
+
+        all_slices: List[np.ndarray] = []
+        for k in range(k_steps):
+            pos = path_pts[k]
+            t_vec = tangents[k]
+            ref = np.array([0.0, 0.0, 1.0]) if abs(t_vec[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+            n_vec = np.cross(t_vec, ref)
+            n_len = np.linalg.norm(n_vec)
+            if n_len < 1e-9:
+                n_vec = np.array([0.0, 1.0, 0.0])
+            else:
+                n_vec /= n_len
+            b_vec = np.cross(t_vec, n_vec)
+
+            slice_v = pos + np.outer(prof_2d[:, 0], n_vec) + np.outer(prof_2d[:, 1], b_vec)
+            all_slices.append(slice_v)
+
+        flat_pts = np.vstack(all_slices)
+        tris: List[List[int]] = []
+        for k in range(k_steps - 1):
+            for i in range(n_segs):
+                next_i = (i + 1) % n_segs
+                v0 = k * n_segs + i
+                v1 = k * n_segs + next_i
+                v2 = (k + 1) * n_segs + next_i
+                v3 = (k + 1) * n_segs + i
+                tris.append([v0, v1, v2])
+                tris.append([v0, v2, v3])
+
+        start_c_idx = len(flat_pts)
+        end_c_idx = start_c_idx + 1
+        flat_pts = np.vstack([flat_pts, path_pts[0:1], path_pts[-1:]])
+
+        for i in range(n_segs):
+            next_i = (i + 1) % n_segs
+            tris.append([start_c_idx, next_i, i])
+            tris.append([end_c_idx, (k_steps - 1) * n_segs + i, (k_steps - 1) * n_segs + next_i])
+
+        mesh = m.Mesh(vert_properties=flat_pts.astype(np.float32), tri_verts=np.array(tris, dtype=np.uint32))
+        sweep_manifold = m.Manifold(mesh)
+        solid = Solid(sweep_manifold, self.name)
+        self.status = FeatureStatus.OK
+        return _apply_boolean_operation(existing_bodies, solid, self.operation, self.body_id, self.target_body_id)
+
+
+class FilletFeature(Feature):
+    """
+    Congé de raccordement paramétrique (Fillet) adoucissant les arêtes vives.
+    Réduit les concentrations de contraintes mécaniques selon les standards industriels.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Fillet",
+        target_body_id: str = "",
+        radius: float = 2.0,
+        segments: int = 16
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.target_body_id = target_body_id
+        self.parameters = {
+            "radius": float(radius),
+            "segments": float(segments),
+        }
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Arrondit les arêtes du corps solide cible."""
+        updated = dict(existing_bodies)
+        if self.target_body_id not in updated:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        target = updated[self.target_body_id]
+        r = max(0.05, float(self.parameters.get("radius", 2.0)))
+        segs = max(8, min(32, int(self.parameters.get("segments", 16))))
+        b_min, b_max = target.bounding_box()
+        dx = b_max.x - b_min.x
+        dy = b_max.y - b_min.y
+        dz = b_max.z - b_min.z
+
+        if dx > 2.2 * r and dy > 2.2 * r and dz > 2.2 * r:
+            sx = (dx - 2.0 * r) / dx
+            sy = (dy - 2.0 * r) / dy
+            sz = (dz - 2.0 * r) / dz
+            center = Vector3D((b_min.x + b_max.x) * 0.5, (b_min.y + b_max.y) * 0.5, (b_min.z + b_max.z) * 0.5)
+            shrunk = target.translate(center.scale(-1.0)).scale(sx, sy, sz).translate(center)
+            sphere_kernel = m.Manifold.sphere(r, segs)
+            rounded_m = shrunk.manifold.minkowski_sum(sphere_kernel)
+            if not rounded_m.is_empty():
+                updated[self.target_body_id] = Solid(rounded_m, f"{target.name}_Fillet")
+                self.status = FeatureStatus.OK
+                return updated
+
+        # Fallback de lissage si trop étroit pour Minkowski
+        updated[self.target_body_id] = target.simplify(r * 0.1)
+        self.status = FeatureStatus.OK
+        return updated
+
+
+class ChamferFeature(Feature):
+    """
+    Chanfrein paramétrique (Chamfer) biseautant les arêtes nettes à 45°.
+    Essentiel pour l'ébavurage, l'assemblage et la conformité d'usinage.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Chamfer",
+        target_body_id: str = "",
+        distance: float = 2.0,
+        edges_mode: str = "all"
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.target_body_id = target_body_id
+        self.edges_mode = edges_mode
+        self.parameters = {
+            "distance": float(distance),
+        }
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Applique les biseaux de découpe par plans inclinés sur les arêtes cibles."""
+        updated = dict(existing_bodies)
+        if self.target_body_id not in updated:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        target = updated[self.target_body_id]
+        d = max(0.01, float(self.parameters.get("distance", 2.0)))
+        b_min, b_max = target.bounding_box()
+        x0, x1 = b_min.x, b_max.x
+        y0, y1 = b_min.y, b_max.y
+        z0, z1 = b_min.z, b_max.z
+
+        # Normalisation du biseau à 45°
+        inv_sqrt2 = 1.0 / np.sqrt(2.0)
+        cut_planes: List[Tuple[np.ndarray, float]] = []
+
+        # Arêtes supérieures (Z = z1)
+        if self.edges_mode in ("all", "top"):
+            cut_planes.append((np.array([inv_sqrt2, 0.0, inv_sqrt2]), (x1 + z1 - d) * inv_sqrt2))
+            cut_planes.append((np.array([-inv_sqrt2, 0.0, inv_sqrt2]), (-x0 + z1 - d) * inv_sqrt2))
+            cut_planes.append((np.array([0.0, inv_sqrt2, inv_sqrt2]), (y1 + z1 - d) * inv_sqrt2))
+            cut_planes.append((np.array([0.0, -inv_sqrt2, inv_sqrt2]), (-y0 + z1 - d) * inv_sqrt2))
+
+        # Arêtes inférieures (Z = z0)
+        if self.edges_mode in ("all", "bottom"):
+            cut_planes.append((np.array([inv_sqrt2, 0.0, -inv_sqrt2]), (x1 - z0 - d) * inv_sqrt2))
+            cut_planes.append((np.array([-inv_sqrt2, 0.0, -inv_sqrt2]), (-x0 - z0 - d) * inv_sqrt2))
+            cut_planes.append((np.array([0.0, inv_sqrt2, -inv_sqrt2]), (y1 - z0 - d) * inv_sqrt2))
+            cut_planes.append((np.array([0.0, -inv_sqrt2, -inv_sqrt2]), (-y0 - z0 - d) * inv_sqrt2))
+
+        # Arêtes verticales
+        if self.edges_mode in ("all", "vertical"):
+            cut_planes.append((np.array([inv_sqrt2, inv_sqrt2, 0.0]), (x1 + y1 - d) * inv_sqrt2))
+            cut_planes.append((np.array([inv_sqrt2, -inv_sqrt2, 0.0]), (x1 - y0 - d) * inv_sqrt2))
+            cut_planes.append((np.array([-inv_sqrt2, inv_sqrt2, 0.0]), (-x0 + y1 - d) * inv_sqrt2))
+            cut_planes.append((np.array([-inv_sqrt2, -inv_sqrt2, 0.0]), (-x0 - y0 - d) * inv_sqrt2))
+
+        chamfered = target
+        for norm_v, cut_dist in cut_planes:
+            norm_3d = Vector3D(float(norm_v[0]), float(norm_v[1]), float(norm_v[2]))
+            chamfered = chamfered.trim_by_plane(norm_3d.scale(-1.0), -cut_dist)
+
+        updated[self.target_body_id] = chamfered
+        self.status = FeatureStatus.OK
+        return updated
+
+
+class DraftFeature(Feature):
+    """
+    Dépouille de moulage paramétrique (Draft) inclinant les faces latérales.
+    Garantit le démoulage facile des pièces injectées sous pression ou coulées en fonderie.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Draft",
+        target_body_id: str = "",
+        draft_angle_deg: float = 3.0,
+        pull_axis: str = "Z"
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.target_body_id = target_body_id
+        self.pull_axis = pull_axis
+        self.parameters = {
+            "draft_angle": float(draft_angle_deg)
+        }
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Applique l'angle de dépouille en déformant les faces selon la direction de tirage."""
+        updated = dict(existing_bodies)
+        if self.target_body_id not in updated:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        target = updated[self.target_body_id]
+        angle_deg = self.parameters.get("draft_angle", 3.0)
+        angle_rad = np.radians(angle_deg)
+        b_min, b_max = target.bounding_box()
+        h_z = max(0.1, b_max.z - b_min.z)
+        tan_a = float(np.tan(angle_rad))
+        cx = (b_min.x + b_max.x) * 0.5
+        cy = (b_min.y + b_max.y) * 0.5
+
+        def _draft_warp(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
+            x, y, z = v[0], v[1], v[2]
+            delta_z = z - b_min.z
+            scale_fac = max(0.05, 1.0 - (delta_z / h_z) * tan_a)
+            new_x = cx + (x - cx) * scale_fac
+            new_y = cy + (y - cy) * scale_fac
+            return (float(new_x), float(new_y), float(z))
+
+        updated[self.target_body_id] = target.warp(_draft_warp)
         self.status = FeatureStatus.OK
         return updated

@@ -20,7 +20,8 @@ from src.core.feature import (
 )
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
-    MirrorFeature, HoleFeature, ShellFeature
+    MirrorFeature, HoleFeature, ShellFeature,
+    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature
 )
 from src.sheetmetal.sheet_metal import SheetMetalFeature
 
@@ -82,6 +83,18 @@ class ProjectSerializer:
                 f_dict["tool_body_id"] = getattr(feat, "tool_body_id")
             if hasattr(feat, "mirror_plane") and isinstance(feat.mirror_plane, PlaneType):
                 f_dict["mirror_plane"] = feat.mirror_plane.value
+            if hasattr(feat, "start_sketch_id"):
+                f_dict["start_sketch_id"] = getattr(feat, "start_sketch_id")
+            if hasattr(feat, "end_sketch_id"):
+                f_dict["end_sketch_id"] = getattr(feat, "end_sketch_id")
+            if hasattr(feat, "profile_sketch_id"):
+                f_dict["profile_sketch_id"] = getattr(feat, "profile_sketch_id")
+            if hasattr(feat, "trajectory_type"):
+                f_dict["trajectory_type"] = getattr(feat, "trajectory_type")
+            if hasattr(feat, "edges_mode"):
+                f_dict["edges_mode"] = getattr(feat, "edges_mode")
+            if hasattr(feat, "pull_axis"):
+                f_dict["pull_axis"] = getattr(feat, "pull_axis")
 
             data["features"].append(f_dict)
 
@@ -213,6 +226,39 @@ class ProjectSerializer:
                         fl = float(params.get("flange_length", 25.0))
                         kf = float(params.get("k_factor", 0.44))
                         feat = SheetMetalFeature(f_id, f_name, bw, bl, th, br, fl, kf, target_id)
+
+                    elif f_cls == "LoftFeature":
+                        s_start = str(f_data.get("start_sketch_id", ""))
+                        s_end = str(f_data.get("end_sketch_id", ""))
+                        h_off = float(params.get("height_offset", 30.0))
+                        s_top = float(params.get("scale_top", 1.0))
+                        segs = int(params.get("num_segments", 36))
+                        feat = LoftFeature(f_id, f_name, s_start, s_end, h_off, s_top, segs, op, target_id)
+
+                    elif f_cls == "SweepFeature":
+                        prof_id = str(f_data.get("profile_sketch_id", ""))
+                        traj_type = str(f_data.get("trajectory_type", "arc"))
+                        rad = float(params.get("radius", 30.0))
+                        h = float(params.get("height", 40.0))
+                        turns = float(params.get("turns", 1.0))
+                        k_steps = int(params.get("num_steps", 24))
+                        n_segs = int(params.get("segments", 24))
+                        feat = SweepFeature(f_id, f_name, prof_id, traj_type, rad, h, turns, k_steps, n_segs, op, target_id)
+
+                    elif f_cls == "FilletFeature":
+                        rad = float(params.get("radius", 2.0))
+                        segs = int(params.get("segments", 16))
+                        feat = FilletFeature(f_id, f_name, target_id or "", rad, segs)
+
+                    elif f_cls == "ChamferFeature":
+                        dist = float(params.get("distance", 2.0))
+                        mode = str(f_data.get("edges_mode", "all"))
+                        feat = ChamferFeature(f_id, f_name, target_id or "", dist, mode)
+
+                    elif f_cls == "DraftFeature":
+                        angle = float(params.get("draft_angle", 3.0))
+                        axis = str(f_data.get("pull_axis", "Z"))
+                        feat = DraftFeature(f_id, f_name, target_id or "", angle, axis)
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

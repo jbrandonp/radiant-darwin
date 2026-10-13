@@ -17,10 +17,12 @@ from PySide6.QtCore import Qt
 from src.core.document import CADDocument
 from src.core.types import BooleanOperation, PlaneType, Point2D, Vector3D
 from src.core.sketch import Sketch2D
+from src.core.geometry import Solid
 from src.core.feature import BoxFeature, CylinderFeature, SphereFeature, ExtrudeFeature, BooleanFeature
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
-    MirrorFeature, HoleFeature, ShellFeature
+    MirrorFeature, HoleFeature, ShellFeature,
+    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature
 )
 from src.core.exporter import CADExporter
 from src.core.serializer import ProjectSerializer
@@ -44,7 +46,8 @@ from src.ui.dialogs import (
     CreateBoxDialog, CreateCylinderDialog, CreateSphereDialog,
     ExtrudeDialog, RevolveDialog, HoleDialog, ShellDialog,
     CombineDialog, FEADialog, ParametersDialog, SheetMetalDialog,
-    RenderDialog
+    RenderDialog, LoftDialog, SweepDialog, FilletDialog,
+    ChamferDialog, DraftDialog, MeasureDialog, MeshAnalysisDialog
 )
 from src.ui.theme import FUSION_DARK_STYLESHEET
 
@@ -157,10 +160,21 @@ class CADMainWindow(QMainWindow):
         self.ribbon.create_sphere_requested.connect(self._on_action_create_sphere)
         self.ribbon.extrude_requested.connect(self._on_action_extrude)
         self.ribbon.revolve_requested.connect(self._on_action_revolve)
+        self.ribbon.loft_requested.connect(self._on_action_loft)
+        self.ribbon.sweep_requested.connect(self._on_action_sweep)
         self.ribbon.hole_requested.connect(self._on_action_hole)
         self.ribbon.shell_requested.connect(self._on_action_shell)
         self.ribbon.pattern_requested.connect(self._on_action_pattern)
         self.ribbon.combine_requested.connect(self._on_action_combine)
+        self.ribbon.fillet_requested.connect(self._on_action_fillet)
+        self.ribbon.chamfer_requested.connect(self._on_action_chamfer)
+        self.ribbon.draft_requested.connect(self._on_action_draft)
+
+        # Inspection & Métrologie (FreeCAD Measure WB)
+        self.ribbon.measure_requested.connect(self._on_action_measure)
+
+        # Maillage & Diagnostic (FreeCAD Mesh WB)
+        self.ribbon.mesh_analysis_requested.connect(self._on_action_mesh_analysis)
 
         # Esquisse
         self.ribbon.new_sketch_xy_requested.connect(lambda: self._create_sketch(PlaneType.XY))
@@ -494,6 +508,125 @@ class CADMainWindow(QMainWindow):
             self._feature_seq += 1
             feat = BooleanFeature(f"feat_{self._feature_seq}", f"Combiner {self._feature_seq}", target, tool, op)
             self.document.add_feature(feat)
+
+    def _on_action_loft(self) -> None:
+        if not self.document.sketches:
+            QMessageBox.information(self, "Lissage (Loft)", "Créez au moins une esquisse 2D pour le lissage.")
+            return
+        sketch_ids = list(self.document.sketches.keys())
+        bodies = self.document.get_active_body_ids()
+        dlg = LoftDialog(sketch_ids, bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            op_val = vals["operation"]
+            bool_op = op_val if isinstance(op_val, BooleanOperation) else BooleanOperation.NEW_BODY
+            tgt_val = vals["target_body_id"]
+            tgt_str = str(tgt_val) if tgt_val is not None else None
+            feat = LoftFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Lissage {self._feature_seq}",
+                start_sketch_id=str(vals["start_sketch_id"]),
+                end_sketch_id=str(vals["end_sketch_id"]),
+                height_offset=float(vals["height_offset"]),
+                scale_top=float(vals["scale_top"]),
+                num_segments=int(float(vals["num_segments"])),
+                operation=bool_op,
+                target_body_id=tgt_str
+            )
+            self.document.add_feature(feat)
+
+    def _on_action_sweep(self) -> None:
+        sketch_ids = list(self.document.sketches.keys())
+        bodies = self.document.get_active_body_ids()
+        dlg = SweepDialog(sketch_ids, bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            op_val = vals["operation"]
+            bool_op = op_val if isinstance(op_val, BooleanOperation) else BooleanOperation.NEW_BODY
+            tgt_val = vals["target_body_id"]
+            tgt_str = str(tgt_val) if tgt_val is not None else None
+            feat = SweepFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Balayage {self._feature_seq}",
+                profile_sketch_id=str(vals["profile_sketch_id"]),
+                trajectory_type=str(vals["trajectory_type"]),
+                radius=float(vals["radius"]),
+                height=float(vals["height"]),
+                turns=float(vals["turns"]),
+                operation=bool_op,
+                target_body_id=tgt_str
+            )
+            self.document.add_feature(feat)
+
+    def _on_action_fillet(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            QMessageBox.information(self, "Congé (Fillet)", "Aucun corps solide disponible.")
+            return
+        dlg = FilletDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            feat = FilletFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Congé R{vals['radius']:.1f}mm",
+                target_body_id=str(vals["target_body_id"]),
+                radius=float(vals["radius"]),
+                segments=int(float(vals["segments"]))
+            )
+            self.document.add_feature(feat)
+
+    def _on_action_chamfer(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            QMessageBox.information(self, "Chanfrein (Chamfer)", "Aucun corps solide disponible.")
+            return
+        dlg = ChamferDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            feat = ChamferFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Chanfrein {vals['distance']:.1f}mm",
+                target_body_id=str(vals["target_body_id"]),
+                distance=float(vals["distance"]),
+                edges_mode=str(vals["edges_mode"])
+            )
+            self.document.add_feature(feat)
+
+    def _on_action_draft(self) -> None:
+        bodies = self.document.get_active_body_ids()
+        if not bodies:
+            QMessageBox.information(self, "Dépouille (Draft)", "Aucun corps solide disponible.")
+            return
+        dlg = DraftDialog(bodies, self)
+        if dlg.exec():
+            vals = dlg.get_values()
+            self._feature_seq += 1
+            feat = DraftFeature(
+                feature_id=f"feat_{self._feature_seq}",
+                name=f"Dépouille {vals['draft_angle']:.1f}°",
+                target_body_id=str(vals["target_body_id"]),
+                draft_angle_deg=float(vals["draft_angle"]),
+                pull_axis=str(vals["pull_axis"])
+            )
+            self.document.add_feature(feat)
+
+    def _on_action_measure(self) -> None:
+        dlg = MeasureDialog(self.document.bodies, self)
+        dlg.exec()
+
+    def _on_action_mesh_analysis(self) -> None:
+        dlg = MeshAnalysisDialog(self.document.bodies, on_repair_callback=self._on_mesh_repaired, parent=self)
+        dlg.exec()
+
+    def _on_mesh_repaired(self, body_id: str, new_solid: Solid) -> None:
+        self.document.bodies[body_id] = new_solid
+        self.document.invalidate_cache()
+        self.document._notify_change()
+        self.status_bar.showMessage(f"Maillage {body_id} réparé et actualisé", 3000)
 
     # --- Actions Esquisse & Solveur ---
     def _create_sketch(self, plane: PlaneType) -> None:

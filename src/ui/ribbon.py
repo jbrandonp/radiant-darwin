@@ -82,16 +82,27 @@ class CADRibbonBar(QTabWidget):
     load_project_requested = Signal()
     manage_parameters_requested = Signal()
 
-    # Solide
+    # Solide & Conception avancée
     create_box_requested = Signal()
     create_cylinder_requested = Signal()
     create_sphere_requested = Signal()
     extrude_requested = Signal()
     revolve_requested = Signal()
+    loft_requested = Signal()
+    sweep_requested = Signal()
     hole_requested = Signal()
     shell_requested = Signal()
     pattern_requested = Signal()
     combine_requested = Signal()
+    fillet_requested = Signal()
+    chamfer_requested = Signal()
+    draft_requested = Signal()
+
+    # Inspection & Métrologie 3D (FreeCAD Measure Workbench)
+    measure_requested = Signal()
+
+    # Analyse & Réparation de Maillage (FreeCAD Mesh Workbench)
+    mesh_analysis_requested = Signal()
 
     # Esquisse
     new_sketch_xy_requested = Signal()
@@ -150,6 +161,8 @@ class CADRibbonBar(QTabWidget):
         self._init_render_tab()
         self._init_cam_tab()
         self._init_drawing_tab()
+        self._init_inspection_tab()
+        self._init_mesh_tab()
         self._init_tools_tab()
         self._init_export_tab()
 
@@ -174,7 +187,7 @@ class CADRibbonBar(QTabWidget):
         self.addTab(tab, "FICHIER")
 
     def _init_solid_tab(self) -> None:
-        """Onglet CONCEPTION SOLIDE."""
+        """Onglet CONCEPTION SOLIDE AVANCÉE."""
         tab = QWidget()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(4, 2, 4, 2)
@@ -191,19 +204,29 @@ class CADRibbonBar(QTabWidget):
         btn_ext.clicked.connect(self.extrude_requested.emit)
         btn_rev = RibbonButton("Révolution", "🔄")
         btn_rev.clicked.connect(self.revolve_requested.emit)
+        btn_loft = RibbonButton("Lissage", "🏺")
+        btn_loft.clicked.connect(self.loft_requested.emit)
+        btn_swp = RibbonButton("Balayage", "➰")
+        btn_swp.clicked.connect(self.sweep_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Créer", [btn_box, btn_cyl, btn_sph, btn_ext, btn_rev]))
+        layout.addWidget(_create_ribbon_group("Créer (PartDesign)", [btn_box, btn_cyl, btn_sph, btn_ext, btn_rev, btn_loft, btn_swp]))
 
         btn_hole = RibbonButton("Perçage", "🕳️")
         btn_hole.clicked.connect(self.hole_requested.emit)
         btn_shell = RibbonButton("Évidement", "🐚")
         btn_shell.clicked.connect(self.shell_requested.emit)
+        btn_fillet = RibbonButton("Congé", "🟢")
+        btn_fillet.clicked.connect(self.fillet_requested.emit)
+        btn_chamfer = RibbonButton("Chanfrein", "📐")
+        btn_chamfer.clicked.connect(self.chamfer_requested.emit)
+        btn_draft = RibbonButton("Dépouille", "📐")
+        btn_draft.clicked.connect(self.draft_requested.emit)
         btn_pat = RibbonButton("Répétition", "🪞")
         btn_pat.clicked.connect(self.pattern_requested.emit)
         btn_comb = RibbonButton("Combiner", "🔀")
         btn_comb.clicked.connect(self.combine_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Modifier", [btn_hole, btn_shell, btn_pat, btn_comb]))
+        layout.addWidget(_create_ribbon_group("Modifier", [btn_hole, btn_shell, btn_fillet, btn_chamfer, btn_draft, btn_pat, btn_comb]))
         self.addTab(tab, "CONCEPTION")
 
     def _init_sketch_tab(self) -> None:
@@ -333,6 +356,42 @@ class CADRibbonBar(QTabWidget):
 
         layout.addWidget(_create_ribbon_group("Mise en Plan ISO 128", [btn_draw, btn_svg]))
         self.addTab(tab, "DESSIN 2D")
+
+    def _init_inspection_tab(self) -> None:
+        """Onglet INSPECTION & MÉTROLOGIE (FreeCAD Measure WB)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_meas = RibbonButton("Mesurer 3D", "📏")
+        btn_meas.clicked.connect(self.measure_requested.emit)
+        btn_clear = RibbonButton("Jeux & Chocs", "💥")
+        btn_clear.clicked.connect(self.measure_requested.emit)
+        btn_audit = RibbonButton("Bilan Masse", "📊")
+        btn_audit.clicked.connect(self.measure_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Métrologie & Contrôle", [btn_meas, btn_clear, btn_audit]))
+        self.addTab(tab, "INSPECTION")
+
+    def _init_mesh_tab(self) -> None:
+        """Onglet MAILLAGE & RÉPARATION 3D (FreeCAD Mesh WB)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_diag = RibbonButton("Diagnostic", "🔬")
+        btn_diag.clicked.connect(self.mesh_analysis_requested.emit)
+        btn_rep = RibbonButton("Réparation", "🛠️")
+        btn_rep.clicked.connect(self.mesh_analysis_requested.emit)
+        btn_dec = RibbonButton("Décimation", "📉")
+        btn_dec.clicked.connect(self.mesh_analysis_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Atelier Maillage", [btn_diag, btn_rep, btn_dec]))
+        self.addTab(tab, "MAILLAGE")
 
     def _init_tools_tab(self) -> None:
         """Onglet AFFICHAGE & CAMÉRA."""

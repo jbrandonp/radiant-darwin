@@ -4,7 +4,7 @@ Utilise manifold3d pour garantir des solides manifold (étanches) et des opérat
 """
 
 from __future__ import annotations
-from typing import List, Tuple, Optional, Sequence
+from typing import List, Tuple, Optional, Sequence, Callable
 import numpy as np
 import manifold3d as m
 
@@ -90,6 +90,57 @@ class Solid:
         """Intersection booléenne : conserve le volume commun."""
         res_manifold = self._manifold ^ other._manifold
         res = Solid(res_manifold, f"{self.name}_Intersect")
+        res.color = self.color
+        return res
+
+    def surface_area(self) -> float:
+        """Calcule la surface extérieure totale du solide en mm²."""
+        if self._manifold.is_empty():
+            return 0.0
+        return float(self._manifold.surface_area())
+
+    def min_gap(self, other: Solid, search_distance: float = 1000.0) -> float:
+        """Calcule la distance minimale (jeu/clearance) entre ce solide et un autre."""
+        if self._manifold.is_empty() or other._manifold.is_empty():
+            return float("inf")
+        return float(self._manifold.min_gap(other._manifold, search_distance))
+
+    def genus(self) -> int:
+        """Retourne le genre topologique du solide (nombre de trous traversants)."""
+        if self._manifold.is_empty():
+            return 0
+        return int(self._manifold.genus())
+
+    def num_vertices(self) -> int:
+        """Retourne le nombre total de sommets uniques du maillage solide."""
+        return int(self._manifold.num_vert())
+
+    def num_edges(self) -> int:
+        """Retourne le nombre total d'arêtes du maillage solide."""
+        return int(self._manifold.num_edge())
+
+    def num_faces(self) -> int:
+        """Retourne le nombre total de facettes triangulaires."""
+        return int(self._manifold.num_tri())
+
+    def simplify(self, tolerance: float = 0.05) -> Solid:
+        """Simplifie le maillage du solide en conservant sa topologie étanche."""
+        new_manifold = self._manifold.simplify(tolerance)
+        res = Solid(new_manifold, f"{self.name}_Simplified")
+        res.color = self.color
+        return res
+
+    def trim_by_plane(self, normal: Vector3D, offset: float) -> Solid:
+        """Découpe le solide par un demi-espace défini par un plan (normal et distance)."""
+        new_manifold = self._manifold.trim_by_plane([normal.x, normal.y, normal.z], offset)
+        res = Solid(new_manifold, f"{self.name}_Trimmed")
+        res.color = self.color
+        return res
+
+    def warp(self, func: Callable[[Tuple[float, float, float]], Tuple[float, float, float]]) -> Solid:
+        """Déforme le solide selon une fonction de transformation 3D continue."""
+        new_manifold = self._manifold.warp(func)
+        res = Solid(new_manifold, f"{self.name}_Warped")
         res.color = self.color
         return res
 

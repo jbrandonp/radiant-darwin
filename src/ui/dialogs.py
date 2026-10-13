@@ -4,11 +4,12 @@ Permet à l'utilisateur de configurer les dimensions, opérations et expressions
 """
 
 from __future__ import annotations
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Union, Callable
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout,
     QDoubleSpinBox, QComboBox, QPushButton, QLabel, QCheckBox,
-    QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit, QFileDialog
+    QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit, QFileDialog,
+    QTabWidget, QGroupBox, QWidget
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QImage
@@ -19,6 +20,8 @@ from src.core.parameters import ParameterTable
 from src.materials.material_db import MATERIAL_LIBRARY, PhysicalMaterial
 from src.render.pbr_material import PBR_LIBRARY, PBRMaterial
 from src.render.raytracer import PBRRaytracer
+from src.core.inspector import measure_points, compute_clearance, compute_interference, generate_inspection_report
+from src.core.mesh_tools import diagnose_mesh, repair_mesh, simplify_mesh, flip_mesh_normals, MeshDiagnostic
 
 
 class CreateBoxDialog(QDialog):
@@ -712,3 +715,581 @@ class RenderDialog(QDialog):
         if path:
             self.rendered_image.save(path, "PNG")
             self.lbl_info.setText(f"Image enregistrée : {path}")
+
+
+class LoftDialog(QDialog):
+    """Dialogue de création d'un lissage volumique (Loft) entre deux esquisses."""
+
+    def __init__(self, sketches: List[str], existing_bodies: List[str], parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Lissage Volumique (Loft)")
+        self.setFixedSize(360, 320)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.combo_start = QComboBox()
+        self.combo_start.addItems(sketches if sketches else ["Aucune esquisse"])
+        form.addRow("Profil de Départ :", self.combo_start)
+
+        self.combo_end = QComboBox()
+        self.combo_end.addItems(sketches if sketches else ["Aucune esquisse"])
+        form.addRow("Profil d'Arrivée :", self.combo_end)
+
+        self.spin_height = QDoubleSpinBox()
+        self.spin_height.setRange(0.1, 5000.0)
+        self.spin_height.setValue(30.0)
+        self.spin_height.setSuffix(" mm")
+        form.addRow("Hauteur de Lissage :", self.spin_height)
+
+        self.spin_scale = QDoubleSpinBox()
+        self.spin_scale.setRange(0.01, 10.0)
+        self.spin_scale.setValue(1.0)
+        self.spin_scale.setSingleStep(0.1)
+        form.addRow("Échelle Supérieure :", self.spin_scale)
+
+        self.spin_segs = QDoubleSpinBox()
+        self.spin_segs.setRange(8.0, 120.0)
+        self.spin_segs.setValue(36.0)
+        self.spin_segs.setDecimals(0)
+        form.addRow("Résolution (Segments) :", self.spin_segs)
+
+        self.combo_op = QComboBox()
+        self.combo_op.addItems(["Nouveau Corps", "Joindre (Union)", "Couper (Différence)", "Intersection"])
+        form.addRow("Opération Booléenne :", self.combo_op)
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Générer le Lissage")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[str, float, BooleanOperation, Optional[str]]]:
+        """Retourne les paramètres validés pour le Loft."""
+        ops = [
+            BooleanOperation.NEW_BODY,
+            BooleanOperation.JOIN,
+            BooleanOperation.CUT,
+            BooleanOperation.INTERSECT
+        ]
+        target = self.combo_target.currentText()
+        return {
+            "start_sketch_id": self.combo_start.currentText(),
+            "end_sketch_id": self.combo_end.currentText(),
+            "height_offset": self.spin_height.value(),
+            "scale_top": self.spin_scale.value(),
+            "num_segments": self.spin_segs.value(),
+            "operation": ops[self.combo_op.currentIndex()],
+            "target_body_id": None if target == "Aucun corps" else target
+        }
+
+
+class SweepDialog(QDialog):
+    """Dialogue de balayage volumique (Sweep) d'un profil le long d'une trajectoire."""
+
+    def __init__(self, sketches: List[str], existing_bodies: List[str], parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Balayage Volumique (Sweep / Pipe)")
+        self.setFixedSize(360, 340)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.combo_profile = QComboBox()
+        self.combo_profile.addItems(sketches if sketches else ["Profil Circulaire Défaut"])
+        form.addRow("Profil 2D :", self.combo_profile)
+
+        self.combo_traj = QComboBox()
+        self.combo_traj.addItems(["Arc de Cercle (90°)", "Hélice / Ressort (Helix)", "Courbe S (Spline)", "Ligne Droite (Linear)"])
+        form.addRow("Trajectoire Guide :", self.combo_traj)
+
+        self.spin_radius = QDoubleSpinBox()
+        self.spin_radius.setRange(1.0, 5000.0)
+        self.spin_radius.setValue(30.0)
+        self.spin_radius.setSuffix(" mm")
+        form.addRow("Rayon de Courbure :", self.spin_radius)
+
+        self.spin_height = QDoubleSpinBox()
+        self.spin_height.setRange(1.0, 5000.0)
+        self.spin_height.setValue(40.0)
+        self.spin_height.setSuffix(" mm")
+        form.addRow("Longueur / Hauteur :", self.spin_height)
+
+        self.spin_turns = QDoubleSpinBox()
+        self.spin_turns.setRange(0.25, 50.0)
+        self.spin_turns.setValue(1.0)
+        self.spin_turns.setSingleStep(0.25)
+        form.addRow("Spires (Hélice) :", self.spin_turns)
+
+        self.combo_op = QComboBox()
+        self.combo_op.addItems(["Nouveau Corps", "Joindre (Union)", "Couper (Différence)", "Intersection"])
+        form.addRow("Opération Booléenne :", self.combo_op)
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Exécuter le Balayage")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[str, float, BooleanOperation, Optional[str]]]:
+        """Retourne les paramètres validés pour le Sweep."""
+        ops = [
+            BooleanOperation.NEW_BODY,
+            BooleanOperation.JOIN,
+            BooleanOperation.CUT,
+            BooleanOperation.INTERSECT
+        ]
+        traj_map = {0: "arc", 1: "helix", 2: "s_curve", 3: "linear"}
+        target = self.combo_target.currentText()
+        return {
+            "profile_sketch_id": self.combo_profile.currentText(),
+            "trajectory_type": traj_map.get(self.combo_traj.currentIndex(), "arc"),
+            "radius": self.spin_radius.value(),
+            "height": self.spin_height.value(),
+            "turns": self.spin_turns.value(),
+            "operation": ops[self.combo_op.currentIndex()],
+            "target_body_id": None if target == "Aucun corps" else target
+        }
+
+
+class FilletDialog(QDialog):
+    """Dialogue de création d'un congé d'arête (Fillet)."""
+
+    def __init__(self, existing_bodies: List[str], parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Congé d'Arête (Fillet)")
+        self.setFixedSize(300, 180)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        self.spin_radius = QDoubleSpinBox()
+        self.spin_radius.setRange(0.1, 100.0)
+        self.spin_radius.setValue(2.0)
+        self.spin_radius.setSuffix(" mm")
+        form.addRow("Rayon de Congé (R) :", self.spin_radius)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Appliquer le Congé")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[str, float]]:
+        """Retourne les paramètres du congé."""
+        return {
+            "target_body_id": self.combo_target.currentText(),
+            "radius": self.spin_radius.value(),
+            "segments": 16.0
+        }
+
+
+class ChamferDialog(QDialog):
+    """Dialogue de création d'un chanfrein d'arêtes (Chamfer)."""
+
+    def __init__(self, existing_bodies: List[str], parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Chanfrein d'Arête (Chamfer)")
+        self.setFixedSize(320, 200)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        self.spin_dist = QDoubleSpinBox()
+        self.spin_dist.setRange(0.1, 100.0)
+        self.spin_dist.setValue(2.0)
+        self.spin_dist.setSuffix(" mm")
+        form.addRow("Distance de Biseau :", self.spin_dist)
+
+        self.combo_mode = QComboBox()
+        self.combo_mode.addItems(["Toutes les arêtes (all)", "Arêtes supérieures (top)", "Arêtes inférieures (bottom)", "Arêtes verticales (vertical)"])
+        form.addRow("Sélection d'Arêtes :", self.combo_mode)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Appliquer le Chanfrein")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[str, float]]:
+        """Retourne les paramètres du chanfrein."""
+        modes = ["all", "top", "bottom", "vertical"]
+        return {
+            "target_body_id": self.combo_target.currentText(),
+            "distance": self.spin_dist.value(),
+            "edges_mode": modes[self.combo_mode.currentIndex()]
+        }
+
+
+class DraftDialog(QDialog):
+    """Dialogue de dépouille de moulage (Draft)."""
+
+    def __init__(self, existing_bodies: List[str], parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Dépouille de Moulage (Draft)")
+        self.setFixedSize(300, 200)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.combo_target = QComboBox()
+        self.combo_target.addItems(existing_bodies if existing_bodies else ["Aucun corps"])
+        form.addRow("Corps Cible :", self.combo_target)
+
+        self.spin_angle = QDoubleSpinBox()
+        self.spin_angle.setRange(0.5, 30.0)
+        self.spin_angle.setValue(3.0)
+        self.spin_angle.setSuffix(" °")
+        form.addRow("Angle de Dépouille :", self.spin_angle)
+
+        self.combo_axis = QComboBox()
+        self.combo_axis.addItems(["Axe Z (Vertical)", "Axe Y (Horizontal)", "Axe X (Transversal)"])
+        form.addRow("Direction de Tirage :", self.combo_axis)
+
+        layout.addLayout(form)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Appliquer la Dépouille")
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_ok)
+        layout.addLayout(btn_box)
+
+    def get_values(self) -> Dict[str, Union[str, float]]:
+        """Retourne les paramètres de la dépouille."""
+        axes = ["Z", "Y", "X"]
+        return {
+            "target_body_id": self.combo_target.currentText(),
+            "draft_angle": self.spin_angle.value(),
+            "pull_axis": axes[self.combo_axis.currentIndex()]
+        }
+
+
+class MeasureDialog(QDialog):
+    """Atelier d'Inspection & Métrologie 3D de précision (Measure Workbench)."""
+
+    def __init__(self, bodies: Dict[str, Solid], parent: Optional[QDialog] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Outil de Mesure 3D & Métrologie")
+        self.setFixedSize(480, 460)
+        self.bodies = bodies
+
+        layout = QVBoxLayout(self)
+        tabs = QTabWidget()
+
+        # Onglet 1 : Mesure 3D entre 2 points
+        tab_pts = QWidget()
+        vbox_pts = QVBoxLayout(tab_pts)
+
+        grp_p1 = QGroupBox("Point 1 (Origine)")
+        h_p1 = QHBoxLayout(grp_p1)
+        self.sp_p1_x = QDoubleSpinBox()
+        self.sp_p1_x.setRange(-10000.0, 10000.0)
+        self.sp_p1_y = QDoubleSpinBox()
+        self.sp_p1_y.setRange(-10000.0, 10000.0)
+        self.sp_p1_z = QDoubleSpinBox()
+        self.sp_p1_z.setRange(-10000.0, 10000.0)
+        h_p1.addWidget(QLabel("X:"))
+        h_p1.addWidget(self.sp_p1_x)
+        h_p1.addWidget(QLabel("Y:"))
+        h_p1.addWidget(self.sp_p1_y)
+        h_p1.addWidget(QLabel("Z:"))
+        h_p1.addWidget(self.sp_p1_z)
+        vbox_pts.addWidget(grp_p1)
+
+        grp_p2 = QGroupBox("Point 2 (Cible)")
+        h_p2 = QHBoxLayout(grp_p2)
+        self.sp_p2_x = QDoubleSpinBox()
+        self.sp_p2_x.setRange(-10000.0, 10000.0)
+        self.sp_p2_x.setValue(20.0)
+        self.sp_p2_y = QDoubleSpinBox()
+        self.sp_p2_y.setRange(-10000.0, 10000.0)
+        self.sp_p2_y.setValue(20.0)
+        self.sp_p2_z = QDoubleSpinBox()
+        self.sp_p2_z.setRange(-10000.0, 10000.0)
+        self.sp_p2_z.setValue(20.0)
+        h_p2.addWidget(QLabel("X:"))
+        h_p2.addWidget(self.sp_p2_x)
+        h_p2.addWidget(QLabel("Y:"))
+        h_p2.addWidget(self.sp_p2_y)
+        h_p2.addWidget(QLabel("Z:"))
+        h_p2.addWidget(self.sp_p2_z)
+        vbox_pts.addWidget(grp_p2)
+
+        self.lbl_dist = QLabel("Distance 3D : 0.000 mm")
+        self.lbl_dist.setStyleSheet("font-size: 14px; font-weight: bold; color: #00a2ff;")
+        self.lbl_deltas = QLabel("ΔX: 0.00 | ΔY: 0.00 | ΔZ: 0.00 mm")
+        self.lbl_angle = QLabel("Angle d'élévation : 0.00°")
+        self.lbl_midpoint = QLabel("Milieu 3D : (0.00, 0.00, 0.00)")
+        vbox_pts.addWidget(self.lbl_dist)
+        vbox_pts.addWidget(self.lbl_deltas)
+        vbox_pts.addWidget(self.lbl_angle)
+        vbox_pts.addWidget(self.lbl_midpoint)
+        tabs.addTab(tab_pts, "Distance 3D")
+
+        # Onglet 2 : Jeu et collision entre deux corps
+        tab_inter = QWidget()
+        vbox_inter = QVBoxLayout(tab_inter)
+        form_inter = QFormLayout()
+
+        body_keys = list(self.bodies.keys())
+        self.combo_body_a = QComboBox()
+        self.combo_body_a.addItems(body_keys if body_keys else ["Aucun corps"])
+        form_inter.addRow("Corps A :", self.combo_body_a)
+
+        self.combo_body_b = QComboBox()
+        self.combo_body_b.addItems(body_keys if body_keys else ["Aucun corps"])
+        if len(body_keys) > 1:
+            self.combo_body_b.setCurrentIndex(1)
+        form_inter.addRow("Corps B :", self.combo_body_b)
+        vbox_inter.addLayout(form_inter)
+
+        self.lbl_clearance = QLabel("Jeu minimal (Clearance) : -- mm")
+        self.lbl_clearance.setStyleSheet("font-size: 13px; font-weight: bold; color: #32d74b;")
+        self.lbl_collision = QLabel("Collision physique : Aucune")
+        self.lbl_collision.setStyleSheet("font-size: 13px; font-weight: bold; color: #ff9f0a;")
+        vbox_inter.addWidget(self.lbl_clearance)
+        vbox_inter.addWidget(self.lbl_collision)
+
+        btn_calc_inter = QPushButton("Calculer Jeu & Interférence")
+        btn_calc_inter.clicked.connect(self._recalc_interference)
+        vbox_inter.addWidget(btn_calc_inter)
+        tabs.addTab(tab_inter, "Jeu & Collisions")
+
+        # Onglet 3 : Centre de gravité et rapport géométrique
+        tab_report = QWidget()
+        vbox_rep = QVBoxLayout(tab_report)
+        form_rep = QFormLayout()
+
+        self.combo_rep_body = QComboBox()
+        self.combo_rep_body.addItems(body_keys if body_keys else ["Aucun corps"])
+        form_rep.addRow("Corps Analysé :", self.combo_rep_body)
+        vbox_rep.addLayout(form_rep)
+
+        self.lbl_rep_text = QLabel("Sélectionnez un corps pour générer le rapport métrologique.")
+        self.lbl_rep_text.setStyleSheet("font-family: monospace; font-size: 11px; background: #26282e; padding: 8px; border-radius: 4px;")
+        vbox_rep.addWidget(self.lbl_rep_text)
+
+        btn_rep = QPushButton("Générer le Rapport Métrologique")
+        btn_rep.clicked.connect(self._recalc_report)
+        vbox_rep.addWidget(btn_rep)
+        tabs.addTab(tab_report, "Centre de Gravité")
+
+        layout.addWidget(tabs)
+
+        btn_close = QPushButton("Fermer")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close)
+
+        # Connecter recalcul automatique des points
+        for sp in [self.sp_p1_x, self.sp_p1_y, self.sp_p1_z, self.sp_p2_x, self.sp_p2_y, self.sp_p2_z]:
+            sp.valueChanged.connect(self._recalc_points)
+
+        self._recalc_points()
+        self._recalc_interference()
+        self._recalc_report()
+
+    def _recalc_points(self) -> None:
+        """Recalcule la distance et les caractéristiques entre P1 et P2."""
+        p1 = Vector3D(self.sp_p1_x.value(), self.sp_p1_y.value(), self.sp_p1_z.value())
+        p2 = Vector3D(self.sp_p2_x.value(), self.sp_p2_y.value(), self.sp_p2_z.value())
+        res = measure_points(p1, p2)
+        self.lbl_dist.setText(f"Distance 3D : {res.distance:.3f} mm")
+        self.lbl_deltas.setText(f"ΔX: {res.dx:.3f} mm | ΔY: {res.dy:.3f} mm | ΔZ: {res.dz:.3f} mm")
+        self.lbl_angle.setText(f"Angle d'élévation : {res.angle_deg:.2f}°")
+        self.lbl_midpoint.setText(f"Milieu 3D : ({res.midpoint.x:.2f}, {res.midpoint.y:.2f}, {res.midpoint.z:.2f})")
+
+    def _recalc_interference(self) -> None:
+        """Recalcule le jeu minimal et l'éventuelle collision entre corps A et B."""
+        kA = self.combo_body_a.currentText()
+        kB = self.combo_body_b.currentText()
+        if kA not in self.bodies or kB not in self.bodies or kA == kB:
+            self.lbl_clearance.setText("Jeu minimal : Sélectionnez 2 corps distincts")
+            self.lbl_collision.setText("Collision : N/A")
+            return
+
+        solid_a = self.bodies[kA]
+        solid_b = self.bodies[kB]
+        gap = compute_clearance(solid_a, solid_b)
+        has_col, vol_col = compute_interference(solid_a, solid_b)
+
+        if gap == float("inf"):
+            self.lbl_clearance.setText("Jeu minimal : Non mesurable")
+        else:
+            self.lbl_clearance.setText(f"Jeu minimal (Clearance) : {gap:.3f} mm")
+
+        if has_col:
+            self.lbl_collision.setText(f"⚠️ Collision DÉTECTÉE ! Volume : {vol_col:.2f} mm³")
+            self.lbl_collision.setStyleSheet("font-size: 13px; font-weight: bold; color: #ff453a;")
+        else:
+            self.lbl_collision.setText("✅ Aucune interférence physique (Pièces dégagées)")
+            self.lbl_collision.setStyleSheet("font-size: 13px; font-weight: bold; color: #32d74b;")
+
+    def _recalc_report(self) -> None:
+        """Génère le bilan géométrique et barycentrique."""
+        k = self.combo_rep_body.currentText()
+        if k not in self.bodies:
+            self.lbl_rep_text.setText("Aucun corps disponible.")
+            return
+
+        solid = self.bodies[k]
+        rep = generate_inspection_report(solid)
+        com = rep["center_of_mass"]
+        com_str = f"({com.x:.2f}, {com.y:.2f}, {com.z:.2f})" if isinstance(com, Vector3D) else str(com)
+
+        txt = (
+            f"Nom du solide       : {rep['solid_name']}\n"
+            f"Volume total        : {rep['volume_mm3']:.2f} mm³ ({rep['volume_cm3']:.3f} cm³)\n"
+            f"Masse (Alu 2.7g/cm³): {rep['mass_grams']:.2f} g ({rep['mass_kg']:.4f} kg)\n"
+            f"Surface extérieure  : {rep['surface_area_mm2']:.2f} mm²\n"
+            f"Encombrement (AABB) : {rep['box_dx_mm']:.1f} x {rep['box_dy_mm']:.1f} x {rep['box_dz_mm']:.1f} mm\n"
+            f"Centre de Gravité   : {com_str}\n"
+            f"Genre topologique   : {int(float(rep['genus']))} trou(s)\n"
+            f"Facettes / Sommets  : {int(float(rep['faces_count']))} faces / {int(float(rep['vertices_count']))} sommets"
+        )
+        self.lbl_rep_text.setText(txt)
+
+
+class MeshAnalysisDialog(QDialog):
+    """Atelier d'analyse topologique, diagnostic d'étanchéité et réparation de maillage (Mesh WB)."""
+
+    def __init__(
+        self,
+        bodies: Dict[str, Solid],
+        on_repair_callback: Optional[Callable[[str, Solid], None]] = None,
+        parent: Optional[QDialog] = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Atelier de Maillage 3D & Réparation (Mesh Workbench)")
+        self.setFixedSize(480, 420)
+        self.bodies = bodies
+        self.on_repair_callback = on_repair_callback
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        body_keys = list(self.bodies.keys())
+        self.combo_body = QComboBox()
+        self.combo_body.addItems(body_keys if body_keys else ["Aucun corps"])
+        self.combo_body.currentIndexChanged.connect(self._update_diagnostic)
+        form.addRow("Corps à Auditer :", self.combo_body)
+        layout.addLayout(form)
+
+        self.lbl_status = QLabel("Évaluation en cours...")
+        self.lbl_status.setStyleSheet("font-size: 13px; font-weight: bold; color: #00a2ff;")
+        layout.addWidget(self.lbl_status)
+
+        self.lbl_details = QLabel("")
+        self.lbl_details.setStyleSheet("font-family: monospace; font-size: 11px; background: #26282e; padding: 10px; border-radius: 4px;")
+        layout.addWidget(self.lbl_details)
+
+        h_actions = QHBoxLayout()
+        self.btn_repair = QPushButton("🔧 Réparer Maillage")
+        self.btn_repair.clicked.connect(self._on_repair)
+        self.btn_simplify = QPushButton("📉 Décimer (-50%)")
+        self.btn_simplify.clicked.connect(self._on_simplify)
+        self.btn_flip = QPushButton("🔄 Inverser Normales")
+        self.btn_flip.clicked.connect(self._on_flip)
+
+        h_actions.addWidget(self.btn_repair)
+        h_actions.addWidget(self.btn_simplify)
+        h_actions.addWidget(self.btn_flip)
+        layout.addLayout(h_actions)
+
+        btn_close = QPushButton("Fermer")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close)
+
+        self._update_diagnostic()
+
+    def _update_diagnostic(self) -> None:
+        """Exécute l'audit géométrique et rafraîchit l'affichage."""
+        k = self.combo_body.currentText()
+        if k not in self.bodies:
+            self.lbl_status.setText("Aucun solide sélectionné.")
+            self.lbl_details.setText("")
+            return
+
+        solid = self.bodies[k]
+        diag = diagnose_mesh(solid)
+
+        if diag.is_watertight:
+            self.lbl_status.setText("✅ Maillage 2-Manifold CONFORME (Étanche / Watertight)")
+            self.lbl_status.setStyleSheet("font-size: 13px; font-weight: bold; color: #32d74b;")
+        else:
+            self.lbl_status.setText("⚠️ Maillage NON-MANIFOLD (Ouvert / Trous détectés)")
+            self.lbl_status.setStyleSheet("font-size: 13px; font-weight: bold; color: #ff453a;")
+
+        txt = (
+            f"Sommets / Faces     : {diag.num_vertices} sommets | {diag.num_faces} triangles\n"
+            f"Caractéristique     : Euler χ = {diag.euler_number} | Genre g = {diag.genus}\n"
+            f"Facettes dégénérées : {diag.degenerate_faces} triangle(s)\n"
+            f"Facettes dupliquées : {diag.duplicate_faces} triangle(s)\n"
+            f"Sommets orphelins   : {diag.unreferenced_vertices}\n"
+            f"Volume exact        : {diag.volume:.2f} mm³\n"
+            f"Surface extérieure  : {diag.surface_area:.2f} mm²"
+        )
+        self.lbl_details.setText(txt)
+
+    def _on_repair(self) -> None:
+        """Applique l'algorithme de réparation automatique."""
+        k = self.combo_body.currentText()
+        if k in self.bodies and self.on_repair_callback:
+            repaired = repair_mesh(self.bodies[k])
+            self.on_repair_callback(k, repaired)
+            self._update_diagnostic()
+
+    def _on_simplify(self) -> None:
+        """Simplifie le maillage en divisant par deux le nombre de triangles."""
+        k = self.combo_body.currentText()
+        if k in self.bodies and self.on_repair_callback:
+            decimated = simplify_mesh(self.bodies[k], 0.5)
+            self.on_repair_callback(k, decimated)
+            self._update_diagnostic()
+
+    def _on_flip(self) -> None:
+        """Inverse les normales du maillage."""
+        k = self.combo_body.currentText()
+        if k in self.bodies and self.on_repair_callback:
+            flipped = flip_mesh_normals(self.bodies[k])
+            self.on_repair_callback(k, flipped)
+            self._update_diagnostic()
+

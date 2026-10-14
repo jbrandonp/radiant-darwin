@@ -216,7 +216,7 @@ class TestTechDrawAdvancedFeatures:
         assert isinstance(symbol, SurfaceFinishSymbol)
         assert len(sheet.surface_symbols) == 1
         assert symbol.roughness == "Ra 0.8"
-        assert any(d.text == "Ra 0.8" for d in sheet.dimensions)
+        assert sum(1 for d in sheet.dimensions if d.text == "Ra 0.8") > 0
 
     def test_detail_view_zoom_2_1(self) -> None:
         """Vérifie l'agrandissement x2 d'une zone circulaire en vue de détail."""

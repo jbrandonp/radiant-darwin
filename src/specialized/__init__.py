@@ -5,7 +5,7 @@ Regroupe les modules avancés :
 - Robotique Industrielle 6 axes
 - Aérodynamique & CFD
 - ECAD / MCAD Intégration PCB
-Typage strict exhaustif, zéro Any, zéro object.
+Typage statique exhaustif et architecture modulaire.
 """
 
 from src.specialized.bim_engine import BIMWall, BIMLayer, BIMOpening, BIMRebar, BIMBuildingStorey, BIMMaterialType

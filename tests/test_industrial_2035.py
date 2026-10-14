@@ -29,9 +29,9 @@ def test_draft_angle_analysis_cube():
     assert isinstance(res, DraftAngleResult)
     assert len(res.face_angles_deg) > 0
     # La face supérieure a un angle de dépouille de 90 deg (démoulable)
-    assert np.any(res.face_angles_deg >= 89.0)
+    assert np.count_nonzero(res.face_angles_deg >= 89.0) > 0
     # La face inférieure orientée vers -Z est en contre-dépouille par rapport à +Z
-    assert np.any(res.face_angles_deg <= -89.0)
+    assert np.count_nonzero(res.face_angles_deg <= -89.0) > 0
     assert res.undercut_count > 0
     assert not res.is_fully_demoldable
 
@@ -68,7 +68,7 @@ def test_mesh_healing_and_quality_certificate():
     assert report.num_faces > 0
     assert report.volume_mm3 > 0.0
     assert report.surface_area_mm2 > 0.0
-    assert any("Manifold3D" in action for action in report.healing_actions)
+    assert sum(1 for action in report.healing_actions if "Manifold3D" in action) > 0
 
 
 def test_octet_truss_lattice_unit_cell():

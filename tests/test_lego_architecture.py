@@ -93,8 +93,9 @@ def test_feature_registry_discovery_and_instantiation():
 
     # Découverte par catégorie
     primitives = FeatureRegistry.list_by_category(FeatureCategory.PRIMITIVE)
-    assert any(p.class_name == "BoxFeature" for p in primitives)
-    assert any(p.class_name == "CylinderFeature" for p in primitives)
+    class_names = [p.class_name for p in primitives]
+    assert "BoxFeature" in class_names
+    assert "CylinderFeature" in class_names
 
     # Création dynamique via fabrique
     feat = FeatureRegistry.create("BoxFeature", "feat_box", "MonBloc", width=30.0, height=40.0, depth=50.0)
@@ -152,10 +153,10 @@ def test_document_emits_lego_events():
     f1 = BoxFeature("f1", "Box", width=10, height=10, depth=10)
     doc.add_feature(f1)
 
-    assert any(isinstance(e, DocumentModifiedEvent) for e in captured_events)
+    assert sum(1 for e in captured_events if isinstance(e, DocumentModifiedEvent)) > 0
 
     doc.set_rollback_index(-1)
-    assert any(isinstance(e, TimelineRollbackEvent) for e in captured_events)
+    assert sum(1 for e in captured_events if isinstance(e, TimelineRollbackEvent)) > 0
 
     unsub1()
     unsub2()

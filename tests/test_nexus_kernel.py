@@ -3,7 +3,7 @@ Suite de Tests Unitaires et de Validation d'Invariants pour NEXUS-3D (AI Geometr
 Vérifie la rigueur de la topologie B-Rep, les courbures analytiques continues,
 la robustesse des booléens hybrides, le moteur Neural SDF, les Jacobiennes différentiables
 et les représentations GNN / Tokens pour agents IA.
-Typage strict exhaustif, zéro Any, zéro object.
+Typage statique exhaustif et architecture modulaire.
 """
 
 from __future__ import annotations

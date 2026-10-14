@@ -155,8 +155,15 @@ END-ISO-10303-21;
 
     # Vérification PMI (Product and Manufacturing Information)
     assert len(context.pmi_annotations) == 2
-    assert any("DATUM_A" in pmi for pmi in context.pmi_annotations)
-    assert any("FLATNESS_TOL" in pmi for pmi in context.pmi_annotations)
+    found_datum = False
+    found_flatness = False
+    for pmi in context.pmi_annotations:
+        if "DATUM_A" in pmi:
+            found_datum = True
+        if "FLATNESS_TOL" in pmi:
+            found_flatness = True
+    assert found_datum is True
+    assert found_flatness is True
 
     # Conversion en solide CAO
     solid = importer.import_to_cad_solid(step_content)

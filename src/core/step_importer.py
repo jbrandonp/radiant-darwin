@@ -137,7 +137,12 @@ class STEPImporter:
         # 8. PMI (Product & Manufacturing Information pour AP242)
         pmi_notes: List[str] = []
         for r in records.values():
-            if any(k in r.entity_type for k in ("TOLERANCE", "DATUM", "DIMENSIONAL")):
+            is_pmi = False
+            for k in ("TOLERANCE", "DATUM", "DIMENSIONAL"):
+                if k in r.entity_type:
+                    is_pmi = True
+                    break
+            if is_pmi:
                 pmi_notes.append(f"{r.entity_type}: {' '.join(r.args)}")
 
         return STEPGeometricContext(

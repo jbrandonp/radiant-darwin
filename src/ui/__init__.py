@@ -9,6 +9,7 @@ from src.ui.timeline import CADTimeline
 from src.ui.properties_panel import CADPropertiesPanel
 from src.ui.theme import FUSION_DARK_STYLESHEET
 from src.ui.modifier_panel import ModifierStackDock, ModifierCardWidget
+from src.ui.ai_command_palette import AICommandPalette
 
 __all__ = [
     "CADMainWindow",
@@ -19,4 +20,5 @@ __all__ = [
     "FUSION_DARK_STYLESHEET",
     "ModifierStackDock",
     "ModifierCardWidget",
+    "AICommandPalette",
 ]

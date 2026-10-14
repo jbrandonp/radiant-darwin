@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QStatusBar, QLabel
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 
 from src.core.document import CADDocument
 from src.core.types import BooleanOperation, PlaneType, Point2D, Vector3D
@@ -64,6 +64,7 @@ from src.ai.cad_ai_bridge import CADAIExecutionResult
 from src.ai.ai_server import CADAIServer
 from src.ui.modifier_panel import ModifierStackDock
 from src.core.modifier_stack import ModifierStack
+from src.ui.ai_command_palette import AICommandPalette
 
 
 class CADMainWindow(QMainWindow):
@@ -90,6 +91,8 @@ class CADMainWindow(QMainWindow):
         self._feature_seq = 0
         self._sketch_seq = 0
         self.ai_server: Optional[CADAIServer] = None
+        self.ai_palette: Optional[AICommandPalette] = None
+        self._palette_shortcut = QShortcut(QKeySequence("Ctrl+K"), self, self._open_ai_command_palette)
 
         # Initialisation UI
         self._setup_ui()
@@ -97,6 +100,17 @@ class CADMainWindow(QMainWindow):
 
         # Composant initial élégant
         self._create_initial_sample()
+
+    def _open_ai_command_palette(self) -> None:
+        """Ouvre le HUD flottant de commande IA rapide (Ctrl+K)."""
+        if self.ai_palette is None:
+            self.ai_palette = AICommandPalette(self.copilot_widget.bridge, self)
+            self.ai_palette.action_completed.connect(self._on_ai_palette_completed)
+        self.ai_palette.show_centered(self)
+
+    def _on_ai_palette_completed(self, prompt: str) -> None:
+        """Gère la notification de complétion d'une commande de la palette."""
+        self.status_label.setText(f"Commande IA exécutée : '{prompt}'")
 
     def _init_default_parameters(self) -> None:
         """Initialise les équations et paramètres globaux par défaut."""

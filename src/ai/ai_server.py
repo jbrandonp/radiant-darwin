@@ -9,13 +9,15 @@ from __future__ import annotations
 import http.server
 import json
 import threading
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Callable
 
 from src.core.document import CADDocument
 from src.ai.cad_ai_bridge import CADAIBridge, CADAIExecutionResult
 from src.ai.cad_validator import CADValidator, ValidationReport, InterferenceReport
 from src.ai.cad_script_engine import CADScriptEngine, ScriptExecutionResult
 from src.ai.mcp_schema import MCPToolRegistry, JSONSchemaDict
+from src.ai.ai_vision_feedback import AIVisionFeedback
+from src.ai.ai_connector_config import AIConnectorConfigGenerator
 
 JSONPrimitive = Union[str, int, float, bool, None]
 JSONVal = Union[
@@ -40,31 +42,67 @@ class CADAIServerHandler(http.server.BaseHTTPRequestHandler):
 
     bridge: Optional[CADAIBridge] = None
 
+    def _handle_connect_claude(self) -> None:
+        """Fournit la configuration prête à l'emploi pour Claude Desktop."""
+        gen = AIConnectorConfigGenerator()
+        snip = gen.generate_claude_desktop_config()
+        self._send_json_response(200, {
+            "client": snip.client_name,
+            "config_json": snip.config_json,
+            "path": snip.target_filepath,
+            "instructions": snip.instructions
+        })
+
+    def _handle_connect_cursor(self) -> None:
+        """Fournit la configuration prête à l'emploi pour Cursor IDE."""
+        gen = AIConnectorConfigGenerator()
+        snip = gen.generate_cursor_config()
+        self._send_json_response(200, {
+            "client": snip.client_name,
+            "config_json": snip.config_json,
+            "path": snip.target_filepath,
+            "instructions": snip.instructions
+        })
+
+    def _handle_connect_install_claude(self) -> None:
+        """Installe automatiquement la configuration MCP dans Claude Desktop."""
+        gen = AIConnectorConfigGenerator()
+        ok, msg = gen.install_to_claude_desktop()
+        self._send_json_response(200 if ok else 500, {"success": ok, "message": msg})
+
     def do_GET(self) -> None:
-        """Points d'accès de lecture d'état, diagnostic et découverte MCP."""
-        if self.path == "/api/cad/status":
-            self._handle_status_request()
-        elif self.path == "/api/cad/health":
-            self._send_json_response(200, {"status": "ok", "engine": "NEXUS-3D SOTA", "mcp_enabled": True})
-        elif self.path == "/api/cad/clashes":
-            self._handle_clashes_request()
-        elif self.path == "/api/cad/mcp/tools":
-            self._handle_mcp_tools_list_request()
+        """Points d'accès de lecture d'état, diagnostic, vision et découverte MCP."""
+        get_routes: Dict[str, Callable[[], None]] = {
+            "/api/cad/status": self._handle_status_request,
+            "/api/cad/health": lambda: self._send_json_response(200, {"status": "ok", "engine": "NEXUS-3D SOTA", "mcp_enabled": True}),
+            "/api/cad/clashes": self._handle_clashes_request,
+            "/api/cad/mcp/tools": self._handle_mcp_tools_list_request,
+            "/api/cad/vision": self._handle_vision_request,
+            "/api/cad/connect/claude": self._handle_connect_claude,
+            "/api/cad/connect/cursor": self._handle_connect_cursor,
+        }
+        handler = get_routes.get(self.path)
+        if handler is not None:
+            handler()
         else:
             self._send_json_response(404, {"error": "Endpoint non trouvé"})
 
     def do_POST(self) -> None:
         """Points d'accès d'exécution (prompt libre, code-as-cad, validation, protocole MCP)."""
-        if self.path == "/api/cad/prompt":
-            self._handle_prompt_execution()
-        elif self.path == "/api/cad/script":
-            self._handle_script_execution()
-        elif self.path == "/api/cad/validate":
-            self._handle_validate_request()
-        elif self.path in ("/mcp", "/api/mcp"):
-            self._handle_mcp_request()
+        post_routes: Dict[str, Callable[[], None]] = {
+            "/api/cad/prompt": self._handle_prompt_execution,
+            "/api/cad/script": self._handle_script_execution,
+            "/api/cad/validate": self._handle_validate_request,
+            "/mcp": self._handle_mcp_request,
+            "/api/mcp": self._handle_mcp_request,
+            "/api/cad/connect/install_claude": self._handle_connect_install_claude,
+        }
+        handler = post_routes.get(self.path)
+        if handler is not None:
+            handler()
         else:
             self._send_json_response(404, {"error": "Endpoint non trouvé"})
+
 
     def _handle_status_request(self) -> None:
         """Retourne l'état complet de la scène géométrique."""
@@ -124,6 +162,21 @@ class CADAIServerHandler(http.server.BaseHTTPRequestHandler):
             "status": "ok",
             "tools_count": len(tools_data),
             "tools": tools_data
+        })
+
+    def _handle_vision_request(self) -> None:
+        """Capture et renvoie un instantané 3D en Base64 pour l'IA multimodale."""
+        if self.bridge is None:
+            self._send_json_response(500, {"error": "Passerelle non initialisée"})
+            return
+        vis = AIVisionFeedback.capture_document_view(self.bridge.doc)
+        self._send_json_response(200, {
+            "has_image": vis.has_image,
+            "data_uri": vis.data_uri,
+            "width": vis.width,
+            "height": vis.height,
+            "bounding_diag_mm": vis.bounding_diag_mm,
+            "description": vis.description
         })
 
     def _handle_prompt_execution(self) -> None:

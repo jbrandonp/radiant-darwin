@@ -8,6 +8,9 @@ from src.ai.cad_ai_bridge import CADAIBridge, CADAIExecutionResult, AICommandTyp
 from src.ai.cad_validator import CADValidator, ValidationReport, InterferenceReport
 from src.ai.cad_script_engine import CADScriptEngine, CADScriptContext, ScriptExecutionResult
 from src.ai.mcp_schema import MCPToolRegistry, MCPToolDefinition
+from src.ai.ai_vision_feedback import AIVisionFeedback, VisionFeedbackResult
+from src.ai.ai_connector_config import AIConnectorConfigGenerator, AIClientConfigSnippet
+from src.ai.mcp_stdio import MCPStdioServer
 
 __all__ = [
     "ShapeSynthesizer",
@@ -21,5 +24,10 @@ __all__ = [
     "CADScriptContext",
     "ScriptExecutionResult",
     "MCPToolRegistry",
-    "MCPToolDefinition"
+    "MCPToolDefinition",
+    "AIVisionFeedback",
+    "VisionFeedbackResult",
+    "AIConnectorConfigGenerator",
+    "AIClientConfigSnippet",
+    "MCPStdioServer",
 ]

@@ -20,6 +20,7 @@ from src.core.feature import Feature
 from src.core.exporter import CADExporter
 from src.ai.shape_synthesizer import ShapeSynthesizer
 from src.ai.cad_validator import CADValidator, ValidationReport
+from src.ai.ai_vision_feedback import AIVisionFeedback
 
 
 class AICommandType(Enum):
@@ -65,6 +66,7 @@ class CADAIExecutionResult:
     suggested_prompts: List[str] = field(default_factory=list)
     is_manifold: bool = True
     quality_score: float = 100.0
+    vision_data_uri: Optional[str] = None
 
 
 class CADAIBridge:
@@ -76,6 +78,35 @@ class CADAIBridge:
     def __init__(self, document: CADDocument) -> None:
         """Initialise la passerelle avec le document CAO cible."""
         self.doc: CADDocument = document
+
+    @property
+    def document(self) -> CADDocument:
+        """Accès au document CAO actif."""
+        return self.doc
+
+    def execute_prompt(self, prompt: str) -> CADAIExecutionResult:
+        """Exécute une instruction en langage naturel et attache le retour visuel 3D."""
+        res = self.execute_natural_language_prompt(prompt)
+        vis = AIVisionFeedback.capture_document_view(self.doc, width=384, height=384)
+        res.vision_data_uri = vis.data_uri
+        return res
+
+    def get_context_summary(self) -> Dict[str, str]:
+        """Retourne l'état courant synthétisé de la scène pour injection de contexte dans l'IA."""
+        body_count = len(self.doc.bodies)
+        feat_count = len(self.doc.features)
+        sketch_count = len(self.doc.sketches)
+        body_names = ", ".join(self.doc.bodies.keys()) if self.doc.bodies else "aucun corps"
+        total_vol = sum(b.volume() for b in self.doc.bodies.values() if not b.is_empty())
+        return {
+            "document_name": self.doc.name,
+            "bodies_count": str(body_count),
+            "bodies_list": body_names,
+            "features_count": str(feat_count),
+            "sketches_count": str(sketch_count),
+            "total_volume_mm3": f"{total_vol:.1f}",
+            "rollback_index": str(self.doc.rollback_index),
+        }
 
     def interpret_and_execute(self, prompt: str) -> CADAIExecutionResult:
         """Alias direct pour execute_natural_language_prompt."""

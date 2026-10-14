@@ -187,3 +187,40 @@ class CADValidator:
                     ))
 
         return reports
+
+    @classmethod
+    def get_scene_diagnostics(
+        cls, bodies: Dict[str, Solid]
+    ) -> Dict[str, Union[int, float, bool, List[Dict[str, Union[str, float, bool]]]]]:
+        """Génère un diagnostic complet de tous les solides de la scène et de leurs interférences."""
+        reports_list: List[Dict[str, Union[str, float, bool]]] = []
+        valid_count = 0
+        total_vol = 0.0
+
+        for b_id, solid in bodies.items():
+            rep = cls.validate_solid(solid)
+            if rep.is_valid:
+                valid_count += 1
+            total_vol += rep.volume_mm3
+            reports_list.append({
+                "body_id": b_id,
+                "is_valid": rep.is_valid,
+                "is_manifold": rep.is_manifold,
+                "volume_mm3": rep.volume_mm3,
+                "quality_score_percent": rep.quality_score_percent,
+            })
+
+        clashes = cls.check_scene_interferences(bodies)
+        total_bodies = len(bodies)
+        all_valid = (valid_count == total_bodies) and (len(clashes) == 0)
+
+        return {
+            "total_bodies": total_bodies,
+            "valid_bodies": valid_count,
+            "total_volume_mm3": total_vol,
+            "has_clashes": len(clashes) > 0,
+            "clashes_count": len(clashes),
+            "all_valid": all_valid,
+            "bodies": reports_list,
+        }
+

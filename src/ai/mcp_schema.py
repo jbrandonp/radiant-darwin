@@ -31,6 +31,15 @@ class MCPToolDefinition:
     description: str
     inputSchema: JSONSchemaDict
 
+    def to_dict(self) -> Dict[str, Union[str, JSONSchemaDict]]:
+        """Sérialise l'outil sous forme de dictionnaire JSON standard."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "inputSchema": self.inputSchema
+        }
+
+
 
 class MCPToolRegistry:
     """Registre des outils CAO exposés aux agents IA par le protocole MCP."""
@@ -183,5 +192,72 @@ class MCPToolRegistry:
                     "type": "object",
                     "properties": {}
                 }
+            ),
+            MCPToolDefinition(
+                name="cad_create_parametric_shape",
+                description="Génère ou modélise une pièce paramétrique ou commande en langage naturel dans CAD Studio.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "prompt": {
+                            "type": "string",
+                            "description": "Description en langage naturel ou instruction de modélisation CAO."
+                        }
+                    },
+                    "required": ["prompt"]
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_run_script",
+                description="Exécute un script Python déclaratif Code-as-CAD dans l'environnement CAD Studio.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "script": {
+                            "type": "string",
+                            "description": "Script Python utilisant le contexte fluide 'cad'."
+                        }
+                    },
+                    "required": ["script"]
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_validate_model",
+                description="Valide l'intégrité topologique, l'étanchéité et les interférences de tous les solides de la scène.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {}
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_capture_vision",
+                description="Génère une capture visuelle isométrique 3D haute définition de la scène actuelle.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "width": {
+                            "type": "number",
+                            "description": "Largeur de l'image de rendu en pixels (défaut: 512)."
+                        },
+                        "height": {
+                            "type": "number",
+                            "description": "Hauteur de l'image de rendu en pixels (défaut: 512)."
+                        }
+                    }
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_get_scene_summary",
+                description="Fournit un résumé complet et structuré du document CAO et des métriques de scène.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {}
+                }
             )
         ]
+
+
+def get_mcp_tool_definitions() -> List[Dict[str, Union[str, JSONSchemaDict]]]:
+    """Retourne la liste de tous les outils MCP enregistrés sous forme de dictionnaires."""
+    return [t.to_dict() for t in MCPToolRegistry.get_tools()]
+

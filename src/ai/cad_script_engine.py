@@ -140,6 +140,11 @@ class CADScriptContext:
         self.doc._notify_change()
         return body_id
 
+    def commit(self, solid: Solid, name: str = "Piece") -> str:
+        """Alias pour add, valide et enregistre le solide dans le document CAO."""
+        return self.add(solid, name)
+
+
     def cut_hole(self, target_id: str, diameter: float, depth: float, x: float = 0.0, y: float = 0.0) -> bool:
         """Perce un alésage cylindrique dans le corps spécifié."""
         if target_id not in self.doc.bodies:

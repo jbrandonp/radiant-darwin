@@ -20,6 +20,8 @@ JSONValue = Union[
     List[Dict[str, Union[str, float, List[Dict[str, Union[str, bool, int, float, List[List[float]]]]]]]]
 ]
 
+import zipfile
+
 from src.core.document import CADDocument
 from src.core.types import PlaneType, BooleanOperation, Point2D
 from src.core.sketch import Sketch2D
@@ -32,7 +34,8 @@ from src.core.operations_advanced import (
     MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
     LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature,
     PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature, MultiTransformStep,
-    HelixFeature, RibFeature, SplitFeature, SubtractiveLoftFeature, SubtractiveSweepFeature
+    HelixFeature, RibFeature, SplitFeature, SubtractiveLoftFeature, SubtractiveSweepFeature,
+    DynamicDatumPlaneFeature, DatumAttachmentMode, VariableRadiusFilletFeature, MultiRailLoftFeature
 )
 from src.core.fasteners import FastenerFeature
 from src.sheetmetal.sheet_metal import SheetMetalFeature
@@ -56,7 +59,7 @@ class ProjectSerializer:
         for s_id, sk in document.sketches.items():
             sk_data: Dict[str, JSONValue] = {
                 "id": sk.sketch_id,
-                "name": sk.name,
+                "name": sk.name.value if hasattr(sk.name, "value") else str(sk.name),
                 "plane": sk.plane.value,
                 "offset_distance": sk.offset_distance,
                 "entities": []
@@ -174,24 +177,56 @@ class ProjectSerializer:
                 f_dict["keep_side"] = getattr(feat, "keep_side")
             if hasattr(feat, "plane") and isinstance(getattr(feat, "plane"), PlaneType):
                 f_dict["plane"] = getattr(feat, "plane").value
+            if hasattr(feat, "mode") and hasattr(getattr(feat, "mode"), "value"):
+                f_dict["mode"] = getattr(feat, "mode").value
+            if hasattr(feat, "point1"):
+                p1_val = getattr(feat, "point1")
+                f_dict["point1"] = [float(p1_val[0]), float(p1_val[1]), float(p1_val[2])]
+            if hasattr(feat, "point2") and getattr(feat, "point2") is not None:
+                p2_val = getattr(feat, "point2")
+                f_dict["point2"] = [float(p2_val[0]), float(p2_val[1]), float(p2_val[2])]
+            if hasattr(feat, "point3") and getattr(feat, "point3") is not None:
+                p3_val = getattr(feat, "point3")
+                f_dict["point3"] = [float(p3_val[0]), float(p3_val[1]), float(p3_val[2])]
+            if hasattr(feat, "tangent_or_normal") and getattr(feat, "tangent_or_normal") is not None:
+                tn_val = getattr(feat, "tangent_or_normal")
+                f_dict["tangent_or_normal"] = [float(tn_val[0]), float(tn_val[1]), float(tn_val[2])]
+            if hasattr(feat, "edge_direction"):
+                f_dict["edge_direction"] = getattr(feat, "edge_direction")
+            if hasattr(feat, "profile_sketch_ids"):
+                f_dict["profile_sketch_ids"] = list(getattr(feat, "profile_sketch_ids"))
+            if hasattr(feat, "guide_rail_curves"):
+                raw_rails = getattr(feat, "guide_rail_curves")
+                f_dict["guide_rail_curves"] = [
+                    [[float(pt[0]), float(pt[1]), float(pt[2])] for pt in rail]
+                    for rail in raw_rails
+                ]
 
             data["features"].append(f_dict)
 
         os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        if filepath.lower().endswith(".cadz"):
+            with zipfile.ZipFile(filepath, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("project.json", json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
 
         return True
 
     @staticmethod
     def load_project(filepath: str) -> Optional[CADDocument]:
-        """Désérialise un projet .cadproj et reconstruit l'arbre paramétrique de façon blindée."""
+        """Désérialise un projet .cadproj ou .cadz compressé et reconstruit l'arbre paramétrique."""
         if not os.path.exists(filepath):
             return None
 
         try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            if filepath.lower().endswith(".cadz") or zipfile.is_zipfile(filepath):
+                with zipfile.ZipFile(filepath, "r") as zf:
+                    data = json.loads(zf.read("project.json").decode("utf-8"))
+            else:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
         except Exception:
             return None
 
@@ -500,6 +535,62 @@ class ProjectSerializer:
                         k_steps = int(params.get("num_steps", 24))
                         n_segs = int(params.get("segments", 24))
                         feat = SubtractiveSweepFeature(f_id, f_name, prof_id, traj_type, rad, h, turns, k_steps, n_segs, target_id)
+
+                    elif f_cls == "DynamicDatumPlaneFeature":
+                        mode_str = str(f_data.get("mode", "OFFSET"))
+                        mode = DatumAttachmentMode(mode_str) if mode_str in DatumAttachmentMode._value2member_map_ else DatumAttachmentMode.OFFSET
+                        bp_str = str(f_data.get("base_plane", "XY"))
+                        bp = PlaneType(bp_str) if bp_str in PlaneType._value2member_map_ else PlaneType.XY
+                        off = float(params.get("offset_distance", 0.0))
+
+                        raw_p1 = f_data.get("point1", [0.0, 0.0, 0.0])
+                        p1 = (float(raw_p1[0]), float(raw_p1[1]), float(raw_p1[2])) if isinstance(raw_p1, list) and len(raw_p1) == 3 else (0.0, 0.0, 0.0)
+
+                        raw_p2 = f_data.get("point2")
+                        p2 = (float(raw_p2[0]), float(raw_p2[1]), float(raw_p2[2])) if isinstance(raw_p2, list) and len(raw_p2) == 3 else None
+
+                        raw_p3 = f_data.get("point3")
+                        p3 = (float(raw_p3[0]), float(raw_p3[1]), float(raw_p3[2])) if isinstance(raw_p3, list) and len(raw_p3) == 3 else None
+
+                        raw_tn = f_data.get("tangent_or_normal")
+                        tn = (float(raw_tn[0]), float(raw_tn[1]), float(raw_tn[2])) if isinstance(raw_tn, list) and len(raw_tn) == 3 else None
+
+                        feat = DynamicDatumPlaneFeature(
+                            f_id, f_name, mode=mode, base_plane=bp, offset_distance=off,
+                            point1=p1, point2=p2, point3=p3, tangent_or_normal=tn
+                        )
+
+                    elif f_cls == "VariableRadiusFilletFeature":
+                        r_start = float(params.get("start_radius", 2.0))
+                        r_end = float(params.get("end_radius", 8.0))
+                        r_mid = float(params.get("mid_radius", (r_start + r_end) * 0.5))
+                        edge_dir = str(f_data.get("edge_direction", "z"))
+                        n_steps = int(params.get("steps", 16))
+                        feat = VariableRadiusFilletFeature(
+                            f_id, f_name, target_body_id=target_id or "",
+                            start_radius=r_start, end_radius=r_end, mid_radius=r_mid,
+                            edge_direction=edge_dir, steps=n_steps
+                        )
+
+                    elif f_cls == "MultiRailLoftFeature":
+                        sk_ids = [str(x) for x in f_data.get("profile_sketch_ids", []) if isinstance(x, str)]
+                        raw_rails = f_data.get("guide_rail_curves", [])
+                        rails_list: List[List[Tuple[float, float, float]]] = []
+                        if isinstance(raw_rails, list):
+                            for r in raw_rails:
+                                if isinstance(r, list):
+                                    rail_pts: List[Tuple[float, float, float]] = []
+                                    for pt in r:
+                                        if isinstance(pt, list) and len(pt) == 3:
+                                            rail_pts.append((float(pt[0]), float(pt[1]), float(pt[2])))
+                                    rails_list.append(rail_pts)
+                        n_sec = int(params.get("num_sections", 16))
+                        n_seg = int(params.get("num_segments", 36))
+                        feat = MultiRailLoftFeature(
+                            f_id, f_name, profile_sketch_ids=sk_ids,
+                            guide_rail_curves=rails_list, num_intermediate_sections=n_sec,
+                            num_segments=n_seg, operation=op, target_body_id=target_id
+                        )
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

@@ -7,7 +7,7 @@ afin de servir de base aux opérations d'extrusion et de révolution 3D.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 import numpy as np
 
 from src.core.types import Point2D, PlaneType, Vector3D
@@ -430,11 +430,21 @@ class Sketch2D:
     Permet d'ajouter des formes et d'extraire des profils pour la CAO 3D.
     """
 
-    def __init__(self, sketch_id: str, name: str = "Sketch", plane: PlaneType = PlaneType.XY, offset_distance: float = 0.0) -> None:
+    def __init__(
+        self,
+        sketch_id: str,
+        name: Union[str, PlaneType] = "Sketch",
+        plane: PlaneType = PlaneType.XY,
+        offset_distance: float = 0.0
+    ) -> None:
         """Initialise une nouvelle esquisse sur le plan indiqué avec un éventuel décalage normal."""
         self.sketch_id: str = sketch_id
-        self.name: str = name
-        self.plane: PlaneType = plane
+        if isinstance(name, PlaneType):
+            self.plane: PlaneType = name
+            self.name: str = f"Sketch_{sketch_id}"
+        else:
+            self.name = str(name)
+            self.plane = plane
         self.offset_distance: float = float(offset_distance)
         self.entities: List[SketchEntity] = []
         self.dimensions: List[SketchDimension] = []

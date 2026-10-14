@@ -50,6 +50,9 @@ ISO_METRIC_TABLE: Dict[str, MetricFastenerSpec] = {
 }
 
 
+_FASTENER_CACHE: Dict[Tuple[str, str, float], m.Manifold] = {}
+
+
 def _make_regular_polygon_cross_section(radius: float, num_sides: int = 6) -> m.CrossSection:
     """Génère un contour 2D de polygone régulier centré."""
     angles = np.linspace(0.0, 2.0 * np.pi, num_sides, endpoint=False)
@@ -59,40 +62,44 @@ def _make_regular_polygon_cross_section(radius: float, num_sides: int = 6) -> m.
 
 def create_hex_bolt(standard_size: str = "M6", length: float = 30.0, name: str = "HexBolt") -> Solid:
     """
-    Crée une vis à tête hexagonale conforme ISO 4017 / DIN 933.
+    Crée une vis à tête hexagonale conforme ISO 4017 / DIN 933 avec mémoïsation de forme.
     """
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
-    safe_len = max(2.0, length)
-    shank_rad = spec.nominal_dia * 0.5
+    safe_len = max(2.0, float(length))
+    cache_key = ("hex_bolt", standard_size, safe_len)
 
-    # Corps cylindrique (tige filetée)
+    if cache_key in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key], name)
+
+    shank_rad = spec.nominal_dia * 0.5
     shank_m = m.Manifold.cylinder(safe_len, shank_rad, shank_rad, 36, False)
 
-    # Tête hexagonale (rayon circonscrit R = s / sqrt(3))
     r_circ = (spec.hex_s * 0.5) / float(np.cos(np.pi / 6.0))
     cs_hex = _make_regular_polygon_cross_section(r_circ, 6)
     head_m = m.Manifold.extrude(cs_hex, spec.hex_k).translate([0.0, 0.0, safe_len])
 
     combined = shank_m + head_m
+    _FASTENER_CACHE[cache_key] = combined
     return Solid(combined, name)
 
 
 def create_socket_head_cap_screw(standard_size: str = "M6", length: float = 25.0, name: str = "SocketScrew") -> Solid:
     """
-    Crée une vis à six pans creux (CHC / BTR) conforme ISO 4762 / DIN 912.
+    Crée une vis à six pans creux (CHC / BTR) conforme ISO 4762 / DIN 912 avec mémoïsation.
     """
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
-    safe_len = max(2.0, length)
-    shank_rad = spec.nominal_dia * 0.5
+    safe_len = max(2.0, float(length))
+    cache_key = ("socket_screw", standard_size, safe_len)
 
-    # Corps cylindrique
+    if cache_key in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key], name)
+
+    shank_rad = spec.nominal_dia * 0.5
     shank_m = m.Manifold.cylinder(safe_len, shank_rad, shank_rad, 36, False)
 
-    # Tête cylindrique
     head_rad = spec.socket_dk * 0.5
     head_m = m.Manifold.cylinder(spec.socket_k, head_rad, head_rad, 36, False).translate([0.0, 0.0, safe_len])
 
-    # Empreinte six pans creux (clé Allen) soustraite de la tête
     r_hex_socket = (spec.socket_s * 0.5) / float(np.cos(np.pi / 6.0))
     socket_depth = spec.socket_k * 0.75
     cs_socket = _make_regular_polygon_cross_section(r_hex_socket, 6)
@@ -100,30 +107,39 @@ def create_socket_head_cap_screw(standard_size: str = "M6", length: float = 25.0
 
     head_with_socket = head_m - socket_cutter
     combined = shank_m + head_with_socket
+    _FASTENER_CACHE[cache_key] = combined
     return Solid(combined, name)
 
 
 def create_hex_nut(standard_size: str = "M6", name: str = "HexNut") -> Solid:
     """
-    Crée un écrou hexagonal conforme ISO 4032 / DIN 934.
+    Crée un écrou hexagonal conforme ISO 4032 / DIN 934 avec mémoïsation.
     """
+    cache_key = ("hex_nut", standard_size, 0.0)
+    if cache_key in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key], name)
+
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
     r_circ = (spec.hex_s * 0.5) / float(np.cos(np.pi / 6.0))
     cs_hex = _make_regular_polygon_cross_section(r_circ, 6)
     nut_body = m.Manifold.extrude(cs_hex, spec.nut_m)
 
-    # Alésage taraudé traversant
     hole_rad = spec.nominal_dia * 0.5
     hole_cutter = m.Manifold.cylinder(spec.nut_m * 1.2, hole_rad, hole_rad, 36, True).translate([0.0, 0.0, spec.nut_m * 0.5])
 
     nut_m_final = nut_body - hole_cutter
+    _FASTENER_CACHE[cache_key] = nut_m_final
     return Solid(nut_m_final, name)
 
 
 def create_washer(standard_size: str = "M6", name: str = "Washer") -> Solid:
     """
-    Crée une rondelle plate conforme ISO 7089 / DIN 125.
+    Crée une rondelle plate conforme ISO 7089 / DIN 125 avec mémoïsation.
     """
+    cache_key = ("washer", standard_size, 0.0)
+    if cache_key in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key], name)
+
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
     r_out = spec.washer_d2 * 0.5
     r_in = spec.washer_d1 * 0.5
@@ -133,6 +149,7 @@ def create_washer(standard_size: str = "M6", name: str = "Washer") -> Solid:
     inner_cyl = m.Manifold.cylinder(th * 1.2, r_in, r_in, 36, True).translate([0.0, 0.0, th * 0.5])
 
     washer_m = outer_cyl - inner_cyl
+    _FASTENER_CACHE[cache_key] = washer_m
     return Solid(washer_m, name)
 
 

@@ -70,6 +70,13 @@ class CADDocument:
         """Récupère une esquisse par son identifiant."""
         return self.sketches.get(sketch_id)
 
+    def get_feature(self, feature_id: str) -> Optional[Feature]:
+        """Récupère une fonctionnalité de l'historique par son identifiant."""
+        for feat in self.features:
+            if feat.feature_id == feature_id:
+                return feat
+        return None
+
     def remove_sketch(self, sketch_id: str) -> None:
         """Supprime une esquisse du document et invalide le cache."""
         if sketch_id in self.sketches:

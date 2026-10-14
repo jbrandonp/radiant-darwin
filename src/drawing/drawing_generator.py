@@ -109,6 +109,23 @@ class TechnicalSheet:
     gdt_frames: List[GDTFrame] = field(default_factory=list)
     surface_symbols: List[SurfaceFinishSymbol] = field(default_factory=list)
 
+    def add_interactive_dimension(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        text: str,
+        is_vertical: bool = False
+    ) -> None:
+        """Ajoute une ligne de cote interactive et son étiquette textuelle selon ISO 128."""
+        self.lines.append(DrawingLine2D(x1, y1, x2, y2, is_dimension=True))
+        mid_x = (x1 + x2) * 0.5
+        mid_y = (y1 + y2) * 0.5
+        offset_x = 3.0 if is_vertical else 0.0
+        offset_y = 3.0 if not is_vertical else 0.0
+        self.dimensions.append(DimensionLabel(mid_x + offset_x, mid_y + offset_y, text, is_vertical=is_vertical))
+
 
 class TechnicalDrawingGenerator:
     """
@@ -184,13 +201,25 @@ class TechnicalDrawingGenerator:
         cx_iso, cy_iso = 310.0, 220.0
 
         # Projection Face (Vue selon Y : coord X et Z)
-        self._project_view(buf.vertices, buf.edges, cx_front, cy_front, scale, axis_h=0, axis_v=2, sheet=sheet)
+        self._project_view(
+            buf.vertices, buf.edges, cx_front, cy_front, scale, axis_h=0, axis_v=2, sheet=sheet,
+            faces=buf.faces, normals=buf.normals, edge_vertices=buf.edge_vertices
+        )
         # Projection Dessus (Vue selon Z : coord X et Y)
-        self._project_view(buf.vertices, buf.edges, cx_top, cy_top, scale, axis_h=0, axis_v=1, sheet=sheet)
+        self._project_view(
+            buf.vertices, buf.edges, cx_top, cy_top, scale, axis_h=0, axis_v=1, sheet=sheet,
+            faces=buf.faces, normals=buf.normals, edge_vertices=buf.edge_vertices
+        )
         # Projection Droite (Vue selon X : coord Y et Z)
-        self._project_view(buf.vertices, buf.edges, cx_right, cy_right, scale, axis_h=1, axis_v=2, sheet=sheet)
+        self._project_view(
+            buf.vertices, buf.edges, cx_right, cy_right, scale, axis_h=1, axis_v=2, sheet=sheet,
+            faces=buf.faces, normals=buf.normals, edge_vertices=buf.edge_vertices
+        )
         # Projection Isométrique (Projection axonométrique 30 deg)
-        self._project_isometric_view(buf.vertices, buf.edges, cx_iso, cy_iso, scale * 0.85, sheet=sheet)
+        self._project_isometric_view(
+            buf.vertices, buf.edges, cx_iso, cy_iso, scale * 0.85, sheet=sheet,
+            faces=buf.faces, normals=buf.normals, edge_vertices=buf.edge_vertices
+        )
 
         # 3. Ajout des cotations principales de référence
         # Cotation Largeur (X) sous la vue de face
@@ -209,6 +238,19 @@ class TechnicalDrawingGenerator:
 
         return sheet
 
+    def add_interactive_dimension(
+        self,
+        sheet: TechnicalSheet,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        text: str,
+        is_vertical: bool = False
+    ) -> None:
+        """Ajoute une ligne de cote interactive sur la feuille technique."""
+        sheet.add_interactive_dimension(x1, y1, x2, y2, text, is_vertical=is_vertical)
+
     def _project_view(
         self,
         vertices: np.ndarray,
@@ -218,24 +260,96 @@ class TechnicalDrawingGenerator:
         scale: float,
         axis_h: int,
         axis_v: int,
-        sheet: TechnicalSheet
+        sheet: TechnicalSheet,
+        faces: Optional[np.ndarray] = None,
+        normals: Optional[np.ndarray] = None,
+        edge_vertices: Optional[np.ndarray] = None,
+        enable_hlr: bool = True
     ) -> None:
-        """Projette les arêtes 3D sur un plan 2D selon deux axes cartésiens."""
+        """Projette les arêtes 3D sur un plan 2D selon deux axes cartésiens avec élimination des lignes cachées (HLR)."""
         if len(edges) == 0:
             return
 
         h_coords = vertices[:, axis_h]
         v_coords = vertices[:, axis_v]
-        mean_h = np.mean(h_coords)
-        mean_v = np.mean(v_coords)
+        mean_h = float(np.mean(h_coords))
+        mean_v = float(np.mean(v_coords))
 
-        for edge in edges:
-            i0, i1 = int(edge[0]), int(edge[1])
-            x1 = center_x + (h_coords[i0] - mean_h) * scale
-            y1 = center_y + (v_coords[i0] - mean_v) * scale
-            x2 = center_x + (h_coords[i1] - mean_h) * scale
-            y2 = center_y + (v_coords[i1] - mean_v) * scale
-            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2))
+        num_edges = len(edges)
+        has_edge_verts = edge_vertices is not None and len(edge_vertices) >= 2 * num_edges
+
+        # Direction de visée : normale au plan de projection dirigée vers la profondeur
+        u_dir = np.zeros(3, dtype=np.float64)
+        u_dir[axis_h] = 1.0
+        v_dir = np.zeros(3, dtype=np.float64)
+        v_dir[axis_v] = 1.0
+        norm_cross = np.cross(u_dir, v_dir)
+        norm_val = float(np.linalg.norm(norm_cross))
+        view_dir = -norm_cross / norm_val if norm_val > 1e-9 else np.array([0.0, 1.0, 0.0])
+
+        front_faces: List[Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float]] = []
+        if enable_hlr and faces is not None and normals is not None and len(faces) > 0:
+            for j in range(len(faces)):
+                f0, f1, f2 = int(faces[j, 0]), int(faces[j, 1]), int(faces[j, 2])
+                n_vec = normals[f0]
+                if float(np.dot(n_vec, view_dir)) < -1e-4:
+                    a, b, c = vertices[f0], vertices[f1], vertices[f2]
+                    au = center_x + (float(a[axis_h]) - mean_h) * scale
+                    av = center_y + (float(a[axis_v]) - mean_v) * scale
+                    bu = center_x + (float(b[axis_h]) - mean_h) * scale
+                    bv = center_y + (float(b[axis_v]) - mean_v) * scale
+                    cu = center_x + (float(c[axis_h]) - mean_h) * scale
+                    cv = center_y + (float(c[axis_v]) - mean_v) * scale
+                    min_u = min(au, bu, cu)
+                    max_u = max(au, bu, cu)
+                    min_v = min(av, bv, cv)
+                    max_v = max(av, bv, cv)
+                    front_faces.append((a, b, c, min_u, max_u, min_v, max_v))
+
+        for k in range(num_edges):
+            if has_edge_verts:
+                p0 = edge_vertices[2 * k]
+                p1 = edge_vertices[2 * k + 1]
+            else:
+                i0, i1 = int(edges[k, 0]), int(edges[k, 1])
+                p0 = vertices[i0]
+                p1 = vertices[i1]
+
+            x1 = center_x + (float(p0[axis_h]) - mean_h) * scale
+            y1 = center_y + (float(p0[axis_v]) - mean_v) * scale
+            x2 = center_x + (float(p1[axis_h]) - mean_h) * scale
+            y2 = center_y + (float(p1[axis_v]) - mean_v) * scale
+
+            is_hidden = False
+            if enable_hlr and front_faces:
+                m_pt = (p0 + p1) * 0.5
+                u_m = (x1 + x2) * 0.5
+                v_m = (y1 + y2) * 0.5
+                d_m = float(np.dot(m_pt, view_dir))
+
+                for a, b, c, min_u, max_u, min_v, max_v in front_faces:
+                    if u_m < min_u - 1e-3 or u_m > max_u + 1e-3 or v_m < min_v - 1e-3 or v_m > max_v + 1e-3:
+                        continue
+                    au = center_x + (float(a[axis_h]) - mean_h) * scale
+                    av = center_y + (float(a[axis_v]) - mean_v) * scale
+                    bu = center_x + (float(b[axis_h]) - mean_h) * scale
+                    bv = center_y + (float(b[axis_v]) - mean_v) * scale
+                    cu = center_x + (float(c[axis_h]) - mean_h) * scale
+                    cv = center_y + (float(c[axis_v]) - mean_v) * scale
+
+                    delta = (bu - au) * (cv - av) - (bv - av) * (cu - au)
+                    if abs(delta) < 1e-7:
+                        continue
+                    wa = ((bu - u_m) * (cv - v_m) - (bv - v_m) * (cu - u_m)) / delta
+                    wb = ((cu - u_m) * (av - v_m) - (cv - v_m) * (au - u_m)) / delta
+                    wc = 1.0 - wa - wb
+                    if wa > 0.02 and wb > 0.02 and wc > 0.02:
+                        d_tri = wa * float(np.dot(a, view_dir)) + wb * float(np.dot(b, view_dir)) + wc * float(np.dot(c, view_dir))
+                        if d_tri < d_m - 0.1:
+                            is_hidden = True
+                            break
+
+            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=is_hidden))
 
     def _project_isometric_view(
         self,
@@ -244,31 +358,102 @@ class TechnicalDrawingGenerator:
         center_x: float,
         center_y: float,
         scale: float,
-        sheet: TechnicalSheet
+        sheet: TechnicalSheet,
+        faces: Optional[np.ndarray] = None,
+        normals: Optional[np.ndarray] = None,
+        edge_vertices: Optional[np.ndarray] = None,
+        enable_hlr: bool = True
     ) -> None:
-        """Projette en vue isométrique avec angles de 30 degrés."""
+        """Projette en vue isométrique avec angles de 30 degrés et élimination des lignes cachées (HLR)."""
         if len(edges) == 0:
             return
 
-        # Matrice isométrique standard
-        cos30 = np.cos(np.radians(30))
-        sin30 = np.sin(np.radians(30))
+        cos30 = float(np.cos(np.radians(30)))
+        sin30 = float(np.sin(np.radians(30)))
 
-        # x_iso = (x - y) * cos(30)
-        # y_iso = (x + y) * sin(30) + z
         iso_x = (vertices[:, 0] - vertices[:, 1]) * cos30
         iso_y = (vertices[:, 0] + vertices[:, 1]) * sin30 + vertices[:, 2]
 
-        mean_x = np.mean(iso_x)
-        mean_y = np.mean(iso_y)
+        mean_x = float(np.mean(iso_x))
+        mean_y = float(np.mean(iso_y))
 
-        for edge in edges:
-            i0, i1 = int(edge[0]), int(edge[1])
-            x1 = center_x + (iso_x[i0] - mean_x) * scale
-            y1 = center_y + (iso_y[i0] - mean_y) * scale
-            x2 = center_x + (iso_x[i1] - mean_x) * scale
-            y2 = center_y + (iso_y[i1] - mean_y) * scale
-            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2))
+        num_edges = len(edges)
+        has_edge_verts = edge_vertices is not None and len(edge_vertices) >= 2 * num_edges
+
+        u_iso = np.array([cos30, -cos30, 0.0], dtype=np.float64)
+        v_iso = np.array([sin30, sin30, 1.0], dtype=np.float64)
+        norm_cross = np.cross(u_iso, v_iso)
+        norm_val = float(np.linalg.norm(norm_cross))
+        view_dir = -norm_cross / norm_val if norm_val > 1e-9 else np.array([0.577, 0.577, -0.577])
+
+        front_faces: List[Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float]] = []
+        if enable_hlr and faces is not None and normals is not None and len(faces) > 0:
+            for j in range(len(faces)):
+                f0, f1, f2 = int(faces[j, 0]), int(faces[j, 1]), int(faces[j, 2])
+                n_vec = normals[f0]
+                if float(np.dot(n_vec, view_dir)) < -1e-4:
+                    a, b, c = vertices[f0], vertices[f1], vertices[f2]
+                    au = center_x + (((float(a[0]) - float(a[1])) * cos30) - mean_x) * scale
+                    av = center_y + (((float(a[0]) + float(a[1])) * sin30 + float(a[2])) - mean_y) * scale
+                    bu = center_x + (((float(b[0]) - float(b[1])) * cos30) - mean_x) * scale
+                    bv = center_y + (((float(b[0]) + float(b[1])) * sin30 + float(b[2])) - mean_y) * scale
+                    cu = center_x + (((float(c[0]) - float(c[1])) * cos30) - mean_x) * scale
+                    cv = center_y + (((float(c[0]) + float(c[1])) * sin30 + float(c[2])) - mean_y) * scale
+                    min_u = min(au, bu, cu)
+                    max_u = max(au, bu, cu)
+                    min_v = min(av, bv, cv)
+                    max_v = max(av, bv, cv)
+                    front_faces.append((a, b, c, min_u, max_u, min_v, max_v))
+
+        for k in range(num_edges):
+            if has_edge_verts:
+                p0 = edge_vertices[2 * k]
+                p1 = edge_vertices[2 * k + 1]
+            else:
+                i0, i1 = int(edges[k, 0]), int(edges[k, 1])
+                p0 = vertices[i0]
+                p1 = vertices[i1]
+
+            p0_x = (float(p0[0]) - float(p0[1])) * cos30
+            p0_y = (float(p0[0]) + float(p0[1])) * sin30 + float(p0[2])
+            p1_x = (float(p1[0]) - float(p1[1])) * cos30
+            p1_y = (float(p1[0]) + float(p1[1])) * sin30 + float(p1[2])
+
+            x1 = center_x + (p0_x - mean_x) * scale
+            y1 = center_y + (p0_y - mean_y) * scale
+            x2 = center_x + (p1_x - mean_x) * scale
+            y2 = center_y + (p1_y - mean_y) * scale
+
+            is_hidden = False
+            if enable_hlr and front_faces:
+                m_pt = (p0 + p1) * 0.5
+                u_m = (x1 + x2) * 0.5
+                v_m = (y1 + y2) * 0.5
+                d_m = float(np.dot(m_pt, view_dir))
+
+                for a, b, c, min_u, max_u, min_v, max_v in front_faces:
+                    if u_m < min_u - 1e-3 or u_m > max_u + 1e-3 or v_m < min_v - 1e-3 or v_m > max_v + 1e-3:
+                        continue
+                    au = center_x + (((float(a[0]) - float(a[1])) * cos30) - mean_x) * scale
+                    av = center_y + (((float(a[0]) + float(a[1])) * sin30 + float(a[2])) - mean_y) * scale
+                    bu = center_x + (((float(b[0]) - float(b[1])) * cos30) - mean_x) * scale
+                    bv = center_y + (((float(b[0]) + float(b[1])) * sin30 + float(b[2])) - mean_y) * scale
+                    cu = center_x + (((float(c[0]) - float(c[1])) * cos30) - mean_x) * scale
+                    cv = center_y + (((float(c[0]) + float(c[1])) * sin30 + float(c[2])) - mean_y) * scale
+
+                    delta = (bu - au) * (cv - av) - (bv - av) * (cu - au)
+                    if abs(delta) < 1e-7:
+                        continue
+                    wa = ((bu - u_m) * (cv - v_m) - (bv - v_m) * (cu - u_m)) / delta
+                    wb = ((cu - u_m) * (av - v_m) - (cv - v_m) * (au - u_m)) / delta
+                    wc = 1.0 - wa - wb
+                    if wa > 0.02 and wb > 0.02 and wc > 0.02:
+                        d_tri = wa * float(np.dot(a, view_dir)) + wb * float(np.dot(b, view_dir)) + wc * float(np.dot(c, view_dir))
+                        if d_tri < d_m - 0.1:
+                            is_hidden = True
+                            break
+
+            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=is_hidden))
 
     def generate_section_view(
         self,

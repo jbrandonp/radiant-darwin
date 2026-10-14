@@ -157,7 +157,8 @@ def bootstrap_default_features() -> None:
         HoleFeature, ShellFeature, FilletFeature, ChamferFeature, DraftFeature,
         PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature,
         HelixFeature, RibFeature, SplitFeature, LoftFeature, SubtractiveLoftFeature,
-        SweepFeature, SubtractiveSweepFeature
+        SweepFeature, SubtractiveSweepFeature, DynamicDatumPlaneFeature,
+        VariableRadiusFilletFeature, MultiRailLoftFeature
     )
     from src.sheetmetal.sheet_metal import SheetMetalFeature
     from src.core.fasteners import FastenerFeature
@@ -211,6 +212,16 @@ def bootstrap_default_features() -> None:
         lambda *args, **kwargs: LoftFeature(*args, **kwargs)  # type: ignore[arg-type]
     )
     FeatureRegistry.register(
+        "MultiRailLoftFeature", "Lissage Multi-Rails Guidé", FeatureCategory.SKETCH_BASED,
+        "Lissage guidé le long de plusieurs courbes rails 3D", "loft_rails",
+        lambda *args, **kwargs: MultiRailLoftFeature(*args, **kwargs)  # type: ignore[arg-type]
+    )
+    FeatureRegistry.register(
+        "DynamicDatumPlaneFeature", "Plan de Référence Dynamique Multi-Modes", FeatureCategory.SKETCH_BASED,
+        "Définit un plan auxiliaire par décalage, 3 points, normale ou tangente", "plane_dynamic",
+        lambda *args, **kwargs: DynamicDatumPlaneFeature(*args, **kwargs)  # type: ignore[arg-type]
+    )
+    FeatureRegistry.register(
         "SubtractiveLoftFeature", "Lissage Soustractif", FeatureCategory.SKETCH_BASED,
         "Creuse une cavité lissée entre profils", "loft_cut",
         lambda *args, **kwargs: SubtractiveLoftFeature(*args, **kwargs)  # type: ignore[arg-type]
@@ -256,6 +267,11 @@ def bootstrap_default_features() -> None:
         "FilletFeature", "Congé / Raccord (Fillet)", FeatureCategory.MODIFICATION,
         "Arrondit les arêtes vives", "fillet",
         lambda *args, **kwargs: FilletFeature(*args, **kwargs)  # type: ignore[arg-type]
+    )
+    FeatureRegistry.register(
+        "VariableRadiusFilletFeature", "Congé à Rayon Variable", FeatureCategory.MODIFICATION,
+        "Arrondi progressif avec rayon variable le long d'une arête", "fillet_variable",
+        lambda *args, **kwargs: VariableRadiusFilletFeature(*args, **kwargs)  # type: ignore[arg-type]
     )
     FeatureRegistry.register(
         "ChamferFeature", "Chanfrein (Chamfer)", FeatureCategory.MODIFICATION,

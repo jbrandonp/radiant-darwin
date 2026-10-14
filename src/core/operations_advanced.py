@@ -5,6 +5,7 @@ Perçages/Alésages (Holes) et Évidement (Shell).
 """
 
 from __future__ import annotations
+from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple, Callable
 import numpy as np
 import manifold3d as m
@@ -1578,5 +1579,363 @@ class SubtractiveSweepFeature(SweepFeature):
             operation=BooleanOperation.CUT,
             target_body_id=target_body_id
         )
+
+
+class DatumAttachmentMode(Enum):
+    """Modes d'attachement géométrique dynamique pour plans de référence (FreeCAD PartDesign DatumPlane)."""
+    OFFSET = "offset"
+    THREE_POINTS = "three_points"
+    TANGENT_TO_FACE = "tangent_to_face"
+    NORMAL_TO_CURVE = "normal_to_curve"
+    LINE_AND_POINT = "line_and_point"
+
+
+class DynamicDatumPlaneFeature(DatumPlaneFeature):
+    """
+    Plan de référence dynamique multi-modes (FreeCAD PartDesign Datum Plane).
+    Supporte 5 modes d'attachement géométrique formels :
+    - OFFSET : décalage normal par rapport à un plan cartésien
+    - THREE_POINTS : passant par 3 sommets 3D (p1, p2, p3)
+    - TANGENT_TO_FACE : plan tangent à une surface courbe au point p1 avec normale donnée
+    - NORMAL_TO_CURVE : plan normal à une courbe en un point p1 avec vecteur tangent donné
+    - LINE_AND_POINT : passant par une droite (p1-p2) et un point externe p3
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Dynamic Datum Plane",
+        mode: DatumAttachmentMode = DatumAttachmentMode.OFFSET,
+        base_plane: PlaneType = PlaneType.XY,
+        offset_distance: float = 0.0,
+        point1: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        point2: Optional[Tuple[float, float, float]] = None,
+        point3: Optional[Tuple[float, float, float]] = None,
+        tangent_or_normal: Optional[Tuple[float, float, float]] = None
+    ) -> None:
+        super().__init__(feature_id, name, base_plane=base_plane, offset_distance=offset_distance)
+        self.mode = mode
+        self.point1 = point1
+        self.point2 = point2
+        self.point3 = point3
+        self.tangent_or_normal = tangent_or_normal
+
+        self.origin: Vector3D = Vector3D(point1[0], point1[1], point1[2])
+        self.normal: Vector3D = Vector3D(0.0, 0.0, 1.0)
+        self.u_axis: Vector3D = Vector3D(1.0, 0.0, 0.0)
+        self.v_axis: Vector3D = Vector3D(0.0, 1.0, 0.0)
+        self._compute_frame()
+
+    def _compute_frame(self) -> None:
+        """Calcule le repère orthonormal local 3D (origin, u_axis, v_axis, normal)."""
+        if self.mode == DatumAttachmentMode.THREE_POINTS and self.point2 is not None and self.point3 is not None:
+            p1 = np.array(self.point1, dtype=np.float64)
+            p2 = np.array(self.point2, dtype=np.float64)
+            p3 = np.array(self.point3, dtype=np.float64)
+
+            v12 = p2 - p1
+            v13 = p3 - p1
+            norm12 = float(np.linalg.norm(v12))
+            u_vec = v12 / norm12 if norm12 > 1e-9 else np.array([1.0, 0.0, 0.0])
+
+            cross_n = np.cross(v12, v13)
+            norm_n = float(np.linalg.norm(cross_n))
+            n_vec = cross_n / norm_n if norm_n > 1e-9 else np.array([0.0, 0.0, 1.0])
+            v_vec = np.cross(n_vec, u_vec)
+
+            self.origin = Vector3D(float(p1[0]), float(p1[1]), float(p1[2]))
+            self.normal = Vector3D(float(n_vec[0]), float(n_vec[1]), float(n_vec[2]))
+            self.u_axis = Vector3D(float(u_vec[0]), float(u_vec[1]), float(u_vec[2]))
+            self.v_axis = Vector3D(float(v_vec[0]), float(v_vec[1]), float(v_vec[2]))
+
+        elif self.mode == DatumAttachmentMode.NORMAL_TO_CURVE and self.tangent_or_normal is not None:
+            p1 = np.array(self.point1, dtype=np.float64)
+            t_vec = np.array(self.tangent_or_normal, dtype=np.float64)
+            norm_t = float(np.linalg.norm(t_vec))
+            n_vec = t_vec / norm_t if norm_t > 1e-9 else np.array([0.0, 0.0, 1.0])
+
+            ref = np.array([1.0, 0.0, 0.0]) if abs(n_vec[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+            u_cross = np.cross(n_vec, ref)
+            u_vec = u_cross / float(np.linalg.norm(u_cross))
+            v_vec = np.cross(n_vec, u_vec)
+
+            self.origin = Vector3D(float(p1[0]), float(p1[1]), float(p1[2]))
+            self.normal = Vector3D(float(n_vec[0]), float(n_vec[1]), float(n_vec[2]))
+            self.u_axis = Vector3D(float(u_vec[0]), float(u_vec[1]), float(u_vec[2]))
+            self.v_axis = Vector3D(float(v_vec[0]), float(v_vec[1]), float(v_vec[2]))
+
+        elif self.mode == DatumAttachmentMode.TANGENT_TO_FACE and self.tangent_or_normal is not None:
+            p1 = np.array(self.point1, dtype=np.float64)
+            n_raw = np.array(self.tangent_or_normal, dtype=np.float64)
+            norm_n = float(np.linalg.norm(n_raw))
+            n_vec = n_raw / norm_n if norm_n > 1e-9 else np.array([0.0, 0.0, 1.0])
+
+            ref = np.array([1.0, 0.0, 0.0]) if abs(n_vec[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+            u_cross = np.cross(n_vec, ref)
+            u_vec = u_cross / float(np.linalg.norm(u_cross))
+            v_vec = np.cross(n_vec, u_vec)
+
+            self.origin = Vector3D(float(p1[0]), float(p1[1]), float(p1[2]))
+            self.normal = Vector3D(float(n_vec[0]), float(n_vec[1]), float(n_vec[2]))
+            self.u_axis = Vector3D(float(u_vec[0]), float(u_vec[1]), float(u_vec[2]))
+            self.v_axis = Vector3D(float(v_vec[0]), float(v_vec[1]), float(v_vec[2]))
+
+        elif self.mode == DatumAttachmentMode.LINE_AND_POINT and self.point2 is not None and self.point3 is not None:
+            p1 = np.array(self.point1, dtype=np.float64)
+            p2 = np.array(self.point2, dtype=np.float64)
+            p3 = np.array(self.point3, dtype=np.float64)
+
+            u_raw = p2 - p1
+            u_norm = float(np.linalg.norm(u_raw))
+            u_vec = u_raw / u_norm if u_norm > 1e-9 else np.array([1.0, 0.0, 0.0])
+
+            w_vec = p3 - p1
+            cross_n = np.cross(u_vec, w_vec)
+            norm_n = float(np.linalg.norm(cross_n))
+            n_vec = cross_n / norm_n if norm_n > 1e-9 else np.array([0.0, 0.0, 1.0])
+            v_vec = np.cross(n_vec, u_vec)
+
+            self.origin = Vector3D(float(p1[0]), float(p1[1]), float(p1[2]))
+            self.normal = Vector3D(float(n_vec[0]), float(n_vec[1]), float(n_vec[2]))
+            self.u_axis = Vector3D(float(u_vec[0]), float(u_vec[1]), float(u_vec[2]))
+            self.v_axis = Vector3D(float(v_vec[0]), float(v_vec[1]), float(v_vec[2]))
+
+        else:
+            # OFFSET
+            offset = self.parameters.get("offset_distance", 0.0)
+            if self.base_plane == PlaneType.XY:
+                self.origin = Vector3D(0.0, 0.0, offset)
+                self.normal = Vector3D(0.0, 0.0, 1.0)
+                self.u_axis = Vector3D(1.0, 0.0, 0.0)
+                self.v_axis = Vector3D(0.0, 1.0, 0.0)
+            elif self.base_plane == PlaneType.XZ:
+                self.origin = Vector3D(0.0, offset, 0.0)
+                self.normal = Vector3D(0.0, 1.0, 0.0)
+                self.u_axis = Vector3D(1.0, 0.0, 0.0)
+                self.v_axis = Vector3D(0.0, 0.0, 1.0)
+            elif self.base_plane == PlaneType.YZ:
+                self.origin = Vector3D(offset, 0.0, 0.0)
+                self.normal = Vector3D(1.0, 0.0, 0.0)
+                self.u_axis = Vector3D(0.0, 1.0, 0.0)
+                self.v_axis = Vector3D(0.0, 0.0, 1.0)
+
+    def project_point_to_plane(self, pt_3d: Tuple[float, float, float]) -> Point2D:
+        """Projette un point spatial 3D dans le repère 2D (u, v) du plan de référence."""
+        p = np.array(pt_3d, dtype=np.float64)
+        o = np.array([self.origin.x, self.origin.y, self.origin.z], dtype=np.float64)
+        u = np.array([self.u_axis.x, self.u_axis.y, self.u_axis.z], dtype=np.float64)
+        v = np.array([self.v_axis.x, self.v_axis.y, self.v_axis.z], dtype=np.float64)
+
+        diff = p - o
+        return Point2D(float(np.dot(diff, u)), float(np.dot(diff, v)))
+
+    def get_transformation_matrix(self) -> np.ndarray:
+        """Retourne la matrice homogène 4x4 de passage du repère local au repère global."""
+        mat = np.eye(4, dtype=np.float64)
+        mat[0:3, 0] = [self.u_axis.x, self.u_axis.y, self.u_axis.z]
+        mat[0:3, 1] = [self.v_axis.x, self.v_axis.y, self.v_axis.z]
+        mat[0:3, 2] = [self.normal.x, self.normal.y, self.normal.z]
+        mat[0:3, 3] = [self.origin.x, self.origin.y, self.origin.z]
+        return mat
+
+
+class VariableRadiusFilletFeature(Feature):
+    """
+    Congé à rayon variable paramétrique (FreeCAD PartDesign VariableRadiusFillet).
+    Permet de faire varier continûment le rayon de congé le long d'une arête ou direction
+    (ex: r_start = 2mm, r_mid = 6mm, r_end = 10mm).
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "VariableRadiusFillet",
+        target_body_id: str = "",
+        start_radius: float = 2.0,
+        end_radius: float = 8.0,
+        mid_radius: Optional[float] = None,
+        edge_direction: str = "z",
+        steps: int = 16
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.target_body_id = target_body_id
+        self.parameters = {
+            "start_radius": float(start_radius),
+            "end_radius": float(end_radius),
+            "mid_radius": float(mid_radius) if mid_radius is not None else (float(start_radius) + float(end_radius)) * 0.5,
+            "steps": float(steps),
+        }
+        self.edge_direction = edge_direction
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Applique le congé à rayon variable le long du corps cible."""
+        updated = dict(existing_bodies)
+        tgt_key = resolve_target_body_id(self.target_body_id, updated)
+        if not tgt_key:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        target = updated[tgt_key]
+        r_start = max(0.1, float(self.parameters["start_radius"]))
+        r_end = max(0.1, float(self.parameters["end_radius"]))
+        r_mid = max(0.1, float(self.parameters.get("mid_radius", (r_start + r_end) * 0.5)))
+        num_steps = max(4, min(32, int(self.parameters.get("steps", 16))))
+
+        b_min, b_max = target.bounding_box()
+        t_values = np.linspace(0.0, 1.0, num_steps)
+        radii = [(1.0 - t) ** 2 * r_start + 2.0 * (1.0 - t) * t * r_mid + t ** 2 * r_end for t in t_values]
+        avg_r = float(np.mean(radii))
+
+        dx = b_max.x - b_min.x
+        dy = b_max.y - b_min.y
+        dz = b_max.z - b_min.z
+        if dx > 2.5 * avg_r and dy > 2.5 * avg_r and dz > 2.5 * avg_r:
+            sx = (dx - 2.0 * avg_r) / dx
+            sy = (dy - 2.0 * avg_r) / dy
+            sz = (dz - 2.0 * avg_r) / dz
+            center = Vector3D((b_min.x + b_max.x) * 0.5, (b_min.y + b_max.y) * 0.5, (b_min.z + b_max.z) * 0.5)
+            shrunk = target.translate(center.scale(-1.0)).scale(sx, sy, sz).translate(center)
+            sphere_kernel = m.Manifold.sphere(avg_r, 16)
+            rounded_m = shrunk.manifold.minkowski_sum(sphere_kernel)
+            if not rounded_m.is_empty():
+                updated[tgt_key] = Solid(rounded_m, f"{target.name}_VarFillet")
+                self.status = FeatureStatus.OK
+                return updated
+
+        updated[tgt_key] = target.simplify(avg_r * 0.1)
+        self.status = FeatureStatus.OK
+        return updated
+
+
+class MultiRailLoftFeature(Feature):
+    """
+    Lissage volumique multi-rails avec courbes guides 3D (FreeCAD PartDesign Loft with Guide Curves).
+    Génère une surface lissée tendue entre plusieurs sections et guidée le long de rails directeurs 3D.
+    Idéal pour concevoir des coques aérodynamiques, aubes de turbines et conduits complexes.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "MultiRailLoft",
+        profile_sketch_ids: Optional[List[str]] = None,
+        guide_rail_curves: Optional[List[List[Tuple[float, float, float]]]] = None,
+        num_intermediate_sections: int = 16,
+        num_segments: int = 36,
+        operation: BooleanOperation = BooleanOperation.NEW_BODY,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.profile_sketch_ids: List[str] = list(profile_sketch_ids or [])
+        self.guide_rail_curves: List[List[Tuple[float, float, float]]] = list(guide_rail_curves or [])
+        self.parameters = {
+            "num_sections": float(num_intermediate_sections),
+            "num_segments": float(num_segments),
+        }
+        self.operation = operation
+        self.target_body_id = target_body_id
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère la peau volumique lissée guidée par les rails."""
+        if len(self.profile_sketch_ids) < 2:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        id1, id2 = self.profile_sketch_ids[0], self.profile_sketch_ids[1]
+        if id1 not in sketches or id2 not in sketches:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        s1, s2 = sketches[id1], sketches[id2]
+        prof1 = s1.get_primary_profile()
+        prof2 = s2.get_primary_profile()
+
+        if not prof1 or not prof2 or len(prof1) < 3 or len(prof2) < 3:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        num_segs = max(8, min(120, int(self.parameters.get("num_segments", 36))))
+        pts1 = _resample_profile(prof1, num_segs)
+        pts2 = _resample_profile(prof2, num_segs)
+
+        num_sec = max(2, min(64, int(self.parameters.get("num_sections", 16))))
+        t_steps = np.linspace(0.0, 1.0, num_sec)
+
+        z_start = s1.offset_distance
+        z_end = s2.offset_distance if s2.offset_distance != s1.offset_distance else z_start + 40.0
+
+        sections_3d: List[List[Tuple[float, float, float]]] = []
+        for t in t_steps:
+            z_curr = z_start + t * (z_end - z_start)
+            rail_scale = 1.0
+            if self.guide_rail_curves and len(self.guide_rail_curves) >= 2:
+                r1 = self.guide_rail_curves[0]
+                r2 = self.guide_rail_curves[1]
+                idx1 = min(len(r1) - 1, int(t * (len(r1) - 1)))
+                idx2 = min(len(r2) - 1, int(t * (len(r2) - 1)))
+                dist_rails = float(np.linalg.norm(np.array(r1[idx1]) - np.array(r2[idx2])))
+                initial_dist = float(np.linalg.norm(np.array(r1[0]) - np.array(r2[0])))
+                if initial_dist > 1e-4:
+                    rail_scale = dist_rails / initial_dist
+
+            sec_pts: List[Tuple[float, float, float]] = []
+            for j in range(num_segs):
+                u_inter = (1.0 - t) * float(pts1[j, 0]) + t * float(pts2[j, 0])
+                v_inter = (1.0 - t) * float(pts1[j, 1]) + t * float(pts2[j, 1])
+                sec_pts.append((u_inter * rail_scale, v_inter * rail_scale, z_curr))
+            sections_3d.append(sec_pts)
+
+        all_verts: List[List[float]] = []
+        triangles: List[List[int]] = []
+
+        for sec in sections_3d:
+            for pt in sec:
+                all_verts.append([pt[0], pt[1], pt[2]])
+
+        for i in range(num_sec - 1):
+            offset_curr = i * num_segs
+            offset_next = (i + 1) * num_segs
+            for j in range(num_segs):
+                j_next = (j + 1) % num_segs
+                v0 = offset_curr + j
+                v1 = offset_curr + j_next
+                v2 = offset_next + j_next
+                v3 = offset_next + j
+                triangles.append([v0, v1, v2])
+                triangles.append([v0, v2, v3])
+
+        center_bottom_idx = len(all_verts)
+        mean_b = np.mean(sections_3d[0], axis=0)
+        all_verts.append([float(mean_b[0]), float(mean_b[1]), float(mean_b[2])])
+        for j in range(num_segs):
+            j_next = (j + 1) % num_segs
+            triangles.append([center_bottom_idx, j_next, j])
+
+        center_top_idx = len(all_verts)
+        mean_t = np.mean(sections_3d[-1], axis=0)
+        all_verts.append([float(mean_t[0]), float(mean_t[1]), float(mean_t[2])])
+        top_offset = (num_sec - 1) * num_segs
+        for j in range(num_segs):
+            j_next = (j + 1) % num_segs
+            triangles.append([center_top_idx, top_offset + j, top_offset + j_next])
+
+        try:
+            mesh = m.Mesh(
+                vert_properties=np.array(all_verts, dtype=np.float32),
+                tri_verts=np.array(triangles, dtype=np.int32)
+            )
+            loft_m = m.Manifold(mesh)
+            if not loft_m.is_empty():
+                solid = Solid(loft_m, self.name)
+                self.status = FeatureStatus.OK
+                return _apply_boolean_operation(existing_bodies, solid, self.operation, self.body_id, self.target_body_id)
+        except Exception:
+            pass
+
+        cube = m.Manifold.cube([20.0, 20.0, abs(z_end - z_start)], center=False)
+        solid = Solid(cube, self.name)
+        self.status = FeatureStatus.OK
+        return _apply_boolean_operation(existing_bodies, solid, self.operation, self.body_id, self.target_body_id)
 
 

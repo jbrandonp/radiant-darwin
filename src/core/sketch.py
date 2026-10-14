@@ -24,6 +24,8 @@ class EntityType(Enum):
     ELLIPSE = "ellipse"
     BSPLINE = "bspline"
     BEZIER = "bezier"
+    EXTERNAL_REFERENCE = "external_reference"
+    ARC = "arc"
 
 
 class SketchEntity:
@@ -50,6 +52,96 @@ class SketchLine(SketchEntity):
     def get_points(self) -> List[Point2D]:
         """Retourne les extrémités du segment."""
         return [self.p1, self.p2]
+
+
+class SketchExternalReference(SketchEntity):
+    """
+    Projection 2D d'une géométrie 3D externe (FreeCAD Sketcher External Geometry).
+    Génère un trait de référence passif violet sur lequel les contraintes peuvent s'accrocher.
+    """
+
+    def __init__(
+        self,
+        entity_id: str,
+        p1: Point2D,
+        p2: Point2D,
+        source_body_id: str = "",
+        source_edge_id: str = "",
+        color: str = "#8A2BE2"
+    ) -> None:
+        super().__init__(entity_id, EntityType.EXTERNAL_REFERENCE, is_construction=True)
+        self.p1: Point2D = p1
+        self.p2: Point2D = p2
+        self.source_body_id: str = source_body_id
+        self.source_edge_id: str = source_edge_id
+        self.color: str = color
+
+    def get_points(self) -> List[Point2D]:
+        """Retourne les deux extrémités du segment de référence projeté."""
+        return [self.p1, self.p2]
+
+
+class SketchArc(SketchEntity):
+    """Arc de cercle 2D défini par un centre, un rayon et deux angles angulaires."""
+
+    def __init__(
+        self,
+        entity_id: str,
+        center: Point2D,
+        radius: float,
+        start_angle_rad: float,
+        end_angle_rad: float,
+        segments: int = 24,
+        is_construction: bool = False
+    ) -> None:
+        super().__init__(entity_id, EntityType.ARC, is_construction=is_construction)
+        self.center: Point2D = center
+        self.radius: float = max(0.01, float(radius))
+        self.start_angle_rad: float = float(start_angle_rad)
+        self.end_angle_rad: float = float(end_angle_rad)
+        self.segments: int = max(6, segments)
+
+    def get_points(self) -> List[Point2D]:
+        """Discrétise l'arc le long de son étendue angulaire."""
+        angles = np.linspace(self.start_angle_rad, self.end_angle_rad, self.segments, endpoint=True)
+        return [
+            Point2D(self.center.u + self.radius * float(np.cos(a)), self.center.v + self.radius * float(np.sin(a)))
+            for a in angles
+        ]
+
+
+class DimensionType(Enum):
+    """Types de cotes géométriques d'esquisse."""
+    DISTANCE = "distance"
+    HORIZONTAL = "horizontal"
+    VERTICAL = "vertical"
+    RADIUS = "radius"
+    DIAMETER = "diameter"
+    ANGLE = "angle"
+
+
+class SketchDimension:
+    """
+    Cote paramétrique d'esquisse.
+    Supporte les cotes pilotantes (driving) qui imposent une contrainte au solveur,
+    et les cotes pilotées / référence (driven) qui mesurent passivement sans sur-contraindre.
+    """
+
+    def __init__(
+        self,
+        dimension_id: str,
+        dim_type: DimensionType,
+        entity1_id: str,
+        entity2_id: Optional[str] = None,
+        value: float = 0.0,
+        is_driven: bool = False
+    ) -> None:
+        self.dimension_id: str = dimension_id
+        self.dim_type: DimensionType = dim_type
+        self.entity1_id: str = entity1_id
+        self.entity2_id: Optional[str] = entity2_id
+        self.value: float = float(value)
+        self.is_driven: bool = is_driven
 
 
 class SketchRectangle(SketchEntity):
@@ -345,6 +437,7 @@ class Sketch2D:
         self.plane: PlaneType = plane
         self.offset_distance: float = float(offset_distance)
         self.entities: List[SketchEntity] = []
+        self.dimensions: List[SketchDimension] = []
         self._counter: int = 0
 
     def add_line(self, p1: Point2D, p2: Point2D, is_construction: bool = False) -> SketchLine:
@@ -479,4 +572,333 @@ class Sketch2D:
         elif self.plane == PlaneType.YZ:
             return Vector3D(self.offset_distance, pt2d.u, pt2d.v)
         return Vector3D(pt2d.u, pt2d.v, self.offset_distance)
+
+    def add_arc(
+        self,
+        center: Point2D,
+        radius: float,
+        start_angle_rad: float,
+        end_angle_rad: float,
+        segments: int = 24,
+        is_construction: bool = False
+    ) -> SketchArc:
+        """Ajoute un arc de cercle paramétrique à l'esquisse."""
+        self._counter += 1
+        entity_id = f"arc_{self._counter}"
+        arc = SketchArc(entity_id, center, radius, start_angle_rad, end_angle_rad, segments, is_construction=is_construction)
+        self.entities.append(arc)
+        return arc
+
+    def add_external_reference(
+        self,
+        edge_start: Tuple[float, float, float],
+        edge_end: Tuple[float, float, float],
+        source_body_id: str = "",
+        source_edge_id: str = ""
+    ) -> SketchExternalReference:
+        """
+        Projette une arête 3D externe sur le plan d'esquisse actif (Sketcher External Geometry).
+        Crée un trait violet de référence passif pour y contraindre ou coter l'esquisse.
+        """
+        from src.solver.constraints_2d import project_3d_edge_to_sketch_plane
+
+        if self.plane == PlaneType.XY:
+            origin = (0.0, 0.0, self.offset_distance)
+            normal = (0.0, 0.0, 1.0)
+            u_axis = (1.0, 0.0, 0.0)
+        elif self.plane == PlaneType.XZ:
+            origin = (0.0, self.offset_distance, 0.0)
+            normal = (0.0, 1.0, 0.0)
+            u_axis = (1.0, 0.0, 0.0)
+        elif self.plane == PlaneType.YZ:
+            origin = (self.offset_distance, 0.0, 0.0)
+            normal = (1.0, 0.0, 0.0)
+            u_axis = (0.0, 1.0, 0.0)
+        else:
+            origin = (0.0, 0.0, self.offset_distance)
+            normal = (0.0, 0.0, 1.0)
+            u_axis = (1.0, 0.0, 0.0)
+
+        p1_2d, p2_2d = project_3d_edge_to_sketch_plane(
+            edge_start, edge_end, plane_origin=origin, plane_normal=normal, plane_u_axis=u_axis
+        )
+
+        self._counter += 1
+        entity_id = f"ext_ref_{self._counter}"
+        ref_entity = SketchExternalReference(
+            entity_id=entity_id,
+            p1=p1_2d,
+            p2=p2_2d,
+            source_body_id=source_body_id,
+            source_edge_id=source_edge_id
+        )
+        self.entities.append(ref_entity)
+        return ref_entity
+
+    def add_dimension(
+        self,
+        dim_type: DimensionType,
+        entity1_id: str,
+        entity2_id: Optional[str] = None,
+        value: Optional[float] = None,
+        is_driven: bool = False
+    ) -> SketchDimension:
+        """
+        Ajoute une cote paramétrique à l'esquisse (distance, horizontale, verticale, angle, rayon).
+        Si is_driven=True, il s'agit d'une cote pilotée (Driven Dimension) de référence passive.
+        """
+        self._counter += 1
+        dim_id = f"dim_{self._counter}"
+
+        calculated_val = float(value) if value is not None else 0.0
+        if value is None:
+            ent1 = next((e for e in self.entities if e.entity_id == entity1_id), None)
+            if ent1:
+                pts1 = ent1.get_points()
+                if dim_type == DimensionType.DISTANCE and len(pts1) >= 2:
+                    calculated_val = float(np.hypot(pts1[1].u - pts1[0].u, pts1[1].v - pts1[0].v))
+                elif dim_type == DimensionType.HORIZONTAL and len(pts1) >= 2:
+                    calculated_val = float(abs(pts1[1].u - pts1[0].u))
+                elif dim_type == DimensionType.VERTICAL and len(pts1) >= 2:
+                    calculated_val = float(abs(pts1[1].v - pts1[0].v))
+                elif dim_type in (DimensionType.RADIUS, DimensionType.DIAMETER) and isinstance(ent1, SketchCircle):
+                    calculated_val = ent1.radius if dim_type == DimensionType.RADIUS else ent1.radius * 2.0
+
+        dim = SketchDimension(
+            dimension_id=dim_id,
+            dim_type=dim_type,
+            entity1_id=entity1_id,
+            entity2_id=entity2_id,
+            value=calculated_val,
+            is_driven=is_driven
+        )
+        self.dimensions.append(dim)
+        return dim
+
+    def get_driven_dimensions(self) -> List[SketchDimension]:
+        """Retourne toutes les cotes de référence passives (Driven Dimensions)."""
+        return [d for d in self.dimensions if d.is_driven]
+
+    def get_driving_dimensions(self) -> List[SketchDimension]:
+        """Retourne toutes les cotes actives imposant des contraintes aux géométries."""
+        return [d for d in self.dimensions if not d.is_driven]
+
+    def trim_segment(
+        self,
+        target_line_id: str,
+        cutting_line_id: str,
+        keep_side: str = "start"
+    ) -> Optional[SketchLine]:
+        """
+        Découpe/Ajuste un segment de ligne (Trim) à son intersection avec une ligne de coupe.
+        Conserve le côté 'start' ou le côté 'end'.
+        """
+        from src.solver.constraints_2d import trim_intersection_2d
+
+        target = next((e for e in self.entities if e.entity_id == target_line_id and isinstance(e, SketchLine)), None)
+        cutter = next((e for e in self.entities if e.entity_id == cutting_line_id and isinstance(e, SketchLine)), None)
+
+        if not target or not cutter:
+            return None
+
+        inter_pt = trim_intersection_2d(target.p1, target.p2, cutter.p1, cutter.p2)
+        if not inter_pt:
+            return None
+
+        if keep_side == "start":
+            target.p2 = inter_pt
+        else:
+            target.p1 = inter_pt
+        return target
+
+    def extend_segment(
+        self,
+        target_line_id: str,
+        boundary_line_id: str
+    ) -> Optional[SketchLine]:
+        """
+        Prolonge un segment de droite (Extend) jusqu'à son intersection avec une frontière.
+        """
+        from src.solver.constraints_2d import trim_intersection_2d
+
+        target = next((e for e in self.entities if e.entity_id == target_line_id and isinstance(e, SketchLine)), None)
+        boundary = next((e for e in self.entities if e.entity_id == boundary_line_id and isinstance(e, SketchLine)), None)
+
+        if not target or not boundary:
+            return None
+
+        inter_pt = trim_intersection_2d(target.p1, target.p2, boundary.p1, boundary.p2)
+        if not inter_pt:
+            return None
+
+        d1 = float(np.hypot(target.p1.u - inter_pt.u, target.p1.v - inter_pt.v))
+        d2 = float(np.hypot(target.p2.u - inter_pt.u, target.p2.v - inter_pt.v))
+
+        if d2 <= d1:
+            target.p2 = inter_pt
+        else:
+            target.p1 = inter_pt
+        return target
+
+    def fillet_2d_lines(
+        self,
+        line1_id: str,
+        line2_id: str,
+        radius: float
+    ) -> Optional[Tuple[SketchLine, SketchLine, SketchCircle]]:
+        """
+        Applique un congé d'angle 2D (Fillet) entre deux segments de droite sécants.
+        Raccourcit les lignes jusqu'aux points de tangence et insère un cercle/arc tangent.
+        """
+        from src.solver.constraints_2d import fillet_2d
+
+        l1 = next((e for e in self.entities if e.entity_id == line1_id and isinstance(e, SketchLine)), None)
+        l2 = next((e for e in self.entities if e.entity_id == line2_id and isinstance(e, SketchLine)), None)
+
+        if not l1 or not l2 or radius <= 0.0:
+            return None
+
+        eps = 1e-4
+        if np.hypot(l1.p2.u - l2.p1.u, l1.p2.v - l2.p1.v) < eps:
+            corner, p0, p1 = l1.p2, l1.p1, l2.p2
+            is_l1_end, is_l2_start = True, True
+        elif np.hypot(l1.p1.u - l2.p1.u, l1.p1.v - l2.p1.v) < eps:
+            corner, p0, p1 = l1.p1, l1.p2, l2.p2
+            is_l1_end, is_l2_start = False, True
+        elif np.hypot(l1.p2.u - l2.p2.u, l1.p2.v - l2.p2.v) < eps:
+            corner, p0, p1 = l1.p2, l1.p1, l2.p1
+            is_l1_end, is_l2_start = True, False
+        elif np.hypot(l1.p1.u - l2.p2.u, l1.p1.v - l2.p2.v) < eps:
+            corner, p0, p1 = l1.p1, l1.p2, l2.p1
+            is_l1_end, is_l2_start = False, False
+        else:
+            return None
+
+        t0, t1, center, eff_rad = fillet_2d(p0, corner, p1, radius)
+        if eff_rad <= 0.0:
+            return None
+
+        if is_l1_end:
+            l1.p2 = t0
+        else:
+            l1.p1 = t0
+
+        if is_l2_start:
+            l2.p1 = t1
+        else:
+            l2.p2 = t1
+
+        self._counter += 1
+        fillet_circle = SketchCircle(f"fillet_{self._counter}", center, eff_rad, segments=24)
+        self.entities.append(fillet_circle)
+
+        return (l1, l2, fillet_circle)
+
+    def chamfer_2d_lines(
+        self,
+        line1_id: str,
+        line2_id: str,
+        distance: float
+    ) -> Optional[Tuple[SketchLine, SketchLine, SketchLine]]:
+        """
+        Applique un chanfrein 2D (Chamfer) entre deux lignes sécantes.
+        Recule de la distance spécifiée le long des deux branches et ajoute le segment de biseau.
+        """
+        l1 = next((e for e in self.entities if e.entity_id == line1_id and isinstance(e, SketchLine)), None)
+        l2 = next((e for e in self.entities if e.entity_id == line2_id and isinstance(e, SketchLine)), None)
+
+        if not l1 or not l2 or distance <= 0.0:
+            return None
+
+        eps = 1e-4
+        if np.hypot(l1.p2.u - l2.p1.u, l1.p2.v - l2.p1.v) < eps:
+            corner, p0, p1 = l1.p2, l1.p1, l2.p2
+            is_l1_end, is_l2_start = True, True
+        elif np.hypot(l1.p1.u - l2.p1.u, l1.p1.v - l2.p1.v) < eps:
+            corner, p0, p1 = l1.p1, l1.p2, l2.p2
+            is_l1_end, is_l2_start = False, True
+        elif np.hypot(l1.p2.u - l2.p2.u, l1.p2.v - l2.p2.v) < eps:
+            corner, p0, p1 = l1.p2, l1.p1, l2.p1
+            is_l1_end, is_l2_start = True, False
+        elif np.hypot(l1.p1.u - l2.p2.u, l1.p1.v - l2.p2.v) < eps:
+            corner, p0, p1 = l1.p1, l1.p2, l2.p1
+            is_l1_end, is_l2_start = False, False
+        else:
+            return None
+
+        v0 = np.array([p0.u - corner.u, p0.v - corner.v], dtype=np.float64)
+        v1 = np.array([p1.u - corner.u, p1.v - corner.v], dtype=np.float64)
+        norm0, norm1 = float(np.linalg.norm(v0)), float(np.linalg.norm(v1))
+        if norm0 < distance or norm1 < distance:
+            return None
+
+        d0 = distance * (v0 / norm0)
+        d1 = distance * (v1 / norm1)
+
+        c0 = Point2D(corner.u + float(d0[0]), corner.v + float(d0[1]))
+        c1 = Point2D(corner.u + float(d1[0]), corner.v + float(d1[1]))
+
+        if is_l1_end:
+            l1.p2 = c0
+        else:
+            l1.p1 = c0
+
+        if is_l2_start:
+            l2.p1 = c1
+        else:
+            l2.p2 = c1
+
+        self._counter += 1
+        chamfer_line = SketchLine(f"chamfer_{self._counter}", c0, c1)
+        self.entities.append(chamfer_line)
+
+        return (l1, l2, chamfer_line)
+
+    def generate_porcupine_comb_2d(
+        self,
+        spline_entity_id: str,
+        num_samples: int = 24,
+        scale: float = 10.0
+    ) -> List[Tuple[Point2D, Point2D]]:
+        """
+        Génère le peigne de courbure (Porcupine Curvature Comb) d'une spline 2D.
+        Retourne une liste de segments [(racine, pointe)] orientés selon la normale locale
+        avec une longueur proportionnelle à la courbure kappa(t).
+        """
+        ent = next((e for e in self.entities if e.entity_id == spline_entity_id), None)
+        if not ent:
+            return []
+
+        pts = ent.get_points()
+        if len(pts) < 3:
+            return []
+
+        comb: List[Tuple[Point2D, Point2D]] = []
+        n = len(pts)
+        step = max(1, n // max(1, num_samples))
+
+        for i in range(1, n - 1, step):
+            p_prev = pts[i - 1]
+            p_curr = pts[i]
+            p_next = pts[i + 1]
+
+            du = (p_next.u - p_prev.u) * 0.5
+            dv = (p_next.v - p_prev.v) * 0.5
+            d2u = p_next.u - 2.0 * p_curr.u + p_prev.u
+            d2v = p_next.v - 2.0 * p_curr.v + p_prev.v
+
+            speed_sq = du ** 2 + dv ** 2
+            if speed_sq < 1e-9:
+                continue
+
+            speed = float(np.sqrt(speed_sq))
+            kappa = abs(du * d2v - dv * d2u) / (speed_sq * speed)
+
+            norm_u = -dv / speed
+            norm_v = du / speed
+
+            tip = Point2D(p_curr.u + norm_u * kappa * scale, p_curr.v + norm_v * kappa * scale)
+            comb.append((p_curr, tip))
+
+        return comb
 

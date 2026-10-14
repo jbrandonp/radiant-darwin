@@ -154,6 +154,16 @@ class NexusWire:
     def total_perimeter(self) -> float:
         return sum(e.length for e in self.edges)
 
+    def sample_points(self, count_per_edge: int = 10) -> List[np.ndarray]:
+        """Échantillonne les points 3D le long des arêtes constituant la boucle."""
+        pts: List[np.ndarray] = []
+        for e in self.edges:
+            pts.append(e.start_vertex.point)
+            if count_per_edge > 2:
+                for t in np.linspace(0.0, 1.0, count_per_edge, endpoint=False)[1:]:
+                    pts.append(e.curve.evaluate(float(t)))
+        return pts
+
 
 class NexusSurface:
     """Surface analytique paramétrique continue S(u, v)."""

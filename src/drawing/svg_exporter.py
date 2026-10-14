@@ -23,6 +23,9 @@ class SVGDrawingExporter:
             '  <style>',
             '    .solid-line { stroke: #1a1a1a; stroke-width: 0.6; stroke-linecap: round; }',
             '    .dim-line { stroke: #0066cc; stroke-width: 0.35; stroke-dasharray: none; }',
+            '    .center-line { stroke: #d32f2f; stroke-width: 0.35; stroke-dasharray: 8, 2, 2, 2; }',
+            '    .hatch-line { stroke: #555555; stroke-width: 0.25; }',
+            '    .hidden-line { stroke: #888888; stroke-width: 0.35; stroke-dasharray: 3, 2; }',
             '    .text-title { font-family: "Segoe UI", Arial, sans-serif; font-size: 4px; font-weight: bold; fill: #222222; }',
             '    .text-dim { font-family: "Segoe UI", Arial, sans-serif; font-size: 3.2px; font-weight: 600; fill: #0066cc; }',
             '    .title-box { stroke: #222222; stroke-width: 0.5; fill: #f8f9fa; }',
@@ -32,7 +35,16 @@ class SVGDrawingExporter:
 
         # Inverser l'axe Y pour l'affichage SVG (origine en haut à gauche)
         for line in sheet.lines:
-            cls_name = "dim-line" if line.is_dimension else "solid-line"
+            if line.is_dimension:
+                cls_name = "dim-line"
+            elif line.is_centerline:
+                cls_name = "center-line"
+            elif line.is_hatch:
+                cls_name = "hatch-line"
+            elif line.is_hidden:
+                cls_name = "hidden-line"
+            else:
+                cls_name = "solid-line"
             svg_y1 = h - line.y1
             svg_y2 = h - line.y2
             svg_lines.append(

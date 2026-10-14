@@ -45,6 +45,21 @@ class DimensionLabel:
 
 
 @dataclass
+class LeaderLine:
+    """
+    Ligne de repère avec flèche et palier d'annotation ISO 128 (FreeCAD TechDraw LeaderLine / Balloon).
+    Permet d'annoter un perçage, un chanfrein, un rayon ou une consigne d'usinage.
+    """
+    x_target: float          # Point d'impact / cible sur la géométrie
+    y_target: float
+    x_text: float            # Position de l'étiquette de texte
+    y_text: float
+    text: str                # Texte d'annotation (ex. "Ø10 H7", "Chanfrein 2x45°")
+    arrow_size: float = 3.0
+    landing_length: float = 8.0  # Longueur du palier horizontal sous le texte
+
+
+@dataclass
 class TitleBlock:
     """Cartouche de mise en plan normalisé ISO."""
     project_title: str
@@ -63,6 +78,7 @@ class TechnicalSheet:
     title_block: TitleBlock = field(default_factory=lambda: TitleBlock("Pièce Usinée"))
     lines: List[DrawingLine2D] = field(default_factory=list)
     dimensions: List[DimensionLabel] = field(default_factory=list)
+    leaders: List[LeaderLine] = field(default_factory=list)
 
 
 class TechnicalDrawingGenerator:
@@ -378,5 +394,80 @@ class TechnicalDrawingGenerator:
         if sheet is not None:
             sheet.lines.extend(lines)
         return lines
+
+    def add_leader_annotation(
+        self,
+        x_target: float,
+        y_target: float,
+        x_text: float,
+        y_text: float,
+        text: str,
+        arrow_size: float = 3.0,
+        landing_length: float = 8.0,
+        sheet: Optional[TechnicalSheet] = None
+    ) -> LeaderLine:
+        """
+        Ajoute une ligne de repère normalisée ISO 128 (FreeCAD TechDraw LeaderLine / Balloon).
+        Génère la pointe de flèche orientée vers la cible, la ligne de renvoi oblique,
+        le palier horizontal de support et l'étiquette textuelle.
+        """
+        leader = LeaderLine(
+            x_target=x_target,
+            y_target=y_target,
+            x_text=x_text,
+            y_text=y_text,
+            text=text,
+            arrow_size=arrow_size,
+            landing_length=landing_length
+        )
+
+        # Déterminer la direction du palier horizontal (vers la gauche ou la droite)
+        dx = x_text - x_target
+        landing_dir = 1.0 if dx >= 0.0 else -1.0
+        x_shoulder = x_text - landing_dir * landing_length
+
+        # 1. Ligne oblique depuis la cible jusqu'au coude/palier
+        l_slant = DrawingLine2D(x_target, y_target, x_shoulder, y_text, is_dimension=True)
+
+        # 2. Ligne horizontale de palier
+        l_landing = DrawingLine2D(x_shoulder, y_text, x_text, y_text, is_dimension=True)
+
+        # 3. Flèche normalisée au point d'impact
+        vx = x_shoulder - x_target
+        vy = y_text - y_target
+        dist = float(np.hypot(vx, vy))
+        arrow_lines: List[DrawingLine2D] = []
+        if dist > 1e-4:
+            ux = vx / dist
+            uy = vy / dist
+            angle_arrow = np.radians(20.0)
+            cos_a = float(np.cos(angle_arrow))
+            sin_a = float(np.sin(angle_arrow))
+
+            # Branche gauche
+            bx1 = ux * cos_a - uy * sin_a
+            by1 = ux * sin_a + uy * cos_a
+            p1_x = x_target + arrow_size * bx1
+            p1_y = y_target + arrow_size * by1
+
+            # Branche droite
+            bx2 = ux * cos_a + uy * sin_a
+            by2 = -ux * sin_a + uy * cos_a
+            p2_x = x_target + arrow_size * bx2
+            p2_y = y_target + arrow_size * by2
+
+            arrow_lines.append(DrawingLine2D(x_target, y_target, p1_x, p1_y, is_dimension=True))
+            arrow_lines.append(DrawingLine2D(x_target, y_target, p2_x, p2_y, is_dimension=True))
+
+        dim_label = DimensionLabel(x=x_text + landing_dir * 2.0, y=y_text + 2.0, text=text, is_vertical=False)
+
+        if sheet is not None:
+            sheet.leaders.append(leader)
+            sheet.lines.append(l_slant)
+            sheet.lines.append(l_landing)
+            sheet.lines.extend(arrow_lines)
+            sheet.dimensions.append(dim_label)
+
+        return leader
 
 

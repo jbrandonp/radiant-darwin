@@ -23,7 +23,8 @@ from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
     LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature,
-    PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature, MultiTransformStep
+    PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature, MultiTransformStep,
+    HelixFeature, RibFeature
 )
 from src.core.fasteners import FastenerFeature
 from src.sheetmetal.sheet_metal import SheetMetalFeature
@@ -137,6 +138,30 @@ class ProjectSerializer:
                         "scale_factor": getattr(st, "scale_factor", 1.0)
                     })
                 f_dict["steps"] = st_list
+            if hasattr(feat, "symmetric"):
+                f_dict["symmetric"] = getattr(feat, "symmetric")
+            if hasattr(feat, "taper_angle"):
+                f_dict["taper_angle"] = getattr(feat, "taper_angle")
+            if hasattr(feat, "twist_degrees"):
+                f_dict["twist_degrees"] = getattr(feat, "twist_degrees")
+            if hasattr(feat, "pitch"):
+                f_dict["pitch"] = getattr(feat, "pitch")
+            if hasattr(feat, "turns"):
+                f_dict["turns"] = getattr(feat, "turns")
+            if hasattr(feat, "wire_radius"):
+                f_dict["wire_radius"] = getattr(feat, "wire_radius")
+            if hasattr(feat, "cone_angle"):
+                f_dict["cone_angle"] = getattr(feat, "cone_angle")
+            if hasattr(feat, "is_left_handed"):
+                f_dict["is_left_handed"] = getattr(feat, "is_left_handed")
+            if hasattr(feat, "axis"):
+                f_dict["axis"] = getattr(feat, "axis")
+            if hasattr(feat, "is_subtractive"):
+                f_dict["is_subtractive"] = getattr(feat, "is_subtractive")
+            if hasattr(feat, "thickness"):
+                f_dict["thickness"] = getattr(feat, "thickness")
+            if hasattr(feat, "draft_angle"):
+                f_dict["draft_angle"] = getattr(feat, "draft_angle")
 
             data["features"].append(f_dict)
 
@@ -244,7 +269,14 @@ class ProjectSerializer:
                     elif f_cls == "ExtrudeFeature":
                         s_id = str(f_data.get("sketch_id", ""))
                         dist = float(params.get("distance", 25.0))
-                        feat = ExtrudeFeature(f_id, f_name, s_id, dist, op, target_id)
+                        sym = bool(params.get("symmetric", 0.0) > 0.5 or f_data.get("symmetric", False))
+                        taper = float(params.get("taper_angle", f_data.get("taper_angle", 0.0)))
+                        twist = float(params.get("twist_degrees", f_data.get("twist_degrees", 0.0)))
+                        feat = ExtrudeFeature(
+                            f_id, f_name, s_id, dist,
+                            symmetric=sym, taper_angle=taper, twist_degrees=twist,
+                            operation=op, target_body_id=target_id
+                        )
 
                     elif f_cls == "RevolveFeature":
                         s_id = str(f_data.get("sketch_id", ""))
@@ -408,6 +440,29 @@ class ProjectSerializer:
                                     s_fact = float(st_data.get("scale_factor", 1.0))
                                     steps_objs.append(MultiTransformStep(t_type, cnt, spc, ax, tot_ang, mp, s_fact))
                         feat = MultiTransformFeature(f_id, f_name, src, steps_objs, join_b)
+
+                    elif f_cls == "HelixFeature":
+                        pitch = float(params.get("pitch", 10.0))
+                        h = float(params.get("height", 40.0))
+                        turns = float(params.get("turns", 4.0))
+                        rad = float(params.get("radius", 15.0))
+                        w_rad = float(params.get("wire_radius", 2.0))
+                        c_ang = float(params.get("cone_angle", 0.0))
+                        is_left = bool(params.get("is_left_handed", 0.0) > 0.5 or f_data.get("is_left_handed", False))
+                        axis = str(f_data.get("axis", "Z"))
+                        is_sub = bool(params.get("is_subtractive", 0.0) > 0.5 or f_data.get("is_subtractive", False))
+                        feat = HelixFeature(
+                            f_id, f_name, pitch=pitch, height=h, turns=turns, radius=rad,
+                            wire_radius=w_rad, cone_angle=c_ang, is_left_handed=is_left,
+                            axis=axis, is_subtractive=is_sub, operation=op, target_body_id=target_id
+                        )
+
+                    elif f_cls == "RibFeature":
+                        s_id = str(f_data.get("sketch_id", ""))
+                        thick = float(params.get("thickness", 4.0))
+                        sym = bool(params.get("symmetric", 1.0) > 0.5 or f_data.get("symmetric", True))
+                        draft = float(params.get("draft_angle", 0.0))
+                        feat = RibFeature(f_id, f_name, sketch_id=s_id, thickness=thick, symmetric=sym, draft_angle=draft, target_body_id=target_id)
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

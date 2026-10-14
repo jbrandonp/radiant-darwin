@@ -1238,3 +1238,207 @@ class MultiTransformFeature(Feature):
         return updated
 
 
+class HelixFeature(Feature):
+    """
+    Fonctionnalité paramétrique d'hélice 3D (ressorts, filets de vis, vis d'Archimède, goujures).
+    Équivalent direct de FreeCAD PartDesign::AdditiveHelix et PartDesign::SubtractiveHelix.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Helix",
+        pitch: float = 10.0,
+        height: float = 40.0,
+        turns: Optional[float] = None,
+        radius: float = 15.0,
+        wire_radius: float = 2.0,
+        cone_angle: float = 0.0,
+        is_left_handed: bool = False,
+        axis: str = "Z",
+        is_subtractive: bool = False,
+        operation: Optional[BooleanOperation] = None,
+        target_body_id: Optional[str] = None,
+        segments_per_turn: int = 24
+    ) -> None:
+        super().__init__(feature_id, name)
+        safe_pitch = max(0.1, abs(pitch))
+        if turns is not None:
+            safe_turns = max(0.1, abs(turns))
+            safe_height = safe_turns * safe_pitch
+        else:
+            safe_height = max(0.1, abs(height))
+            safe_turns = safe_height / safe_pitch
+
+        self.pitch = safe_pitch
+        self.height = safe_height
+        self.turns = safe_turns
+        self.radius = max(0.1, abs(radius))
+        self.wire_radius = max(0.05, abs(wire_radius))
+        self.cone_angle = float(cone_angle)
+        self.is_left_handed = bool(is_left_handed)
+        self.axis = str(axis).upper()
+        self.is_subtractive = bool(is_subtractive)
+        self.segments_per_turn = max(12, int(segments_per_turn))
+        self.target_body_id = target_body_id
+
+        if operation is not None:
+            self.operation = operation
+        else:
+            self.operation = BooleanOperation.CUT if self.is_subtractive else BooleanOperation.NEW_BODY
+
+        self.parameters = {
+            "pitch": self.pitch,
+            "height": self.height,
+            "turns": self.turns,
+            "radius": self.radius,
+            "wire_radius": self.wire_radius,
+            "cone_angle": self.cone_angle,
+            "is_left_handed": 1.0 if self.is_left_handed else 0.0,
+            "is_subtractive": 1.0 if self.is_subtractive else 0.0,
+        }
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère l'hélice volumique 3D étanche et l'intègre au modèle (ajout ou soustraction)."""
+        p = max(0.1, self.parameters.get("pitch", self.pitch))
+        h = max(0.1, self.parameters.get("height", self.height))
+        r = max(0.1, self.parameters.get("radius", self.radius))
+        wr = max(0.05, self.parameters.get("wire_radius", self.wire_radius))
+        c_ang = float(self.parameters.get("cone_angle", self.cone_angle))
+        left_h = bool(self.parameters.get("is_left_handed", 1.0 if self.is_left_handed else 0.0) > 0.5)
+
+        turns = h / p
+        total_pts = max(16, int(turns * self.segments_per_turn))
+        t_vals = np.linspace(0.0, 1.0, total_pts, endpoint=True)
+
+        hand_sign = -1.0 if left_h else 1.0
+        thetas = 2.0 * np.pi * turns * t_vals * hand_sign
+        zs = t_vals * h
+
+        if abs(c_ang) > 1e-4:
+            tan_cone = float(np.tan(np.radians(c_ang)))
+            rs = np.maximum(0.1, r + zs * tan_cone)
+        else:
+            rs = np.full_like(zs, r)
+
+        xs = rs * np.cos(thetas)
+        ys = rs * np.sin(thetas)
+        pts: List[np.ndarray] = [np.array([x, y, z], dtype=np.float32) for x, y, z in zip(xs, ys, zs)]
+
+        cyls: List[m.Manifold] = []
+        for i in range(len(pts) - 1):
+            p0 = pts[i]
+            p1 = pts[i + 1]
+            v = p1 - p0
+            seg_len = float(np.linalg.norm(v))
+            if seg_len < 1e-4:
+                continue
+
+            v_norm = v / seg_len
+            z_axis = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+            dot = float(np.dot(z_axis, v_norm))
+            if abs(dot - 1.0) < 1e-6:
+                rot_mat = np.eye(3, dtype=np.float32)
+            elif abs(dot + 1.0) < 1e-6:
+                rot_mat = np.diag([1.0, -1.0, -1.0]).astype(np.float32)
+            else:
+                k = np.cross(z_axis, v_norm)
+                k_len = float(np.linalg.norm(k))
+                k = k / k_len
+                c = dot
+                s = k_len
+                skew_k = np.array([
+                    [0.0, -k[2], k[1]],
+                    [k[2], 0.0, -k[0]],
+                    [-k[1], k[0], 0.0]
+                ], dtype=np.float32)
+                rot_mat = np.eye(3, dtype=np.float32) + s * skew_k + (1.0 - c) * (skew_k @ skew_k)
+
+            trans_mat = np.zeros((3, 4), dtype=np.float32)
+            trans_mat[:3, :3] = rot_mat
+            trans_mat[:3, 3] = p0
+
+            cyl_m = m.Manifold.cylinder(seg_len, wr, wr, 16).transform(trans_mat)
+            sph_m = m.Manifold.sphere(wr, 16).translate(list(p0))
+            cyls.append(cyl_m)
+            cyls.append(sph_m)
+
+        cyls.append(m.Manifold.sphere(wr, 16).translate(list(pts[-1])))
+        if not cyls:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        helix_manifold = m.Manifold.batch_boolean(cyls, m.OpType.Add)
+
+        # Orientation de l'axe de l'hélice
+        if self.axis == "X":
+            helix_manifold = helix_manifold.rotate([0.0, 90.0, 0.0])
+        elif self.axis == "Y":
+            helix_manifold = helix_manifold.rotate([-90.0, 0.0, 0.0])
+
+        solid = Solid(helix_manifold, self.name)
+        self.status = FeatureStatus.OK
+        return _apply_boolean_operation(existing_bodies, solid, self.operation, self.body_id, self.target_body_id)
+
+
+class RibFeature(Feature):
+    """
+    Fonctionnalité de nervure / renfort de structure (FreeCAD PartDesign::Rib).
+    Extrude un profil d'esquisse (triangle de gousset, nervure de raidissement)
+    de manière symétrique par rapport au plan d'esquisse et le fusionne avec le corps cible.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Rib",
+        sketch_id: str = "",
+        thickness: float = 4.0,
+        symmetric: bool = True,
+        draft_angle: float = 0.0,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.sketch_id = sketch_id
+        self.thickness = max(0.1, abs(thickness))
+        self.symmetric = symmetric
+        self.draft_angle = float(draft_angle)
+        self.operation = BooleanOperation.JOIN
+        self.target_body_id = target_body_id
+        self.parameters = {
+            "thickness": self.thickness,
+            "symmetric": 1.0 if self.symmetric else 0.0,
+            "draft_angle": self.draft_angle,
+        }
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Génère la nervure volumique et la fusionne avec le corps cible."""
+        if self.sketch_id not in sketches:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        sketch = sketches[self.sketch_id]
+        profile = sketch.get_primary_profile()
+        if not profile or len(profile) < 3:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        t = max(0.1, self.parameters.get("thickness", self.thickness))
+        sym = bool(self.parameters.get("symmetric", 1.0 if self.symmetric else 0.0) > 0.5)
+        draft = float(self.parameters.get("draft_angle", self.draft_angle))
+
+        rib_solid = extrude_polygon(
+            profile,
+            t,
+            plane=sketch.plane,
+            plane_offset=sketch.offset_distance,
+            symmetric=sym,
+            taper_angle=draft,
+            name=self.name
+        )
+        self.status = FeatureStatus.OK
+        return _apply_boolean_operation(existing_bodies, rib_solid, self.operation, self.body_id, self.target_body_id)
+
+

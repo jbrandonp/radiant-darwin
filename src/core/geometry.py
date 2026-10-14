@@ -398,26 +398,59 @@ def extrude_polygon(
     height: float,
     plane: PlaneType = PlaneType.XY,
     plane_offset: float = 0.0,
+    symmetric: bool = False,
+    taper_angle: float = 0.0,
+    twist_degrees: float = 0.0,
     name: str = "Extrude"
 ) -> Solid:
     """
-    Extrude un contour 2D fermé pour créer un solide 3D.
+    Extrude un contour 2D fermé pour créer un solide 3D avec support des options avancées FreeCAD :
     - points : liste ordonnée des sommets du polygone 2D
     - height : distance d'extrusion normale au plan
     - plane : plan d'esquisse de référence (XY, XZ ou YZ)
     - plane_offset : décalage le long de l'axe normal au plan (Datum Plane)
+    - symmetric : extrusion symétrique par rapport au plan d'esquisse (Pad symétrique FreeCAD)
+    - taper_angle : angle de dépouille (draft angle) en degrés (>0 évasé, <0 rétréci)
+    - twist_degrees : angle de torsion hélicoïdale de la face supérieure en degrés
     """
     if len(points) < 3:
         raise ValueError("Un polygone d'extrusion nécessite au moins 3 points.")
 
-    poly_coords: List[List[float]] = [[pt.u, pt.v] for pt in points]
-    cs = m.CrossSection([poly_coords])
-    if height < 0.0:
-        abs_h = max(0.001, abs(height))
-        solid_manifold = m.Manifold.extrude(cs, abs_h).translate([0.0, 0.0, -abs_h])
+    abs_h = max(0.001, abs(height))
+    cu = sum(pt.u for pt in points) / float(len(points))
+    cv = sum(pt.v for pt in points) / float(len(points))
+
+    has_advanced = (abs(taper_angle) > 1e-4) or (abs(twist_degrees) > 1e-4)
+
+    if has_advanced:
+        centered_coords: List[List[float]] = [[pt.u - cu, pt.v - cv] for pt in points]
+        cs = m.CrossSection([centered_coords])
+
+        u_vals = [pt.u for pt in points]
+        v_vals = [pt.v for pt in points]
+        span_u = max(u_vals) - min(u_vals)
+        span_v = max(v_vals) - min(v_vals)
+
+        if abs(taper_angle) > 1e-4:
+            delta = abs_h * float(np.tan(np.radians(taper_angle)))
+            sx = max(0.01, (span_u + 2.0 * delta) / span_u) if span_u > 1e-4 else 1.0
+            sy = max(0.01, (span_v + 2.0 * delta) / span_v) if span_v > 1e-4 else 1.0
+            scale_top = (sx, sy)
+        else:
+            scale_top = (1.0, 1.0)
+
+        n_divisions = max(10, int(abs(twist_degrees) / 5.0)) if abs(twist_degrees) > 1e-4 else 10
+        solid_manifold = m.Manifold.extrude(cs, abs_h, n_divisions=n_divisions, twist_degrees=twist_degrees, scale_top=scale_top)
+        solid_manifold = solid_manifold.translate([cu, cv, 0.0])
     else:
-        safe_height = max(0.001, height)
-        solid_manifold = m.Manifold.extrude(cs, safe_height)
+        poly_coords: List[List[float]] = [[pt.u, pt.v] for pt in points]
+        cs = m.CrossSection([poly_coords])
+        solid_manifold = m.Manifold.extrude(cs, abs_h)
+
+    if symmetric:
+        solid_manifold = solid_manifold.translate([0.0, 0.0, -abs_h / 2.0])
+    elif height < 0.0:
+        solid_manifold = solid_manifold.translate([0.0, 0.0, -abs_h])
 
     # Réorienter selon le plan choisi
     if plane == PlaneType.XZ:

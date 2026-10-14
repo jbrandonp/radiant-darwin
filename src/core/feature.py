@@ -269,8 +269,8 @@ class WedgeFeature(Feature):
 
 class ExtrudeFeature(Feature):
     """
-    Fonctionnalité maîtresse d'extrusion paramétrique d'une esquisse 2D.
-    Consomme un profil de Sketch2D et l'extrude sur une distance donnée.
+    Fonctionnalité maîtresse d'extrusion paramétrique d'une esquisse 2D style FreeCAD Pad.
+    Consomme un profil de Sketch2D et l'extrude avec support du mode symétrique, dépouille et torsion.
     """
 
     def __init__(
@@ -279,13 +279,22 @@ class ExtrudeFeature(Feature):
         name: str = "Extrude",
         sketch_id: str = "",
         distance: float = 25.0,
+        symmetric: bool = False,
+        taper_angle: float = 0.0,
+        twist_degrees: float = 0.0,
         operation: BooleanOperation = BooleanOperation.NEW_BODY,
         target_body_id: Optional[str] = None
     ) -> None:
         super().__init__(feature_id, name)
         self.sketch_id = sketch_id
+        self.symmetric = symmetric
+        self.taper_angle = float(taper_angle)
+        self.twist_degrees = float(twist_degrees)
         self.parameters = {
             "distance": float(distance),
+            "symmetric": 1.0 if symmetric else 0.0,
+            "taper_angle": float(taper_angle),
+            "twist_degrees": float(twist_degrees),
         }
         self.operation = operation
         self.target_body_id = target_body_id
@@ -303,10 +312,24 @@ class ExtrudeFeature(Feature):
             self.status = FeatureStatus.ERROR
             return dict(existing_bodies)
 
-        dist = float(self.parameters["distance"])
+        dist = float(self.parameters.get("distance", 25.0))
         if abs(dist) < 0.001:
             dist = 0.001
-        new_solid = extrude_polygon(profile, dist, plane=sketch.plane, plane_offset=sketch.offset_distance, name=self.name)
+
+        sym = bool(self.parameters.get("symmetric", 0.0) > 0.5 or getattr(self, "symmetric", False))
+        taper = float(self.parameters.get("taper_angle", getattr(self, "taper_angle", 0.0)))
+        twist = float(self.parameters.get("twist_degrees", getattr(self, "twist_degrees", 0.0)))
+
+        new_solid = extrude_polygon(
+            profile,
+            dist,
+            plane=sketch.plane,
+            plane_offset=sketch.offset_distance,
+            symmetric=sym,
+            taper_angle=taper,
+            twist_degrees=twist,
+            name=self.name
+        )
         self.status = FeatureStatus.OK
         return _apply_boolean_operation(existing_bodies, new_solid, self.operation, self.body_id, self.target_body_id)
 

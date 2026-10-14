@@ -11,7 +11,9 @@ from src.core.feature import (
 )
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
-    MirrorFeature, HoleFeature, ShellFeature, PipeFeature
+    MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
+    PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature,
+    HelixFeature, RibFeature
 )
 from src.core.document import CADDocument
 from src.core.exporter import CADExporter
@@ -48,6 +50,12 @@ __all__ = [
     "MirrorFeature",
     "HoleFeature",
     "ShellFeature",
+    "PocketFeature",
+    "DatumPlaneFeature",
+    "GrooveFeature",
+    "MultiTransformFeature",
+    "HelixFeature",
+    "RibFeature",
     "CADDocument",
     "CADExporter",
     "ProjectSerializer",

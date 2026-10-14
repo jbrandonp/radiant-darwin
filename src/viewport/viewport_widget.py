@@ -5,7 +5,7 @@ et l'intégration du ViewCube.
 """
 
 from __future__ import annotations
-from typing import Optional, List
+from typing import Optional, List, Callable
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent, QSurfaceFormat
@@ -16,6 +16,7 @@ from src.viewport.camera import CADCamera
 from src.viewport.gl_renderer import GLRenderer
 from src.viewport.view_cube import ViewCubeOverlay
 from src.viewport.nav_bar import ViewportNavBar
+from src.viewport.ray_picking import RayPicker, PickResult, PickedEntityType
 
 
 class CADViewportWidget(QOpenGLWidget):
@@ -34,6 +35,8 @@ class CADViewportWidget(QOpenGLWidget):
         self.camera: CADCamera = CADCamera()
         self.renderer: GLRenderer = GLRenderer()
         self.cached_buffers: List[MeshBuffer] = []
+        self.selected_pick: Optional[PickResult] = None
+        self._pick_listeners: List[Callable[[PickResult], None]] = []
 
         self._last_mouse_pos: QPoint = QPoint()
         self._is_orbiting: bool = False
@@ -107,9 +110,24 @@ class CADViewportWidget(QOpenGLWidget):
         if clipboard:
             clipboard.setImage(img)
 
+    def register_pick_listener(self, callback: Callable[[PickResult], None]) -> None:
+        """Enregistre un écouteur appelé lorsqu'une entité 3D est cliquée avec la souris."""
+        self._pick_listeners.append(callback)
+
+    def clear_selection(self) -> None:
+        """Désélectionne toute entité active et redessine."""
+        self.selected_pick = None
+        self.update()
+
     def paintGL(self) -> None:
         """Effectue le rendu graphique de la scène."""
-        self.renderer.render_scene(self.camera, self.cached_buffers, self.width(), self.height())
+        self.renderer.render_scene(
+            self.camera,
+            self.cached_buffers,
+            self.width(),
+            self.height(),
+            selected_pick=self.selected_pick
+        )
 
     def on_document_changed(self) -> None:
         """Met à jour les maillages mis en cache et redessine la scène."""
@@ -161,6 +179,26 @@ class CADViewportWidget(QOpenGLWidget):
         # Alt + Clic Gauche = ORBIT
         elif event.button() == Qt.MouseButton.LeftButton and (mods & Qt.KeyboardModifier.AltModifier):
             self._is_orbiting = True
+        # Clic Gauche Simple = SÉLECTION INTERACTIVE 3D (RAY PICKING)
+        elif event.button() == Qt.MouseButton.LeftButton:
+            m_pos = event.position()
+            hit = RayPicker.pick_from_screen(
+                screen_x=float(m_pos.x()),
+                screen_y=float(m_pos.y()),
+                viewport_width=self.width(),
+                viewport_height=self.height(),
+                camera=self.camera,
+                bodies=self.document.bodies,
+                edge_tolerance=3.0
+            )
+            self.selected_pick = hit if hit.has_hit else None
+            if self.selected_pick is not None:
+                for cb in self._pick_listeners:
+                    try:
+                        cb(self.selected_pick)
+                    except Exception as err:
+                        print(f"Erreur callback sélection 3D : {err}")
+            self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Gère le déplacement de la souris lors des opérations d'orbite et de pan."""

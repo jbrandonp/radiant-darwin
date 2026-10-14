@@ -153,3 +153,7 @@ class AerodynamicsSolver:
             separation_risk=separation_risk,
             pressure_coefficients=cp
         )
+
+
+# Alias de clarification technique
+NacaAnalyticPolar = AerodynamicsSolver

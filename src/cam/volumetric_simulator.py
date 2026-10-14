@@ -264,3 +264,7 @@ class CNCPostProcessorRegistry:
             for pt in path:
                 flat_points.append(ToolpathPoint(x=pt[0], y=pt[1], z=pt[2], feed_rate=feedrate_mm_min, spindle_rpm=spindle_rpm))
         return cls.generate_program(dialect.value, flat_points)
+
+
+# Alias de clarification technique
+VoxelRoughingPreview = VolumetricStockSimulator

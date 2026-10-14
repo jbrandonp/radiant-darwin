@@ -12,6 +12,7 @@ from src.core.geometry import Solid
 from src.core.sketch import Sketch2D
 from src.core.feature import Feature
 from src.core.types import MeshBuffer, FeatureStatus
+from src.core.assembly import AssemblyInstance, AssemblyMate, AssemblySolver
 
 
 class CADDocument:
@@ -26,6 +27,9 @@ class CADDocument:
         self.sketches: Dict[str, Sketch2D] = {}
         self.features: List[Feature] = []
         self.bodies: Dict[str, Solid] = {}
+        # Atelier d'Assemblage Multi-Pièces
+        self.assembly_instances: Dict[str, AssemblyInstance] = {}
+        self.assembly_mates: List[AssemblyMate] = []
         # Curseur de retour dans le temps (Rollback) : -1 signifie tout évaluer
         self.rollback_index: int = -1
         self._counter: int = 0
@@ -192,14 +196,52 @@ class CADDocument:
         self._notify_change()
 
     def get_all_mesh_buffers(self) -> List[MeshBuffer]:
-        """Convertit tous les corps solides visibles en tampons maillés pour OpenGL."""
+        """Convertit tous les corps solides et instances d'assemblage en tampons maillés pour OpenGL."""
         buffers: List[MeshBuffer] = []
         for body in self.bodies.values():
             buf = body.to_mesh_buffer()
             if not buf.is_empty():
                 buffers.append(buf)
+
+        # Inclure les instances positionnées de l'assemblage
+        for inst in self.assembly_instances.values():
+            inst_solid = inst.get_transformed_solid()
+            buf = inst_solid.to_mesh_buffer()
+            if not buf.is_empty():
+                buffers.append(buf)
+
         return buffers
 
     def get_active_body_ids(self) -> List[str]:
         """Retourne la liste des identifiants des corps 3D actuellement existants."""
         return list(self.bodies.keys())
+
+    # --- Méthodes de l'Atelier d'Assemblage Multi-Pièces ---
+
+    def add_assembly_instance(
+        self,
+        instance_id: str,
+        solid: Solid,
+        name: str = "Component",
+        is_grounded: bool = False
+    ) -> AssemblyInstance:
+        """Ajoute une pièce instanciée dans l'assemblage."""
+        inst = AssemblyInstance(instance_id=instance_id, solid=solid, name=name, is_grounded=is_grounded)
+        self.assembly_instances[instance_id] = inst
+        self._notify_change()
+        return inst
+
+    def add_assembly_mate(self, mate: AssemblyMate) -> None:
+        """Ajoute une contrainte géométrique d'assemblage."""
+        self.assembly_mates.append(mate)
+        self.solve_assembly()
+
+    def solve_assembly(self) -> bool:
+        """Résout le positionnement relatif des composants et actualise l'affichage."""
+        success = AssemblySolver.solve_mates(self.assembly_instances, self.assembly_mates)
+        self._notify_change()
+        return success
+
+    def check_assembly_collisions(self) -> List[Tuple[str, str, float]]:
+        """Détecte les collisions et interférences physiques réelles entre pièces (en mm³)."""
+        return AssemblySolver.detect_collisions(self.assembly_instances)

@@ -275,3 +275,7 @@ class NonlinearFEASolver:
         u_total[free_dofs] = u_free
         return u_total
 
+
+# Alias de clarification technique
+LinearTetraDemoSolver = NonlinearFEASolver
+

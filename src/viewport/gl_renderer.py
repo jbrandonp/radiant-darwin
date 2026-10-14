@@ -12,6 +12,7 @@ from OpenGL.GLU import gluPerspective, gluLookAt
 
 from src.core.types import MeshBuffer, Vector3D, ColorRGBA
 from src.viewport.camera import CADCamera
+from src.viewport.ray_picking import PickResult, PickedEntityType
 
 
 class GLRenderer:
@@ -138,7 +139,14 @@ class GLRenderer:
         GL.glDepthMask(GL.GL_TRUE)
         GL.glEnable(GL.GL_DEPTH_TEST)
 
-    def render_scene(self, camera: CADCamera, mesh_buffers: List[MeshBuffer], width: int, height: int) -> None:
+    def render_scene(
+        self,
+        camera: CADCamera,
+        mesh_buffers: List[MeshBuffer],
+        width: int,
+        height: int,
+        selected_pick: Optional[PickResult] = None
+    ) -> None:
         """Effectue le rendu complet de la scène 3D."""
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
 
@@ -177,8 +185,31 @@ class GLRenderer:
                 self._draw_mesh_edges(buffer)
             GL.glEnable(GL.GL_LIGHTING)
 
-        # 4. Rendu du repère d'orientation (Trièdre X, Y, Z) en bas à gauche
+        # 4. Rendu de la surbrillance de sélection 3D (Picking interactif)
+        if selected_pick is not None and selected_pick.has_hit:
+            self._draw_pick_highlight(selected_pick)
+
+        # 5. Rendu du repère d'orientation (Trièdre X, Y, Z) en bas à gauche
         self._draw_orientation_triad(camera, width, height)
+
+    def _draw_pick_highlight(self, pick_result: PickResult) -> None:
+        """Dessine en surbrillance ambre / or le point et la normale de l'entité cliquée."""
+        GL.glDisable(GL.GL_LIGHTING)
+        GL.glPointSize(8.0)
+        GL.glLineWidth(3.0)
+        GL.glColor4f(1.0, 0.65, 0.0, 1.0)
+
+        pt = pick_result.hit_point
+        GL.glBegin(GL.GL_POINTS)
+        GL.glVertex3f(float(pt.x), float(pt.y), float(pt.z))
+        GL.glEnd()
+
+        if pick_result.entity_type == PickedEntityType.FACE:
+            n = pick_result.normal
+            GL.glBegin(GL.GL_LINES)
+            GL.glVertex3f(float(pt.x), float(pt.y), float(pt.z))
+            GL.glVertex3f(float(pt.x + n.x * 15.0), float(pt.y + n.y * 15.0), float(pt.z + n.z * 15.0))
+            GL.glEnd()
 
     def _draw_shaded_mesh(self, buffer: MeshBuffer) -> None:
         """Dessine les faces du maillage avec éclairage, normales et reflet spéculaire."""

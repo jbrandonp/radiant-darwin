@@ -43,6 +43,7 @@ from src.sheetmetal.sheet_metal import SheetMetalPart, SheetMetalRule, FlatPatte
 from src.sheetmetal.dxf_exporter import DXFExporter
 from src.viewport.viewport_widget import CADViewportWidget
 from src.viewport.sketch_mode import ViewportSketchController
+from src.viewport.ray_picking import PickResult, PickedEntityType
 from src.ui.ribbon import CADRibbonBar
 from src.ui.browser_tree import CADBrowserTree
 from src.ui.timeline import CADTimeline
@@ -111,6 +112,8 @@ class CADMainWindow(QMainWindow):
 
         # 2. Viewport 3D
         self.viewport = CADViewportWidget(self.document)
+        self.last_picked_entity: Optional[PickResult] = None
+        self.viewport.register_pick_listener(self._on_viewport_entity_picked)
         central_layout.addWidget(self.viewport, 1)
 
         # 3. Timeline d'historique
@@ -799,11 +802,50 @@ class CADMainWindow(QMainWindow):
         self.document._notify_change()
         self.status_bar.showMessage(f"Maillage {body_id} réparé et actualisé", 3000)
 
+    def _on_viewport_entity_picked(self, pick_res: PickResult) -> None:
+        """Réagit à la sélection 3D interactive dans le Viewport (Ray Picking)."""
+        self.last_picked_entity = pick_res
+        if pick_res.entity_type == PickedEntityType.FACE:
+            self.status_bar.showMessage(
+                f"Face sélectionnée : {pick_res.face_id} ({pick_res.body_id}) | "
+                f"Normale: ({pick_res.normal.x:.2f}, {pick_res.normal.y:.2f}, {pick_res.normal.z:.2f}) - "
+                f"Prête pour 'Nouvelle Esquisse' ou 'Extrusion directe'",
+                6000
+            )
+        elif pick_res.entity_type == PickedEntityType.EDGE:
+            self.status_bar.showMessage(
+                f"Arête sélectionnée : {pick_res.edge_id} ({pick_res.body_id}) - "
+                f"Prête pour 'Congé' ou 'Chanfrein'",
+                6000
+            )
+
     # --- Actions Esquisse & Solveur ---
     def _create_sketch(self, plane: PlaneType) -> None:
+        used_plane = plane
+        offset = 0.0
+
+        # Si l'utilisateur a cliqué sur une face 3D dans le viewport, s'attacher directement dessus
+        if self.last_picked_entity is not None and self.last_picked_entity.entity_type == PickedEntityType.FACE:
+            n = self.last_picked_entity.normal
+            pt = self.last_picked_entity.hit_point
+            if abs(n.z) > 0.7:
+                used_plane = PlaneType.XY
+                offset = pt.z
+            elif abs(n.y) > 0.7:
+                used_plane = PlaneType.XZ
+                offset = pt.y
+            elif abs(n.x) > 0.7:
+                used_plane = PlaneType.YZ
+                offset = pt.x
+            self.status_bar.showMessage(
+                f"Esquisse attachée directement sur {self.last_picked_entity.face_id} "
+                f"(Plan {used_plane.value}, décalage {offset:.1f} mm)",
+                5000
+            )
+
         self._sketch_seq += 1
         s_id = f"sketch_{self._sketch_seq}"
-        sketch = Sketch2D(s_id, f"Esquisse {self._sketch_seq}", plane=plane)
+        sketch = Sketch2D(s_id, f"Esquisse {self._sketch_seq}", plane=used_plane, offset_distance=offset)
         sketch.add_rectangle(Point2D(-20.0, -15.0), 40.0, 30.0)
         self.document.add_sketch(sketch)
 

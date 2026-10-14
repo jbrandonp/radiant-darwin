@@ -94,6 +94,17 @@ class SafeExpressionEvaluator:
         "pi": lambda: math.pi,
     }
 
+    BUILTIN_CONSTANTS_AND_UNITS: Dict[str, float] = {
+        "pi": math.pi,
+        "e": math.e,
+        "mm": 1.0,
+        "cm": 10.0,
+        "m": 1000.0,
+        "inch": 25.4,
+        "deg": 1.0,
+        "rad": 180.0 / math.pi,
+    }
+
     @classmethod
     def evaluate(cls, expression_str: str, context: Dict[str, float]) -> float:
         """
@@ -131,22 +142,8 @@ class SafeExpressionEvaluator:
             if var_name in context:
                 return float(context[var_name])
             low_name = var_name.lower()
-            if low_name == "pi":
-                return math.pi
-            elif low_name == "e":
-                return math.e
-            elif low_name == "mm":
-                return 1.0
-            elif low_name == "cm":
-                return 10.0
-            elif low_name == "m":
-                return 1000.0
-            elif low_name == "inch":
-                return 25.4
-            elif low_name == "deg":
-                return 1.0
-            elif low_name == "rad":
-                return 180.0 / math.pi
+            if low_name in cls.BUILTIN_CONSTANTS_AND_UNITS:
+                return cls.BUILTIN_CONSTANTS_AND_UNITS[low_name]
             raise ValueError(f"Variable inconnue '{var_name}'")
 
         elif isinstance(node, ast.UnaryOp):  # Opération unaire (-x, +x)

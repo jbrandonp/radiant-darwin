@@ -1167,6 +1167,55 @@ class MultiTransformFeature(Feature):
         self.steps.append(step)
         return step
 
+    @staticmethod
+    def _apply_linear_step(step: MultiTransformStep, solids: List[Solid]) -> List[Solid]:
+        """Applique une étape de translation linéaire répétée."""
+        result: List[Solid] = []
+        for s in solids:
+            for i in range(step.count):
+                disp = float(i) * step.spacing
+                if step.axis == "Y":
+                    t = [0.0, disp, 0.0]
+                elif step.axis == "Z":
+                    t = [0.0, 0.0, disp]
+                else:
+                    t = [disp, 0.0, 0.0]
+                result.append(s.translate(t))
+        return result
+
+    @staticmethod
+    def _apply_circular_step(step: MultiTransformStep, solids: List[Solid]) -> List[Solid]:
+        """Applique une étape de rotation circulaire répétée."""
+        result: List[Solid] = []
+        num = step.count
+        step_ang = step.total_angle / float(num) if num > 1 else 0.0
+        for s in solids:
+            for i in range(num):
+                ang = float(i) * step_ang
+                if step.axis == "X":
+                    rot = [ang, 0.0, 0.0]
+                elif step.axis == "Y":
+                    rot = [0.0, ang, 0.0]
+                else:
+                    rot = [0.0, 0.0, ang]
+                result.append(s.rotate(rot[0], rot[1], rot[2]))
+        return result
+
+    @staticmethod
+    def _apply_mirror_step(step: MultiTransformStep, solids: List[Solid]) -> List[Solid]:
+        """Applique une étape de symétrie miroir."""
+        result: List[Solid] = []
+        for s in solids:
+            result.append(s)
+            if step.mirror_plane == PlaneType.XY:
+                m_solid = s.scale(1.0, 1.0, -1.0)
+            elif step.mirror_plane == PlaneType.XZ:
+                m_solid = s.scale(1.0, -1.0, 1.0)
+            else:
+                m_solid = s.scale(-1.0, 1.0, 1.0)
+            result.append(m_solid)
+        return result
+
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Applique séquentiellement toutes les transformations configurées."""
         updated = dict(existing_bodies)
@@ -1179,46 +1228,12 @@ class MultiTransformFeature(Feature):
         current_solids: List[Solid] = [base_solid]
 
         for step in self.steps:
-            new_set: List[Solid] = []
             if step.transform_type == "linear":
-                for s in current_solids:
-                    for i in range(step.count):
-                        disp = float(i) * step.spacing
-                        if step.axis == "Y":
-                            t = [0.0, disp, 0.0]
-                        elif step.axis == "Z":
-                            t = [0.0, 0.0, disp]
-                        else:
-                            t = [disp, 0.0, 0.0]
-                        new_set.append(s.translate(t))
-
+                current_solids = self._apply_linear_step(step, current_solids)
             elif step.transform_type == "circular":
-                for s in current_solids:
-                    num = step.count
-                    step_ang = step.total_angle / float(num) if num > 1 else 0.0
-                    for i in range(num):
-                        ang = float(i) * step_ang
-                        if step.axis == "X":
-                            rot = [ang, 0.0, 0.0]
-                        elif step.axis == "Y":
-                            rot = [0.0, ang, 0.0]
-                        else:
-                            rot = [0.0, 0.0, ang]
-                        new_set.append(s.rotate(rot[0], rot[1], rot[2]))
-
+                current_solids = self._apply_circular_step(step, current_solids)
             elif step.transform_type == "mirror":
-                for s in current_solids:
-                    new_set.append(s)
-                    if step.mirror_plane == PlaneType.XY:
-                        m_solid = s.scale(1.0, 1.0, -1.0)
-                    elif step.mirror_plane == PlaneType.XZ:
-                        m_solid = s.scale(1.0, -1.0, 1.0)
-                    else:
-                        m_solid = s.scale(-1.0, 1.0, 1.0)
-                    new_set.append(m_solid)
-
-            if new_set:
-                current_solids = new_set
+                current_solids = self._apply_mirror_step(step, current_solids)
 
         if not current_solids:
             self.status = FeatureStatus.ERROR

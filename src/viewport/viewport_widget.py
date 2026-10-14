@@ -17,6 +17,9 @@ from src.viewport.gl_renderer import GLRenderer
 from src.viewport.view_cube import ViewCubeOverlay
 from src.viewport.nav_bar import ViewportNavBar
 from src.viewport.ray_picking import RayPicker, PickResult, PickedEntityType
+from src.viewport.viewport_shading import ShadingMode
+from src.viewport.snap_engine import SnapResult
+from src.core.push_pull import PushPullEngine
 
 
 class CADViewportWidget(QOpenGLWidget):
@@ -36,6 +39,7 @@ class CADViewportWidget(QOpenGLWidget):
         self.renderer: GLRenderer = GLRenderer()
         self.cached_buffers: List[MeshBuffer] = []
         self.selected_pick: Optional[PickResult] = None
+        self.current_snap: Optional[SnapResult] = None
         self._pick_listeners: List[Callable[[PickResult], None]] = []
 
         self._last_mouse_pos: QPoint = QPoint()
@@ -59,6 +63,9 @@ class CADViewportWidget(QOpenGLWidget):
         self.nav_bar.zoom_fit_requested.connect(self.fit_view)
         self.nav_bar.toggle_grid_requested.connect(self._toggle_grid)
         self.nav_bar.toggle_edges_requested.connect(self._toggle_edges)
+        self.nav_bar.toggle_shading_requested.connect(self._cycle_shading_mode)
+        self.nav_bar.toggle_snap_requested.connect(self._toggle_snapping)
+        self.nav_bar.toggle_gizmo_requested.connect(self._toggle_gizmo)
         self.nav_bar.snapshot_requested.connect(self._take_snapshot)
 
         # Écouter les modifications du modèle pour redessiner
@@ -126,8 +133,57 @@ class CADViewportWidget(QOpenGLWidget):
             self.cached_buffers,
             self.width(),
             self.height(),
-            selected_pick=self.selected_pick
+            selected_pick=self.selected_pick,
+            snap_result=self.current_snap
         )
+
+    def _cycle_shading_mode(self) -> None:
+        """Bascule séquentiellement entre les modes d'affichage (Blender MatCaps & Fusion 360)."""
+        modes = [
+            ShadingMode.SHADED_EDGES,
+            ShadingMode.MATCAP_CLAY,
+            ShadingMode.MATCAP_RED_WAX,
+            ShadingMode.MATCAP_CHROME,
+            ShadingMode.ZEBRA_STRIPES,
+            ShadingMode.DRAFT_ANGLE,
+            ShadingMode.WIREFRAME
+        ]
+        cur = self.renderer.shading_manager.active_mode
+        idx = (modes.index(cur) + 1) % len(modes)
+        self.renderer.shading_manager.set_shading_mode(modes[idx])
+        self.update()
+
+    def _toggle_snapping(self) -> None:
+        """Active ou désactive l'accrochage magnétique intelligent (Blender Snap)."""
+        self.renderer.snap_engine.is_enabled = not self.renderer.snap_engine.is_enabled
+        self.nav_bar.btn_magnetic_snap.setChecked(self.renderer.snap_engine.is_enabled)
+        self.update()
+
+    def _toggle_gizmo(self) -> None:
+        """Affiche ou masque le manipulateur 3D interactif (Transform Gizmo)."""
+        self.renderer.transform_gizmo.is_visible = not self.renderer.transform_gizmo.is_visible
+        self.nav_bar.btn_gizmo.setChecked(self.renderer.transform_gizmo.is_visible)
+        self.update()
+
+    def execute_press_pull(self, offset_dist: float = 10.0) -> bool:
+        """Applique la modélisation directe Press-Pull Fusion 360 sur l'entité sélectionnée."""
+        if self.selected_pick is None or not self.selected_pick.has_hit:
+            return False
+        body_id = self.selected_pick.body_id
+        if not body_id or body_id not in self.document.bodies:
+            return False
+        solid = self.document.bodies[body_id]
+        res = PushPullEngine.execute_press_pull(
+            solid,
+            self.selected_pick.hit_point,
+            self.selected_pick.normal,
+            offset_dist
+        )
+        if res.success:
+            self.document.bodies[body_id] = res.modified_solid
+            self.document.notify_listeners()
+            return True
+        return False
 
     def on_document_changed(self) -> None:
         """Met à jour les maillages mis en cache et redessine la scène."""
@@ -193,6 +249,7 @@ class CADViewportWidget(QOpenGLWidget):
         )
         self.selected_pick = hit if hit.has_hit else None
         if self.selected_pick is not None:
+            self.renderer.transform_gizmo.set_target(self.selected_pick.hit_point)
             for cb in self._pick_listeners:
                 try:
                     cb(self.selected_pick)
@@ -209,7 +266,7 @@ class CADViewportWidget(QOpenGLWidget):
             self._handle_interactive_pick(event.position())
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """Gère le déplacement de la souris lors des opérations d'orbite et de pan."""
+        """Gère le déplacement de la souris lors des opérations d'orbite, de pan et d'accrochage."""
         current_pos = event.position().toPoint()
         delta = current_pos - self._last_mouse_pos
         dx = float(delta.x())
@@ -222,6 +279,14 @@ class CADViewportWidget(QOpenGLWidget):
         elif self._is_panning:
             self.camera.pan(dx, dy, self.height())
             self.update()
+        else:
+            if self.renderer.snap_engine.is_enabled:
+                self.current_snap = self.renderer.snap_engine.find_best_snap(
+                    current_pos.x(), current_pos.y(),
+                    self.width(), self.height(),
+                    self.camera, self.cached_buffers
+                )
+                self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Relâche les verrous de navigation lors du relâchement du clic."""
@@ -235,11 +300,19 @@ class CADViewportWidget(QOpenGLWidget):
         self.update()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Gère les raccourcis clavier pratiques (F pour recadrer, H pour vue initiale)."""
+        """Gère les raccourcis clavier pratiques (F=fit, H=home, Q=press-pull, M=shading, S=snap, G=gizmo)."""
         if event.key() == Qt.Key.Key_F:
             self.fit_view()
         elif event.key() == Qt.Key.Key_H:
             self.camera.set_preset_view("HOME")
             self.update()
+        elif event.key() == Qt.Key.Key_Q:
+            self.execute_press_pull(10.0)
+        elif event.key() == Qt.Key.Key_M:
+            self._cycle_shading_mode()
+        elif event.key() == Qt.Key.Key_S:
+            self._toggle_snapping()
+        elif event.key() == Qt.Key.Key_G:
+            self._toggle_gizmo()
         else:
             super().keyPressEvent(event)

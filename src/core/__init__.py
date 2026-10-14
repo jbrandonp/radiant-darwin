@@ -35,6 +35,14 @@ from src.core.nexus_kernel import (
     NexusSolid, NexusBRep, NexusVertex, NexusEdge, NexusWire, NexusFace, NexusShell,
     NeuralSDFEngine, DifferentiableGeometryEngine, CADTokenizer, LatentShapeEmbedding
 )
+from src.core.modifier_stack import (
+    ModifierStack, CADModifier, ModifierType,
+    MirrorModifier, ArrayModifier, SolidifyModifier, BevelModifier, BooleanModifier
+)
+from src.core.push_pull import PushPullEngine, PushPullResult
+from src.core.joint_solver import (
+    FusionJointType, JointLimit, JointAnchor, AssemblyJoint, JointKinematicSolver
+)
 
 __all__ = [
     "Vector3D",
@@ -128,4 +136,19 @@ __all__ = [
     "DifferentiableGeometryEngine",
     "CADTokenizer",
     "LatentShapeEmbedding",
+    "ModifierStack",
+    "CADModifier",
+    "ModifierType",
+    "MirrorModifier",
+    "ArrayModifier",
+    "SolidifyModifier",
+    "BevelModifier",
+    "BooleanModifier",
+    "PushPullEngine",
+    "PushPullResult",
+    "FusionJointType",
+    "JointLimit",
+    "JointAnchor",
+    "AssemblyJoint",
+    "JointKinematicSolver",
 ]

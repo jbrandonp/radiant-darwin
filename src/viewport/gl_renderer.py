@@ -13,6 +13,9 @@ from OpenGL.GLU import gluPerspective, gluLookAt
 from src.core.types import MeshBuffer, Vector3D, ColorRGBA
 from src.viewport.camera import CADCamera
 from src.viewport.ray_picking import PickResult, PickedEntityType
+from src.viewport.viewport_shading import ViewportShadingManager, ShadingMode
+from src.viewport.snap_engine import MagneticSnapEngine, SnapResult
+from src.viewport.transform_gizmo import TransformGizmo
 
 
 class GLRenderer:
@@ -26,6 +29,9 @@ class GLRenderer:
         self.show_edges: bool = True
         self.bg_color_top: Tuple[float, float, float] = (0.22, 0.24, 0.28)    # Ardoise studio claire
         self.bg_color_bottom: Tuple[float, float, float] = (0.12, 0.13, 0.16) # Graphite sombre profond
+        self.shading_manager: ViewportShadingManager = ViewportShadingManager()
+        self.snap_engine: MagneticSnapEngine = MagneticSnapEngine()
+        self.transform_gizmo: TransformGizmo = TransformGizmo()
         self._grid_minor_pts: Optional[np.ndarray] = None
         self._grid_major_pts: Optional[np.ndarray] = None
         self._rebuild_grid_geometry()
@@ -145,9 +151,10 @@ class GLRenderer:
         mesh_buffers: List[MeshBuffer],
         width: int,
         height: int,
-        selected_pick: Optional[PickResult] = None
+        selected_pick: Optional[PickResult] = None,
+        snap_result: Optional[SnapResult] = None
     ) -> None:
-        """Effectue le rendu complet de la scène 3D."""
+        """Effectue le rendu complet de la scène 3D avec styles de rendu Blender et Fusion 360."""
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
 
         # 0. Fond d'écran dégradé studio
@@ -168,28 +175,47 @@ class GLRenderer:
         if self.show_grid:
             self._draw_grid_and_axes()
 
-        # 2. Rendu des corps solides (Faces ombrées avec brillance métallique)
-        GL.glEnable(GL.GL_LIGHTING)
-        GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
-        GL.glPolygonOffset(1.0, 1.0)  # Évite le z-fighting avec les arêtes
+        # Prétraitement des tampons selon le mode de shading actif (MatCap, Zébrure, Dépouille)
+        processed_buffers = [
+            self.shading_manager.apply_shading_to_buffer(buf, eye)
+            for buf in mesh_buffers
+        ]
 
-        for buffer in mesh_buffers:
-            self._draw_shaded_mesh(buffer)
-
-        GL.glDisable(GL.GL_POLYGON_OFFSET_FILL)
-
-        # 3. Rendu des arêtes nettes (Lignes CAD contrastées)
-        if self.show_edges:
+        # 2. Rendu des corps solides (Faces ombrées ou filaire)
+        if self.shading_manager.active_mode == ShadingMode.WIREFRAME:
             GL.glDisable(GL.GL_LIGHTING)
-            for buffer in mesh_buffers:
+            for buffer in processed_buffers:
                 self._draw_mesh_edges(buffer)
             GL.glEnable(GL.GL_LIGHTING)
+        else:
+            GL.glEnable(GL.GL_LIGHTING)
+            GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
+            GL.glPolygonOffset(1.0, 1.0)  # Évite le z-fighting avec les arêtes
+
+            for buffer in processed_buffers:
+                self._draw_shaded_mesh(buffer)
+
+            GL.glDisable(GL.GL_POLYGON_OFFSET_FILL)
+
+            # 3. Rendu des arêtes nettes (Lignes CAD contrastées)
+            if self.show_edges:
+                GL.glDisable(GL.GL_LIGHTING)
+                for buffer in processed_buffers:
+                    self._draw_mesh_edges(buffer)
+                GL.glEnable(GL.GL_LIGHTING)
 
         # 4. Rendu de la surbrillance de sélection 3D (Picking interactif)
         if selected_pick is not None and selected_pick.has_hit:
             self._draw_pick_highlight(selected_pick)
 
-        # 5. Rendu du repère d'orientation (Trièdre X, Y, Z) en bas à gauche
+        # 5. Rendu du Manipulateur 3D interactif (Transform Gizmo style Blender / Fusion 360)
+        self.transform_gizmo.render_gl()
+
+        # 6. Rendu du retour visuel d'accrochage magnétique (Magnetic Snapping)
+        if snap_result is not None and snap_result.has_snap:
+            self.snap_engine.draw_snap_feedback(snap_result)
+
+        # 7. Rendu du repère d'orientation (Trièdre X, Y, Z) en bas à gauche
         self._draw_orientation_triad(camera, width, height)
 
     def _draw_pick_highlight(self, pick_result: PickResult) -> None:

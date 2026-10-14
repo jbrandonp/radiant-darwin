@@ -62,6 +62,8 @@ from src.ui.theme import FUSION_DARK_STYLESHEET
 from src.ui.ai_copilot_dock import AICopilotWidget
 from src.ai.cad_ai_bridge import CADAIExecutionResult
 from src.ai.ai_server import CADAIServer
+from src.ui.modifier_panel import ModifierStackDock
+from src.core.modifier_stack import ModifierStack
 
 
 class CADMainWindow(QMainWindow):
@@ -152,6 +154,11 @@ class CADMainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.copilot_dock)
         self.tabifyDockWidget(self.props_dock, self.copilot_dock)
 
+        # 7. Pile de Modificateurs (Blender Modifier Stack)
+        self.modifier_dock = ModifierStackDock(self)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.modifier_dock)
+        self.tabifyDockWidget(self.copilot_dock, self.modifier_dock)
+
         # Serveur IA local (REST / JSON-RPC / MCP)
         try:
             self.ai_server = CADAIServer(self.copilot_widget.bridge, host="127.0.0.1", port=8765)
@@ -159,7 +166,7 @@ class CADMainWindow(QMainWindow):
         except Exception:
             self.ai_server = None
 
-        self.resizeDocks([self.browser_dock, self.props_dock, self.copilot_dock], [260, 270, 290], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.browser_dock, self.props_dock, self.copilot_dock, self.modifier_dock], [260, 260, 280, 280], Qt.Orientation.Horizontal)
 
         # Barre d'état professionnelle avec badges d'information
         self.status_bar = QStatusBar()
@@ -208,6 +215,8 @@ class CADMainWindow(QMainWindow):
         self.ribbon.fillet_requested.connect(self._on_action_fillet)
         self.ribbon.chamfer_requested.connect(self._on_action_chamfer)
         self.ribbon.draft_requested.connect(self._on_action_draft)
+        self.ribbon.press_pull_requested.connect(self._on_action_press_pull)
+        self.ribbon.modifier_stack_requested.connect(self._on_action_open_modifiers)
 
         # Quincaillerie ISO (FreeCAD Fasteners WB)
         self.ribbon.create_fastener_requested.connect(self._on_action_create_fastener)
@@ -757,6 +766,24 @@ class CADMainWindow(QMainWindow):
                 pull_axis=str(vals["pull_axis"])
             )
             self.document.add_feature(feat)
+
+    def _on_action_press_pull(self) -> None:
+        """Active l'opération de modélisation directe Press-Pull Fusion 360 (Touche Q)."""
+        ok = self.viewport.execute_press_pull(10.0)
+        if ok:
+            self.status_label.setText("Press-Pull appliqué avec succès (+10.0 mm).")
+        else:
+            self.status_label.setText("Veuillez d'abord cliquer sur une face solide dans la vue 3D pour utiliser Press-Pull.")
+
+    def _on_action_open_modifiers(self) -> None:
+        """Affiche et active le panneau de la pile de modificateurs non-destructifs style Blender."""
+        self.modifier_dock.show()
+        self.modifier_dock.raise_()
+        if self.document.bodies:
+            body_key = list(self.document.bodies.keys())[0]
+            stack = ModifierStack(body_key)
+            self.modifier_dock.set_target_stack(stack, self.document.bodies)
+            self.status_label.setText(f"Pile de modificateurs active pour '{body_key}'.")
 
     def _on_action_create_fastener(self, fastener_type: str = "hex_bolt") -> None:
         dlg = FastenerDialog(fastener_type=fastener_type, parent=self)

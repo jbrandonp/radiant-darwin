@@ -22,6 +22,9 @@ class ViewportNavBar(QWidget):
     toggle_grid_requested = Signal()
     toggle_edges_requested = Signal()
     snapshot_requested = Signal()
+    toggle_shading_requested = Signal()
+    toggle_snap_requested = Signal()
+    toggle_gizmo_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """Initialise la barre de navigation avec style translucide sombre."""
@@ -97,6 +100,28 @@ class ViewportNavBar(QWidget):
         self.btn_edges.setToolTip("Afficher / Masquer les arêtes contrastées du solide")
         self.btn_edges.clicked.connect(self.toggle_edges_requested.emit)
         layout.addWidget(self.btn_edges)
+
+        self.btn_shading = QPushButton("🎨 Shading")
+        self.btn_shading.setStyleSheet(btn_style)
+        self.btn_shading.setToolTip("Basculer le style de rendu (CAO, Clay, Red Wax, Chrome, Zébrures, Dépouille)")
+        self.btn_shading.clicked.connect(self.toggle_shading_requested.emit)
+        layout.addWidget(self.btn_shading)
+
+        self.btn_magnetic_snap = QPushButton("🧲 Snap")
+        self.btn_magnetic_snap.setStyleSheet(btn_style)
+        self.btn_magnetic_snap.setCheckable(True)
+        self.btn_magnetic_snap.setChecked(True)
+        self.btn_magnetic_snap.setToolTip("Activer / Désactiver l'accrochage magnétique intelligent (Blender Snap)")
+        self.btn_magnetic_snap.clicked.connect(self.toggle_snap_requested.emit)
+        layout.addWidget(self.btn_magnetic_snap)
+
+        self.btn_gizmo = QPushButton("🧭 Gizmo")
+        self.btn_gizmo.setStyleSheet(btn_style)
+        self.btn_gizmo.setCheckable(True)
+        self.btn_gizmo.setChecked(True)
+        self.btn_gizmo.setToolTip("Afficher / Masquer le manipulateur 3D interactif")
+        self.btn_gizmo.clicked.connect(self.toggle_gizmo_requested.emit)
+        layout.addWidget(self.btn_gizmo)
 
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.VLine)

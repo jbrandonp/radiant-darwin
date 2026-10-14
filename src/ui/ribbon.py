@@ -101,6 +101,8 @@ class CADRibbonBar(QTabWidget):
     fillet_requested = Signal()
     chamfer_requested = Signal()
     draft_requested = Signal()
+    press_pull_requested = Signal()
+    modifier_stack_requested = Signal()
 
     # Quincaillerie & Visserie ISO (FreeCAD Fasteners Workbench)
     create_fastener_requested = Signal(str)
@@ -246,8 +248,14 @@ class CADRibbonBar(QTabWidget):
         btn_pat.clicked.connect(self.pattern_requested.emit)
         btn_comb = RibbonButton("Combiner", "🔀")
         btn_comb.clicked.connect(self.combine_requested.emit)
+        btn_press_pull = RibbonButton("Press-Pull", "🎯")
+        btn_press_pull.setToolTip("Modélisation directe Press-Pull Fusion 360 (Q)")
+        btn_press_pull.clicked.connect(self.press_pull_requested.emit)
+        btn_mod_stack = RibbonButton("Modificateurs", "🧩")
+        btn_mod_stack.setToolTip("Pile de modificateurs non-destructifs style Blender")
+        btn_mod_stack.clicked.connect(self.modifier_stack_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Modifier", [btn_hole, btn_shell, btn_fillet, btn_chamfer, btn_draft, btn_pat, btn_comb]))
+        layout.addWidget(_create_ribbon_group("Modifier", [btn_hole, btn_shell, btn_fillet, btn_chamfer, btn_draft, btn_pat, btn_comb, btn_press_pull, btn_mod_stack]))
         self.addTab(tab, "CONCEPTION")
 
     def _init_sketch_tab(self) -> None:

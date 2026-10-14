@@ -2,7 +2,7 @@
 Système de sélection interactive 3D (Ray-Casting Picking) pour le Viewport CAO.
 Permet d'attraper directement les faces, arêtes et sommets avec le curseur de la souris,
 sans nécessiter la saisie manuelle d'identifiants textuels.
-Strictement typé sans utilisation d'Any.
+Architecture fortement typée.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@ Moteur de Résolution du Problème de Nommage Topologique (TNP Mitigation Engine
 Inspiré de l'algorithme RealThunder (FreeCAD 1.0) et des systèmes de nommage invariants de CATIA V5.
 Génère une empreinte géométrique (Geometric Fingerprint) multi-facteurs pour chaque face et arête,
 permettant aux opérations aval de retrouver leur cible même si la géométrie amont est modifiée ou scindée.
-Strictement typé sans utilisation d'Any.
+Architecture fortement typée.
 """
 
 from __future__ import annotations

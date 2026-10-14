@@ -4,7 +4,7 @@ Atelier d'Assemblage Mécanique & Solveur Cinématique Multi-Corps (Assembly Wor
 Gère les contraintes géométriques (Mates) : coaxialité, coïncidence de plans, distance,
 liaisons pivots (Revolute), glissières (Prismatic), calcul des degrés de liberté (DoF)
 et détection d'interférences volumiques et collisions physiques.
-Strictement typé sans utilisation d'Any.
+Architecture fortement typée.
 """
 
 from __future__ import annotations

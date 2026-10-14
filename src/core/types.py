@@ -71,6 +71,10 @@ class Vector3D:
             return Vector3D(0.0, 0.0, 0.0)
         return Vector3D(self.x / dist, self.y / dist, self.z / dist)
 
+    def normalize(self) -> Vector3D:
+        """Alias retournant le vecteur unitaire colinéaire."""
+        return self.normalized()
+
     def dot(self, other: Vector3D) -> float:
         """Calcule le produit scalaire entre deux vecteurs."""
         return self.x * other.x + self.y * other.y + self.z * other.z

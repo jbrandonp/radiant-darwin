@@ -4,7 +4,7 @@ Post-processeurs CNC Industriels certifiés (Haas, Fanuc, Heidenhain).
 Traduit les opérations de parcours d'outils CAM en G-Code machine certifié
 avec cycles d'usinage, arrosage (M08/M09), compensation de longueur d'outil (G43 H)
 et estimation physique précise du temps d'usinage.
-Strictement typé sans utilisation d'Any.
+Architecture fortement typée.
 """
 
 from __future__ import annotations

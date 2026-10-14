@@ -27,6 +27,8 @@ class ConstraintType(Enum):
     ANGLE = auto()            # Angle fixé entre deux segments
     POINT_ON_LINE = auto()    # Point aligné sur un segment de droite
     TANGENT = auto()          # Segment de droite tangent à un cercle
+    G2_CURVATURE = auto()     # Continuité de courbure G2 (alignement des tangentes et égalité des rayons de courbure)
+    EXTERNAL_REFERENCE = auto() # Projection de géométrie 3D externe dans le plan d'esquisse
 
 
 @dataclass
@@ -140,6 +142,39 @@ class SketchConstraintSolver2D:
             c_idx = int(center)
         self.constraints.append(GeometricConstraint(
             ConstraintType.TANGENT, (pt_line1_idx, pt_line2_idx, c_idx), target_value=max(0.001, float(radius))
+        ))
+
+    def add_g2_curvature(
+        self,
+        pt_a0_idx: int,
+        pt_a1_idx: int,
+        pt_joint_idx: int,
+        pt_b1_idx: int,
+        pt_b2_idx: int,
+    ) -> None:
+        """
+        Contraint deux courbes se rejoignant en un point commun (pt_joint)
+        à avoir une continuité de courbure G2 stricte (même tangente G1 et même rayon de courbure G2).
+        """
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.G2_CURVATURE,
+            (pt_a0_idx, pt_a1_idx, pt_joint_idx, pt_b1_idx, pt_b2_idx)
+        ))
+
+    def add_external_reference(
+        self,
+        pt_idx: int,
+        ref_u: float,
+        ref_v: float
+    ) -> None:
+        """
+        Lie un point d'esquisse à une coordonnée de référence 2D issue d'une arête 3D externe projetée.
+        """
+        self.constraints.append(GeometricConstraint(
+            ConstraintType.EXTERNAL_REFERENCE,
+            (pt_idx,),
+            target_value=float(ref_u),
+            target_value_v=float(ref_v)
         ))
 
     def solve(self, tolerance: float = 1e-6) -> Tuple[bool, List[Point2D]]:
@@ -297,6 +332,40 @@ class SketchConstraintSolver2D:
                 else:
                     res.append(0.0)
 
+            elif c_type == ConstraintType.EXTERNAL_REFERENCE:
+                i_a = indices[0]
+                ua, va = x[2 * i_a], x[2 * i_a + 1]
+                res.append(ua - c.target_value)
+                res.append(va - c.target_value_v)
+
+            elif c_type == ConstraintType.G2_CURVATURE:
+                i_a0, i_a1, i_joint, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3], indices[4]
+                # Tangente côté A (arrivée vers le joint)
+                v_ax = x[2 * i_joint] - x[2 * i_a1]
+                v_ay = x[2 * i_joint + 1] - x[2 * i_a1 + 1]
+                # Tangente côté B (départ depuis le joint)
+                v_bx = x[2 * i_b1] - x[2 * i_joint]
+                v_by = x[2 * i_b1 + 1] - x[2 * i_joint + 1]
+
+                # Continuité G1 : Colinéarité des tangentes (produit vectoriel 2D nul)
+                res.append(v_ax * v_by - v_ay * v_bx)
+
+                # Continuité G2 : Égalité des courbures kappa = (vx * ay - vy * ax) / (vx^2 + vy^2)^(3/2)
+                a_ax = x[2 * i_joint] - 2.0 * x[2 * i_a1] + x[2 * i_a0]
+                a_ay = x[2 * i_joint + 1] - 2.0 * x[2 * i_a1 + 1] + x[2 * i_a0 + 1]
+                v_a_norm_sq = v_ax * v_ax + v_ay * v_ay
+
+                a_bx = x[2 * i_b2] - 2.0 * x[2 * i_b1] + x[2 * i_joint]
+                a_by = x[2 * i_b2 + 1] - 2.0 * x[2 * i_b1 + 1] + x[2 * i_joint + 1]
+                v_b_norm_sq = v_bx * v_bx + v_by * v_by
+
+                if v_a_norm_sq > 1e-12 and v_b_norm_sq > 1e-12:
+                    kappa_a = (v_ax * a_ay - v_ay * a_ax) / (v_a_norm_sq ** 1.5)
+                    kappa_b = (v_bx * a_by - v_by * a_bx) / (v_b_norm_sq ** 1.5)
+                    res.append(kappa_a - kappa_b)
+                else:
+                    res.append(0.0)
+
         return np.array(res, dtype=np.float64)
 
     def calculate_degrees_of_freedom(self) -> Tuple[int, str]:
@@ -354,5 +423,127 @@ class SketchConstraintSolver2D:
 
 # Alias pour compatibilité
 ConstraintSolver2D = SketchConstraintSolver2D
+
+
+def project_3d_edge_to_sketch_plane(
+    edge_start: Tuple[float, float, float],
+    edge_end: Tuple[float, float, float],
+    plane_origin: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+    plane_normal: Tuple[float, float, float] = (0.0, 0.0, 1.0),
+    plane_u_axis: Tuple[float, float, float] = (1.0, 0.0, 0.0)
+) -> Tuple[Point2D, Point2D]:
+    """
+    Projette une arête 3D du solide dans le système de coordonnées local (u, v) de l'esquisse.
+    Permet la contrainte de géométrie externe (FreeCAD External Geometry).
+    """
+    n = np.array(plane_normal, dtype=np.float64)
+    n_norm = float(np.linalg.norm(n))
+    if n_norm > 1e-9:
+        n = n / n_norm
+    else:
+        n = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+
+    u = np.array(plane_u_axis, dtype=np.float64)
+    u = u - float(np.dot(u, n)) * n
+    u_norm = float(np.linalg.norm(u))
+    if u_norm > 1e-9:
+        u = u / u_norm
+    else:
+        arbitrary = np.array([0.0, 1.0, 0.0], dtype=np.float64) if abs(n[0]) > 0.9 else np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        u = np.cross(n, arbitrary)
+        u = u / float(np.linalg.norm(u))
+
+    v = np.cross(n, u)
+    o = np.array(plane_origin, dtype=np.float64)
+
+    p0 = np.array(edge_start, dtype=np.float64)
+    p1 = np.array(edge_end, dtype=np.float64)
+
+    p0_proj = p0 - float(np.dot(p0 - o, n)) * n
+    p1_proj = p1 - float(np.dot(p1 - o, n)) * n
+
+    u0 = float(np.dot(p0_proj - o, u))
+    v0 = float(np.dot(p0_proj - o, v))
+    u1 = float(np.dot(p1_proj - o, u))
+    v1 = float(np.dot(p1_proj - o, v))
+
+    return (Point2D(u0, v0), Point2D(u1, v1))
+
+
+def fillet_2d(
+    p0: Point2D,
+    corner: Point2D,
+    p1: Point2D,
+    radius: float
+) -> Tuple[Point2D, Point2D, Point2D, float]:
+    """
+    Calcule le congé 2D (fillet) entre deux segments sécants au point corner.
+
+    Returns:
+        Tuple[tangent_0: Point2D, tangent_1: Point2D, center: Point2D, radius: float]
+    """
+    v0 = np.array([p0.u - corner.u, p0.v - corner.v], dtype=np.float64)
+    v1 = np.array([p1.u - corner.u, p1.v - corner.v], dtype=np.float64)
+
+    len0 = float(np.linalg.norm(v0))
+    len1 = float(np.linalg.norm(v1))
+    if len0 < 1e-9 or len1 < 1e-9 or radius <= 0.0:
+        return (corner, corner, corner, 0.0)
+
+    d0 = v0 / len0
+    d1 = v1 / len1
+
+    dot = float(np.dot(d0, d1))
+    dot = max(-1.0, min(1.0, dot))
+    angle = float(np.arccos(dot))
+
+    if angle < 1e-4 or angle > (np.pi - 1e-4):
+        return (corner, corner, corner, 0.0)
+
+    half_angle = angle / 2.0
+    tangent_dist = radius / float(np.tan(half_angle))
+
+    tangent_dist = min(tangent_dist, len0 * 0.99, len1 * 0.99)
+    eff_radius = tangent_dist * float(np.tan(half_angle))
+
+    t0 = Point2D(corner.u + float(d0[0]) * tangent_dist, corner.v + float(d0[1]) * tangent_dist)
+    t1 = Point2D(corner.u + float(d1[0]) * tangent_dist, corner.v + float(d1[1]) * tangent_dist)
+
+    bisector = d0 + d1
+    bis_norm = float(np.linalg.norm(bisector))
+    if bis_norm < 1e-9:
+        return (corner, corner, corner, 0.0)
+    bisector = bisector / bis_norm
+
+    center_dist = eff_radius / float(np.sin(half_angle))
+    center = Point2D(corner.u + float(bisector[0]) * center_dist, corner.v + float(bisector[1]) * center_dist)
+
+    return (t0, t1, center, eff_radius)
+
+
+def trim_intersection_2d(
+    p0: Point2D,
+    p1: Point2D,
+    q0: Point2D,
+    q1: Point2D
+) -> Optional[Point2D]:
+    """
+    Calcule l'intersection exacte entre deux droites/segments 2D pour les opérations d'ajustement (Trim).
+    """
+    dx_p = p1.u - p0.u
+    dy_p = p1.v - p0.v
+    dx_q = q1.u - q0.u
+    dy_q = q1.v - q0.v
+
+    denom = dx_p * dy_q - dy_p * dx_q
+    if abs(denom) < 1e-9:
+        return None
+
+    t = ((q0.u - p0.u) * dy_q - (q0.v - p0.v) * dx_q) / denom
+    inter_u = p0.u + t * dx_p
+    inter_v = p0.v + t * dy_p
+
+    return Point2D(float(inter_u), float(inter_v))
+
 
 

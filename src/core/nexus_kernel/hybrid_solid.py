@@ -2,7 +2,7 @@
 Noyau Géométrique Hybride NEXUS-3D : Solide Hybride Dual-BRep & Exact CSG.
 Synthétise la modélisation hybride de ZW3D Overdrive, la précision rationnelle d'AMCAX
 et l'arithmétique exacte de Manifold3D pour garantir zéro plantage booléen.
-Typage strict exhaustif, zéro Any, zéro object.
+Typage statique exhaustif et architecture modulaire.
 """
 
 from __future__ import annotations
@@ -72,6 +72,12 @@ class NexusSolid:
             return True
         mesh = self._manifold.to_mesh()
         return len(mesh.vert_properties) > 0 and len(mesh.tri_verts) > 0
+
+    def get_volume(self) -> float:
+        """Retourne le volume exact du solide volumique."""
+        if self.is_empty():
+            return 0.0
+        return float(abs(self._manifold.volume()))
 
     # -------------------------------------------------------------------------
     # Opérations Booléennes Hybrides Robustes

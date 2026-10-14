@@ -42,11 +42,19 @@ class Solid:
         """Vérifie si le solide est une variété topologique fermée étanche (2-manifold)."""
         return not self._manifold.is_empty() and self.volume() > 0.0
 
+    def is_watertight(self) -> bool:
+        """Vérifie que le solide est mathématiquement fermé, 2-variété et étanche sans trou."""
+        return self.is_manifold()
+
     def volume(self) -> float:
         """Calcule le volume exact du solide en unités cubiques."""
         if self._manifold.is_empty():
             return 0.0
         return float(self._manifold.volume())
+
+    def get_volume(self) -> float:
+        """Alias pour compatibilité avec le noyau NexusSolid."""
+        return self.volume()
 
     def bounding_box(self) -> Tuple[Vector3D, Vector3D]:
         """

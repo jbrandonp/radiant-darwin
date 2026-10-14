@@ -3,7 +3,7 @@ Noyau Géométrique Hybride NEXUS-3D (Next-Gen AI-Native Geometric Kernel).
 Intègre la topologie B-Rep rigoureuse d'OpenCASCADE / Truck, la modélisation hybride
 de ZW3D Overdrive, et l'arithmétique exacte de Manifold3D avec des interfaces natives
 pour l'intelligence artificielle (Neural SDF, Géométrie Différentiable, CAD Tokenizer).
-Typage strict exhaustif, zéro Any, zéro object.
+Typage statique exhaustif et architecture modulaire.
 """
 
 from src.core.nexus_kernel.brep_topology import (

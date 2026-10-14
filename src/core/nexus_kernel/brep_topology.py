@@ -3,7 +3,7 @@ Noyau Géométrique Hybride NEXUS-3D : Topologie B-Rep Analytique & Graphe Front
 Inspiré de la rigueur topologique d'OpenCASCADE (OCCT) et de la sûreté mémoire de Truck (Rust).
 Définit la hiérarchie topologique formelle :
 Vertex -> Edge (Curve) -> Wire -> Face (Surface) -> Shell -> BRep.
-Typage strict exhaustif, zéro Any, zéro object.
+Typage statique exhaustif et architecture modulaire.
 """
 
 from __future__ import annotations

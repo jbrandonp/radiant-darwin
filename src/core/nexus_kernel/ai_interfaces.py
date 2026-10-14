@@ -6,7 +6,7 @@ aux réseaux de neurones implicites (DeepSDF / NeRF) et à l'optimisation par gr
 2. DifferentiableGeometryEngine : Calcul analytique et par différences finies des Jacobiennes géométriques.
 3. CADTokenizer : Traduction de la topologie B-Rep en tokens pour LLMs et tenseurs de graphes GNN.
 4. LatentShapeEmbedding : Vecteur d'empreinte continue invariante (dimension 64).
-Typage strict exhaustif, zéro Any, zéro object.
+Typage statique exhaustif et architecture modulaire.
 """
 
 from __future__ import annotations

@@ -1,52 +1,81 @@
 """
-Script de lancement interactif de l'application CAD Studio sur le bureau utilisateur Windows.
-Garantit le rattachement du processus à la station interactive WinSta0\\Default.
+Script de lancement interactif de l'application CAD Studio sur le bureau utilisateur.
+Sur Windows : rattachement du processus à la station interactive WinSta0\\Default.
+Sur Linux / macOS : lancement standard en sous-processus détaché.
+Architecture 100% portable et typée.
 """
 
 from __future__ import annotations
 import os
 import sys
-import ctypes
-from ctypes import wintypes
-
-
-class STARTUPINFOW(ctypes.Structure):
-    _fields_ = [
-        ("cb", wintypes.DWORD),
-        ("lpReserved", wintypes.LPWSTR),
-        ("lpDesktop", wintypes.LPWSTR),
-        ("lpTitle", wintypes.LPWSTR),
-        ("dwX", wintypes.DWORD),
-        ("dwY", wintypes.DWORD),
-        ("dwXSize", wintypes.DWORD),
-        ("dwYSize", wintypes.DWORD),
-        ("dwXCountChars", wintypes.DWORD),
-        ("dwYCountChars", wintypes.DWORD),
-        ("dwFillAttribute", wintypes.DWORD),
-        ("dwFlags", wintypes.DWORD),
-        ("wShowWindow", wintypes.WORD),
-        ("cbReserved2", wintypes.WORD),
-        ("lpReserved2", ctypes.c_char_p),
-        ("hStdInput", wintypes.HANDLE),
-        ("hStdOutput", wintypes.HANDLE),
-        ("hStdError", wintypes.HANDLE),
-    ]
-
-
-class PROCESS_INFORMATION(ctypes.Structure):
-    _fields_ = [
-        ("hProcess", wintypes.HANDLE),
-        ("hThread", wintypes.HANDLE),
-        ("dwProcessId", wintypes.DWORD),
-        ("dwThreadId", wintypes.DWORD),
-    ]
+import subprocess
+from typing import Optional
 
 
 def launch_cad_studio() -> bool:
-    """Lance CAD Studio sur le bureau Windows interactif de l'utilisateur."""
+    """Lance CAD Studio sur le bureau interactif de l'utilisateur."""
     root_dir = os.path.abspath(os.path.dirname(__file__))
-    python_exe = os.path.join(root_dir, ".venv", "Scripts", "python.exe")
+    
+    # Détection de l'exécutable Python
+    python_exe: str = sys.executable
+    if sys.platform == "win32":
+        venv_python = os.path.join(root_dir, ".venv", "Scripts", "python.exe")
+        if os.path.exists(venv_python):
+            python_exe = venv_python
+    else:
+        venv_python = os.path.join(root_dir, ".venv", "bin", "python")
+        if os.path.exists(venv_python):
+            python_exe = venv_python
+
     main_script = os.path.join(root_dir, "src", "main.py")
+
+    # Sur les plateformes non-Windows, lancer directement via subprocess
+    if sys.platform != "win32":
+        try:
+            proc = subprocess.Popen(
+                [python_exe, main_script],
+                cwd=root_dir,
+                start_new_session=True
+            )
+            print(f"CAD Studio démarré avec succès (PID: {proc.pid}).")
+            return True
+        except Exception as exc:
+            print(f"Échec du démarrage de CAD Studio: {exc}")
+            return False
+
+    # Sur Windows : rattachement Win32 explicite à WinSta0\\Default
+    import ctypes
+    from ctypes import wintypes
+
+    class STARTUPINFOW(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("lpReserved", wintypes.LPWSTR),
+            ("lpDesktop", wintypes.LPWSTR),
+            ("lpTitle", wintypes.LPWSTR),
+            ("dwX", wintypes.DWORD),
+            ("dwY", wintypes.DWORD),
+            ("dwXSize", wintypes.DWORD),
+            ("dwYSize", wintypes.DWORD),
+            ("dwXCountChars", wintypes.DWORD),
+            ("dwYCountChars", wintypes.DWORD),
+            ("dwFillAttribute", wintypes.DWORD),
+            ("dwFlags", wintypes.DWORD),
+            ("wShowWindow", wintypes.WORD),
+            ("cbReserved2", wintypes.WORD),
+            ("lpReserved2", ctypes.c_char_p),
+            ("hStdInput", wintypes.HANDLE),
+            ("hStdOutput", wintypes.HANDLE),
+            ("hStdError", wintypes.HANDLE),
+        ]
+
+    class PROCESS_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("hProcess", wintypes.HANDLE),
+            ("hThread", wintypes.HANDLE),
+            ("dwProcessId", wintypes.DWORD),
+            ("dwThreadId", wintypes.DWORD),
+        ]
 
     cmd_line = f'"{python_exe}" "{main_script}"'
 
@@ -59,8 +88,7 @@ def launch_cad_studio() -> bool:
     pi = PROCESS_INFORMATION()
 
     k32 = ctypes.windll.kernel32
-    # CREATE_NEW_PROCESS_GROUP = 0x00000200
-    creation_flags = 0x00000200
+    creation_flags = 0x00000200  # CREATE_NEW_PROCESS_GROUP
 
     success = k32.CreateProcessW(
         None,

@@ -58,9 +58,19 @@ def build_cli_parser() -> argparse.ArgumentParser:
 
 def handle_audit_command() -> int:
     """Exécute l'audit industriel officiel déterministe."""
-    from scripts.industrial_audit_engine import run_industrial_quality_audit, generate_console_summary
-    metrics, is_green, violations = run_industrial_quality_audit()
-    print(generate_console_summary(metrics, is_green, violations))
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+    src_dir = os.path.join(root_dir, "src")
+    from scripts.industrial_audit_engine import ProjectIndustrialAuditor
+    auditor = ProjectIndustrialAuditor(src_dir)
+    report = auditor.run_full_enterprise_audit()
+    is_green = (
+        report.get("critical_functions_over_25", 0.0) == 0.0
+        and report.get("security_violations", 0.0) == 0.0
+        and report.get("circular_dependencies", 0.0) == 0.0
+        and report.get("type_completeness_percent", 0.0) >= 99.0
+    )
     return 0 if is_green else 1
 
 

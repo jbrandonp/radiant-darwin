@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "radiant-darwin"
+version = "2.4.0"
+description = "CAD Studio (Radiant-Darwin) — High-Performance Parametric 3D CAD/CAE/CAM Suite & AI-Driven Generative Copilot"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Brandon", email = "jbrandonp@users.noreply.github.com" }
+]
+requires-python = ">=3.10"
+keywords = [
+    "cad", "cae", "cam", "fem", "fea", "3d-modeling", "manifold3d",
+    "parametric", "gcode", "mcp", "ai-copilot", "computational-geometry"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "PySide6>=6.6.0",
+    "PyOpenGL>=3.1.7",
+    "PyOpenGL_accelerate>=3.1.7; platform_system != 'Darwin'",
+    "manifold3d>=3.0.0",
+    "trimesh>=4.0.0",
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "coverage>=7.4.0",
+]
+
+[project.scripts]
+cad-studio = "src.main:main"
+cad-cli = "src.cli:main"
+cad-mcp = "src.ai.mcp_stdio:main"
+
+[project.urls]
+Homepage = "https://github.com/jbrandonp/radiant-darwin"
+Repository = "https://github.com/jbrandonp/radiant-darwin.git"
+Issues = "https://github.com/jbrandonp/radiant-darwin/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers -p no:warnings"
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/viewport/*",
+    "src/ui/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

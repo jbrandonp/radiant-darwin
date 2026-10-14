@@ -103,6 +103,12 @@ def test_chantier_2_techdraw_iso_sheet_generation():
     hidden_lines = [l for l in sheet.lines if l.is_hidden]
     assert len(hidden_lines) >= 3
 
+    # Vérification mathématique stricte des dimensions (résiste aux mutations)
+    horizontal_lengths = [abs(l.p2.x - l.p1.x) for l in sheet.lines if abs(l.p1.y - l.p2.y) < 1e-4]
+    assert any(pytest.approx(hl, 1e-2) == 40.0 for hl in horizontal_lengths)
+    vertical_lengths = [abs(l.p2.y - l.p1.y) for l in sheet.lines if abs(l.p1.x - l.p2.x) < 1e-4]
+    assert any(pytest.approx(vl, 1e-2) == 30.0 for vl in vertical_lengths)
+
     # Génération SVG
     svg_code = sheet.render_svg()
     assert "<svg" in svg_code

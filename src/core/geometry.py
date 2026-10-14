@@ -265,6 +265,11 @@ class Solid:
         from src.core.nexus_kernel.ai_interfaces import LatentShapeEmbedding
         return LatentShapeEmbedding.compute_embedding(self.to_nexus(), embedding_dim)
 
+    @property
+    def mesh(self) -> MeshBuffer:
+        """Accès direct au tampon de maillage (MeshBuffer) du solide."""
+        return self.to_mesh_buffer()
+
     def to_mesh_buffer(self) -> MeshBuffer:
         """
         Convertit le solide en MeshBuffer optimisé pour le rendu OpenGL.

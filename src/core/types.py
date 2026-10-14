@@ -156,6 +156,11 @@ class MeshBuffer:
     edge_vertices: Optional[np.ndarray] = None  # Shape: (2K, 3), sommets 3D des lignes d'arêtes
     vertex_colors: Optional[np.ndarray] = None  # Shape: (N, 4), dtype=float32 (couleurs par sommet ex. FEA)
 
+    @property
+    def indices(self) -> np.ndarray:
+        """Alias pour les indices de triangles (faces) compatible WebGL / WebXR."""
+        return self.faces
+
     def is_empty(self) -> bool:
         """Vérifie si le maillage ne contient aucune géométrie."""
         return len(self.vertices) == 0 or len(self.faces) == 0

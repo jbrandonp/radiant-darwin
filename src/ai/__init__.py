@@ -11,6 +11,15 @@ from src.ai.mcp_schema import MCPToolRegistry, MCPToolDefinition
 from src.ai.ai_vision_feedback import AIVisionFeedback, VisionFeedbackResult
 from src.ai.ai_connector_config import AIConnectorConfigGenerator, AIClientConfigSnippet
 from src.ai.mcp_stdio import MCPStdioServer
+from src.ai.cad_ai_full_suite import (
+    CADFullSuiteOrchestrator,
+    CAMAnalysisResult,
+    FEAAnalysisResult,
+    TechDrawResult,
+    SheetMetalResult,
+    MaterialPropertiesResult,
+    DirectModelingResult
+)
 
 __all__ = [
     "ShapeSynthesizer",
@@ -30,4 +39,12 @@ __all__ = [
     "AIConnectorConfigGenerator",
     "AIClientConfigSnippet",
     "MCPStdioServer",
+    "CADFullSuiteOrchestrator",
+    "CAMAnalysisResult",
+    "FEAAnalysisResult",
+    "TechDrawResult",
+    "SheetMetalResult",
+    "MaterialPropertiesResult",
+    "DirectModelingResult",
 ]
+

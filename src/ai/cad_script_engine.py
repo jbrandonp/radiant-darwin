@@ -19,6 +19,16 @@ from src.core.geometry import (
 )
 from src.core.types import Vector3D, Point2D
 from src.ai.shape_synthesizer import ShapeSynthesizer
+from src.ai.cad_ai_full_suite import (
+    CADFullSuiteOrchestrator,
+    CAMAnalysisResult,
+    FEAAnalysisResult,
+    TechDrawResult,
+    SheetMetalResult,
+    MaterialPropertiesResult,
+    DirectModelingResult
+)
+
 
 @dataclass
 class ScriptExecutionResult:
@@ -163,6 +173,106 @@ class CADScriptContext:
         self.doc.features.clear()
         self.created_bodies.clear()
         self.doc._notify_change()
+
+    def cam(
+        self,
+        body_id: str = "",
+        operation: str = "contour",
+        depth: float = 10.0,
+        tool_diameter: float = 6.0
+    ) -> CAMAnalysisResult:
+        """Génère les parcours d'usinage et le G-code pour une pièce."""
+        target_solid = self.doc.bodies.get(body_id) or self.last_solid or make_box(50.0, 30.0, 15.0)
+        return CADFullSuiteOrchestrator.run_cam(
+            target_solid,
+            operation_type=operation,
+            depth_mm=depth,
+            tool_diameter_mm=tool_diameter
+        )
+
+    def fea(
+        self,
+        body_id: str = "",
+        force_n: float = 1500.0,
+        material: str = "Aluminium 6061-T6"
+    ) -> FEAAnalysisResult:
+        """Exécute l'analyse mécanique FEA et renvoie les contraintes von Mises et le facteur de sécurité."""
+        target_solid = self.doc.bodies.get(body_id) or self.last_solid or make_box(50.0, 30.0, 15.0)
+        return CADFullSuiteOrchestrator.run_fea(
+            target_solid,
+            applied_force_n=force_n,
+            material_name=material
+        )
+
+    def techdraw(
+        self,
+        body_id: str = "",
+        material: str = "Aluminium 6061-T6"
+    ) -> TechDrawResult:
+        """Génère la mise en plan 2D normalisée ISO (4 vues, cartouche et cotations)."""
+        target_solid = self.doc.bodies.get(body_id) or self.last_solid or make_box(50.0, 30.0, 15.0)
+        return CADFullSuiteOrchestrator.generate_techdraw(
+            target_solid,
+            part_name=body_id or "Piece_CAO",
+            material_name=material
+        )
+
+    def sheetmetal(
+        self,
+        width: float = 120.0,
+        length: float = 80.0,
+        thickness: float = 2.0,
+        flange_height: float = 25.0
+    ) -> Solid:
+        """Conçoit une pièce de tôlerie avec plis et génère le modèle 3D."""
+        res = CADFullSuiteOrchestrator.design_sheet_metal(
+            width_mm=width,
+            length_mm=length,
+            thickness_mm=thickness,
+            flange_height_mm=flange_height
+        )
+        self.last_solid = res.solid
+        return res.solid
+
+    def material(
+        self,
+        body_id: str = "",
+        material_name: str = "Aluminium 6061-T6"
+    ) -> MaterialPropertiesResult:
+        """Calcule les caractéristiques massiques et mécaniques exactes d'une pièce."""
+        target_solid = self.doc.bodies.get(body_id) or self.last_solid or make_box(50.0, 30.0, 15.0)
+        return CADFullSuiteOrchestrator.get_material_properties(target_solid, material_name)
+
+    def push_pull(self, body_id: str, offset_mm: float, axis: str = "z") -> Solid:
+        """Modélisation directe : extrusion ou retrait d'une face d'un corps solide."""
+        target_solid = self.doc.bodies.get(body_id) or self.last_solid or make_box(50.0, 30.0, 15.0)
+        res = CADFullSuiteOrchestrator.direct_modeling_push_pull(target_solid, offset_mm=offset_mm, axis=axis)
+        if body_id in self.doc.bodies:
+            self.doc.bodies[body_id] = res.solid
+            self.doc._notify_change()
+        self.last_solid = res.solid
+        return res.solid
+
+    def fillet(self, body_id: str, radius_mm: float) -> Solid:
+        """Applique un congé de raccordement sur un solide."""
+        target_solid = self.doc.bodies.get(body_id) or self.last_solid or make_box(50.0, 30.0, 15.0)
+        res = CADFullSuiteOrchestrator.direct_modeling_fillet(target_solid, radius_mm=radius_mm)
+        if body_id in self.doc.bodies:
+            self.doc.bodies[body_id] = res.solid
+            self.doc._notify_change()
+        self.last_solid = res.solid
+        return res.solid
+
+    def shell(self, body_id: str, wall_thickness_mm: float) -> Solid:
+        """Évide un corps solide pour créer une coque mince."""
+        target_solid = self.doc.bodies.get(body_id) or self.last_solid or make_box(50.0, 30.0, 15.0)
+        res = CADFullSuiteOrchestrator.direct_modeling_shell(target_solid, wall_thickness_mm=wall_thickness_mm)
+        if body_id in self.doc.bodies:
+            self.doc.bodies[body_id] = res.solid
+            self.doc._notify_change()
+        self.last_solid = res.solid
+        return res.solid
+
 
 
 SafeContextVal = Union[CADScriptContext, type, Callable, Dict[str, Callable]]

@@ -103,11 +103,14 @@ class AICommandPalette(QDialog):
         chips_row = QHBoxLayout()
         chips_row.setSpacing(6)
         chips = [
-            ("Boîtier 60x40", "Crée un boîtier de 60x40x20mm"),
-            ("Palier Ø25", "Crée un palier à semelle pour arbre de 25mm"),
-            ("Poulie trapézoïdale", "Crée une poulie trapézoïdale diamètre 80mm"),
-            ("Vérifier étanchéité", "Vérifie la validité topologique d'Euler"),
+            ("🔨 Usinage CAM", "Génère le parcours d'usinage et le G-Code"),
+            ("⚡ Simulation FEA", "Simule la résistance sous charge de 2000N"),
+            ("📐 Plan 2D", "Génère la mise en plan technique 2D ISO"),
+            ("📦 Tôlerie", "Conçois une tôle pliée 100x60 épaisseur 2mm"),
+            ("🪨 Inox 316L", "Applique le matériau Inox 316L"),
+            ("📏 Push-Pull", "Pousse la face de 10mm"),
         ]
+
         chip_style = """
             QPushButton {
                 background-color: #242730;

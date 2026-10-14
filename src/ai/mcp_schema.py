@@ -253,8 +253,194 @@ class MCPToolRegistry:
                     "type": "object",
                     "properties": {}
                 }
+            ),
+            MCPToolDefinition(
+                name="cad_cam_toolpath_and_gcode",
+                description="Génère les trajectoires d'usinage CNC (contournage, poche, perçage) et exporte le G-Code standard ISO/GRBL.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "body_id": {
+                            "type": "string",
+                            "description": "Identifiant de la pièce à usiner (optionnel, prend la première pièce si omis)."
+                        },
+                        "operation_type": {
+                            "type": "string",
+                            "description": "Type d'opération : 'contour', 'pocket', 'drill', 'facing'."
+                        },
+                        "tool_diameter_mm": {
+                            "type": "number",
+                            "description": "Diamètre de la fraise en mm (défaut: 6.0)."
+                        },
+                        "depth_mm": {
+                            "type": "number",
+                            "description": "Profondeur totale d'usinage en mm (défaut: 10.0)."
+                        }
+                    }
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_fea_stress_simulation",
+                description="Exécute une analyse par éléments finis (FEA), calcule les contraintes de von Mises, le déplacement maximal et le facteur de sécurité.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "body_id": {
+                            "type": "string",
+                            "description": "Identifiant de la pièce à simuler."
+                        },
+                        "applied_force_n": {
+                            "type": "number",
+                            "description": "Effort appliqué en Newtons (défaut: 2000.0)."
+                        },
+                        "material_name": {
+                            "type": "string",
+                            "description": "Matériau physique ('Aluminium 6061-T6', 'Acier Inox 316L', 'Titane Ti-6Al-4V', 'Acier Carbone C45')."
+                        }
+                    }
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_generate_2d_techdraw",
+                description="Génère la mise en plan technique 2D normalisée ISO (4 vues orthogonales, cartouche et cotations).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "body_id": {
+                            "type": "string",
+                            "description": "Identifiant de la pièce à mettre en plan."
+                        },
+                        "part_name": {
+                            "type": "string",
+                            "description": "Titre du projet dans le cartouche ISO."
+                        },
+                        "material_name": {
+                            "type": "string",
+                            "description": "Désignation du matériau normalisé."
+                        }
+                    }
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_design_sheetmetal",
+                description="Conçoit une pièce de tôlerie industrielle avec plis et calcule le développé à plat (flan) pour découpe laser.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "width_mm": {
+                            "type": "number",
+                            "description": "Largeur de base de la tôle en mm."
+                        },
+                        "length_mm": {
+                            "type": "number",
+                            "description": "Longueur de base de la tôle en mm."
+                        },
+                        "thickness_mm": {
+                            "type": "number",
+                            "description": "Épaisseur nominale de la tôle en mm (défaut: 2.0)."
+                        },
+                        "flange_height_mm": {
+                            "type": "number",
+                            "description": "Hauteur des rebords pliés en mm (défaut: 20.0)."
+                        }
+                    }
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_get_physical_material_props",
+                description="Calcule les propriétés physiques et massiques exactes (masse en kg/g, centre de gravité, limite d'élasticité) selon le matériau choisi.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "body_id": {
+                            "type": "string",
+                            "description": "Identifiant de la pièce cible."
+                        },
+                        "material_name": {
+                            "type": "string",
+                            "description": "Matériau ('Aluminium 6061-T6', 'Acier Inox 316L', 'Titane Ti-6Al-4V', 'Laiton CuZn39Pb3')."
+                        }
+                    }
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_direct_modeling_push_pull",
+                description="Modélisation directe : extrusion ou retrait d'une face de solide selon un axe (Push-Pull).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "body_id": {
+                            "type": "string",
+                            "description": "Identifiant de la pièce cible."
+                        },
+                        "offset_mm": {
+                            "type": "number",
+                            "description": "Distance de décalage en mm (positif pour étendre, négatif pour retirer)."
+                        },
+                        "axis": {
+                            "type": "string",
+                            "description": "Axe de décalage ('x', 'y', ou 'z')."
+                        }
+                    },
+                    "required": ["offset_mm"]
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_direct_modeling_fillet",
+                description="Applique un congé ou adoucissement de rayon spécifié sur un corps solide.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "body_id": {
+                            "type": "string",
+                            "description": "Identifiant de la pièce cible."
+                        },
+                        "radius_mm": {
+                            "type": "number",
+                            "description": "Rayon du congé en mm."
+                        }
+                    },
+                    "required": ["radius_mm"]
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_direct_modeling_shell",
+                description="Évide un corps solide pour créer une coque mince avec épaisseur de paroi constante.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "body_id": {
+                            "type": "string",
+                            "description": "Identifiant de la pièce cible."
+                        },
+                        "wall_thickness_mm": {
+                            "type": "number",
+                            "description": "Épaisseur de paroi de la coque en mm."
+                        }
+                    },
+                    "required": ["wall_thickness_mm"]
+                }
+            ),
+            MCPToolDefinition(
+                name="cad_export_model",
+                description="Exporte le document ou une pièce au format STEP, STL, OBJ ou DXF.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "format_type": {
+                            "type": "string",
+                            "description": "Format d'export : 'step', 'stl', 'obj', 'dxf'."
+                        },
+                        "filepath": {
+                            "type": "string",
+                            "description": "Chemin de destination optionnel."
+                        }
+                    },
+                    "required": ["format_type"]
+                }
             )
         ]
+
 
 
 def get_mcp_tool_definitions() -> List[Dict[str, Union[str, JSONSchemaDict]]]:

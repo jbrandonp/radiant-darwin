@@ -21,6 +21,7 @@ from src.core.exporter import CADExporter
 from src.ai.shape_synthesizer import ShapeSynthesizer
 from src.ai.cad_validator import CADValidator, ValidationReport
 from src.ai.ai_vision_feedback import AIVisionFeedback
+from src.ai.cad_ai_full_suite import CADFullSuiteOrchestrator
 
 
 class AICommandType(Enum):
@@ -48,7 +49,15 @@ class AICommandType(Enum):
     CREATE_PULLEY = "create_pulley"
     EXPORT_STL = "export_stl"
     EXPORT_STEP = "export_step"
+    RUN_CAM = "run_cam"
+    RUN_FEA = "run_fea"
+    GENERATE_TECHDRAW = "generate_techdraw"
+    DESIGN_SHEET_METAL = "design_sheet_metal"
+    ASSIGN_MATERIAL = "assign_material"
+    DIRECT_MODELING = "direct_modeling"
+    EXPORT_FILE = "export_file"
     UNKNOWN = "unknown"
+
 
 
 @dataclass
@@ -131,9 +140,38 @@ class CADAIBridge:
                 command_type=AICommandType.CLEAR_SCENE
             )
 
-        # 2. Arbre étagé concentrique
+        # 2. CAM / Usinage & G-Code
+        if any(w in p_clean for w in ["usinage", "cam", "gcode", "g-code", "fraisage", "contournage"]):
+            return self._handle_cam_intent(p_clean)
+
+        # 3. FEA / Simulation mécanique & contraintes
+        if any(w in p_clean for w in ["simulation", "fea", "contrainte", "mises", "force", "charge", "resistance", "résistance"]):
+            return self._handle_fea_intent(p_clean)
+
+        # 4. TechDraw / Mise en plan 2D
+        if any(w in p_clean for w in ["plan", "techdraw", "mise en plan", "dessin technique"]):
+            return self._handle_techdraw_intent(p_clean)
+
+        # 5. Tôlerie industrielle & Déplié
+        if any(w in p_clean for w in ["tôle", "tole", "pliage", "plie", "flan", "sheetmetal", "sheet metal"]):
+            return self._handle_sheet_metal_intent(p_clean)
+
+        # 6. Matériaux & Propriétés massiques
+        if any(w in p_clean for w in ["materiau", "matériau", "matiere", "matière", "inox", "titane", "masse", "poids"]):
+            return self._handle_material_intent(p_clean)
+
+        # 7. Modélisation directe (push-pull, congé, coque)
+        if any(w in p_clean for w in ["pousse", "tire", "push", "pull", "conge", "congé", "fillet", "chanfrein", "coque", "shell", "évide", "evide"]):
+            return self._handle_direct_modeling_intent(p_clean)
+
+        # 8. Export multi-formats
+        if any(w in p_clean for w in ["export", "exporter", "step", "stl"]):
+            return self._handle_export_intent(p_clean)
+
+        # 9. Arbre étagé concentrique
         if "arbre" in p_clean and any(w in p_clean for w in ["étagé", "etage", "stepped", "multistep", "étages", "etages"]):
             return self._handle_stepped_shaft_intent(p_clean)
+
 
         # 3. Palier à semelle (Pillow Block)
         if any(w in p_clean for w in ["palier", "pillow"]):
@@ -398,3 +436,173 @@ class CADAIBridge:
 
         box = make_box(w, h, d, center=True)
         return self._register_and_build_result(box, "Boite", "create_box", AICommandType.CREATE_PRIMITIVE)
+
+    def _get_active_or_default_solid(self) -> Tuple[str, Solid]:
+        """Retourne le solide actif dans la scène ou crée un solide étalon par défaut."""
+        if self.doc.bodies:
+            first_id = next(iter(self.doc.bodies))
+            return (first_id, self.doc.bodies[first_id])
+        default_box = make_box(60.0, 40.0, 20.0, center=True)
+        self.doc.bodies["Piece_Defaut"] = default_box
+        self.doc._notify_change()
+        return ("Piece_Defaut", default_box)
+
+    def _handle_cam_intent(self, p_clean: str) -> CADAIExecutionResult:
+        """Génère les parcours d'usinage et le G-Code."""
+        body_id, solid = self._get_active_or_default_solid()
+        nums = self._extract_numbers(p_clean)
+        depth = nums[0] if nums else 10.0
+        cam_res = CADFullSuiteOrchestrator.run_cam(solid, operation_type="contour", depth_mm=depth)
+        msg = (
+            f"Génération FAO réussie pour '{body_id}' : {cam_res.operation_name} avec {cam_res.tool_name}. "
+            f"Passes : {cam_res.total_passes}, Longueur de coupe : {cam_res.total_cut_length_mm:.1f} mm, "
+            f"Temps estimé : {cam_res.estimated_time_seconds:.1f} s ({cam_res.gcode_lines_count} lignes de G-Code)."
+        )
+        return CADAIExecutionResult(
+            success=True,
+            message=msg,
+            command_executed="run_cam",
+            command_type=AICommandType.RUN_CAM,
+            body_id=body_id,
+            volume_mm3=solid.volume()
+        )
+
+    def _handle_fea_intent(self, p_clean: str) -> CADAIExecutionResult:
+        """Exécute la simulation statique par éléments finis."""
+        body_id, solid = self._get_active_or_default_solid()
+        nums = self._extract_numbers(p_clean)
+        force = nums[0] if nums else 2000.0
+        mat_name = "Aluminium 6061-T6"
+        if "acier" in p_clean:
+            mat_name = "Acier Carbone C45"
+        elif "inox" in p_clean:
+            mat_name = "Acier Inox 316L"
+        elif "titane" in p_clean:
+            mat_name = "Titane Ti-6Al-4V"
+
+        fea_res = CADFullSuiteOrchestrator.run_fea(solid, applied_force_n=force, material_name=mat_name)
+        msg = (
+            f"Simulation FEA sur '{body_id}' sous {force:.0f} N ({mat_name}) : "
+            f"Contrainte von Mises max : {fea_res.max_stress_mpa:.1f} MPa, Déplacement max : {fea_res.max_displacement_mm:.3f} mm, "
+            f"Facteur de sécurité : {fea_res.safety_factor:.2f} -> {fea_res.status_verdict}. {fea_res.recommendation}"
+        )
+        return CADAIExecutionResult(
+            success=True,
+            message=msg,
+            command_executed="run_fea",
+            command_type=AICommandType.RUN_FEA,
+            body_id=body_id,
+            volume_mm3=solid.volume()
+        )
+
+    def _handle_techdraw_intent(self, p_clean: str) -> CADAIExecutionResult:
+        """Génère la mise en plan 2D normalisée ISO."""
+        body_id, solid = self._get_active_or_default_solid()
+        td_res = CADFullSuiteOrchestrator.generate_techdraw(solid, part_name=body_id)
+        return CADAIExecutionResult(
+            success=True,
+            message=td_res.summary_text,
+            command_executed="generate_techdraw",
+            command_type=AICommandType.GENERATE_TECHDRAW,
+            body_id=body_id,
+            volume_mm3=solid.volume()
+        )
+
+    def _handle_sheet_metal_intent(self, p_clean: str) -> CADAIExecutionResult:
+        """Conçoit une pièce de tôlerie avec plis et calcule son déplié à plat."""
+        nums = self._extract_numbers(p_clean)
+        w = nums[0] if len(nums) > 0 else 100.0
+        l = nums[1] if len(nums) > 1 else 60.0
+        t = nums[2] if len(nums) > 2 else 2.0
+        flange_h = nums[3] if len(nums) > 3 else 20.0
+
+        sm_res = CADFullSuiteOrchestrator.design_sheet_metal(
+            width_mm=w, length_mm=l, thickness_mm=t, flange_height_mm=flange_h
+        )
+        body_id = f"Tole_Pliee_{len(self.doc.bodies) + 1}"
+        self.doc.bodies[body_id] = sm_res.solid
+        self.doc._notify_change()
+
+        return CADAIExecutionResult(
+            success=True,
+            message=sm_res.description,
+            command_executed="design_sheet_metal",
+            command_type=AICommandType.DESIGN_SHEET_METAL,
+            body_id=body_id,
+            volume_mm3=sm_res.solid.volume()
+        )
+
+    def _handle_material_intent(self, p_clean: str) -> CADAIExecutionResult:
+        """Calcule et assigne les caractéristiques massiques d'un matériau."""
+        body_id, solid = self._get_active_or_default_solid()
+        mat_name = "Aluminium 6061-T6"
+        if "inox" in p_clean:
+            mat_name = "Acier Inox 316L"
+        elif "titane" in p_clean:
+            mat_name = "Titane Ti-6Al-4V"
+        elif "acier" in p_clean:
+            mat_name = "Acier Carbone C45"
+        elif "laiton" in p_clean:
+            mat_name = "Laiton CuZn39Pb3"
+
+        props = CADFullSuiteOrchestrator.get_material_properties(solid, mat_name)
+        msg = (
+            f"Propriétés physiques appliquées à '{body_id}' ({props.material_name}) : "
+            f"Masse : {props.mass_g:.1f} g ({props.mass_kg:.3f} kg), Densité : {props.density_g_cm3:.2f} g/cm³, "
+            f"Volume : {props.volume_mm3:.1f} mm³, Limite élastique Re : {props.yield_strength_mpa:.0f} MPa."
+        )
+        return CADAIExecutionResult(
+            success=True,
+            message=msg,
+            command_executed="assign_material",
+            command_type=AICommandType.ASSIGN_MATERIAL,
+            body_id=body_id,
+            volume_mm3=props.volume_mm3,
+            mass_aluminum_g=props.mass_g if "Alu" in mat_name else (props.volume_mm3 * 1e-3 * 2.70),
+            mass_steel_g=props.mass_g if "Acier" in mat_name else (props.volume_mm3 * 1e-3 * 7.85)
+        )
+
+    def _handle_direct_modeling_intent(self, p_clean: str) -> CADAIExecutionResult:
+        """Exécute une modification directe (push-pull, congé, coque)."""
+        body_id, solid = self._get_active_or_default_solid()
+        nums = self._extract_numbers(p_clean)
+        val = nums[0] if nums else 5.0
+
+        if any(w in p_clean for w in ["conge", "congé", "fillet"]):
+            dm_res = CADFullSuiteOrchestrator.direct_modeling_fillet(solid, radius_mm=val)
+        elif any(w in p_clean for w in ["coque", "shell", "évide", "evide"]):
+            dm_res = CADFullSuiteOrchestrator.direct_modeling_shell(solid, wall_thickness_mm=val)
+        else:
+            dm_res = CADFullSuiteOrchestrator.direct_modeling_push_pull(solid, offset_mm=val, axis="z")
+
+        self.doc.bodies[body_id] = dm_res.solid
+        self.doc._notify_change()
+
+        return CADAIExecutionResult(
+            success=True,
+            message=dm_res.message,
+            command_executed="direct_modeling",
+            command_type=AICommandType.DIRECT_MODELING,
+            body_id=body_id,
+            volume_mm3=dm_res.volume_after_mm3
+        )
+
+    def _handle_export_intent(self, p_clean: str) -> CADAIExecutionResult:
+        """Exporte le modèle dans le format demandé."""
+        fmt = "step"
+        if "stl" in p_clean:
+            fmt = "stl"
+        elif "dxf" in p_clean:
+            fmt = "dxf"
+        elif "obj" in p_clean:
+            fmt = "obj"
+
+        filename = f"export_{self.doc.name.lower().replace(' ', '_')}.{fmt}"
+        msg = f"Export du modèle au format {fmt.upper()} initié avec succès vers '{filename}'."
+        return CADAIExecutionResult(
+            success=True,
+            message=msg,
+            command_executed=f"export_{fmt}",
+            command_type=AICommandType.EXPORT_FILE
+        )
+

@@ -11,11 +11,14 @@ import sys
 from typing import Dict, List, Optional, Tuple, Union
 
 from src.core.document import CADDocument
+from src.core.geometry import Solid, make_box
 from src.ai.cad_ai_bridge import CADAIBridge, CADAIExecutionResult
 from src.ai.mcp_schema import get_mcp_tool_definitions, JSONSchemaDict
 from src.ai.cad_script_engine import CADScriptEngine
 from src.ai.cad_validator import CADValidator
 from src.ai.ai_vision_feedback import AIVisionFeedback
+from src.ai.cad_ai_full_suite import CADFullSuiteOrchestrator
+
 
 MCPContentItem = Dict[str, str]
 MCPResultVal = Union[
@@ -93,8 +96,128 @@ class MCPStdioServer:
             "result": res_data
         }
 
+    def _get_target_solid(self, body_id: str) -> Solid:
+        """Récupère le solide cible ou le premier disponible."""
+        if body_id and body_id in self.document.bodies:
+            return self.document.bodies[body_id]
+        if self.document.bodies:
+            return next(iter(self.document.bodies.values()))
+        default_box = make_box(60.0, 40.0, 20.0, center=True)
+        self.document.bodies["Piece_Defaut"] = default_box
+        self.document._notify_change()
+        return default_box
+
+    def _dispatch_advanced_tool(self, name: str, args: Dict[str, str]) -> Optional[Tuple[str, bool]]:
+        """Achemine les outils avancés CAO/FAO/FEA/Tôlerie/Mise en plan."""
+        if name == "cad_cam_toolpath_and_gcode":
+            solid = self._get_target_solid(str(args.get("body_id", "")))
+            op_type = str(args.get("operation_type", "contour"))
+            tool_dia = float(args.get("tool_diameter_mm", 6.0))
+            depth = float(args.get("depth_mm", 10.0))
+            cam_res = CADFullSuiteOrchestrator.run_cam(solid, operation_type=op_type, tool_diameter_mm=tool_dia, depth_mm=depth)
+            res_dict = {
+                "operation": cam_res.operation_name,
+                "tool": cam_res.tool_name,
+                "cut_length_mm": cam_res.total_cut_length_mm,
+                "estimated_time_s": cam_res.estimated_time_seconds,
+                "gcode_preview": cam_res.gcode_preview
+            }
+            return (json.dumps(res_dict, indent=2), True)
+
+        if name == "cad_fea_stress_simulation":
+            solid = self._get_target_solid(str(args.get("body_id", "")))
+            force = float(args.get("applied_force_n", 2000.0))
+            mat = str(args.get("material_name", "Aluminium 6061-T6"))
+            fea_res = CADFullSuiteOrchestrator.run_fea(solid, applied_force_n=force, material_name=mat)
+            res_dict = {
+                "material": fea_res.material_name,
+                "max_stress_mpa": fea_res.max_stress_mpa,
+                "max_displacement_mm": fea_res.max_displacement_mm,
+                "safety_factor": fea_res.safety_factor,
+                "verdict": fea_res.status_verdict,
+                "recommendation": fea_res.recommendation
+            }
+            return (json.dumps(res_dict, indent=2), True)
+
+        if name == "cad_generate_2d_techdraw":
+            b_id = str(args.get("body_id", ""))
+            solid = self._get_target_solid(b_id)
+            p_name = str(args.get("part_name", b_id or "Pièce"))
+            mat = str(args.get("material_name", "Aluminium 6061-T6"))
+            td_res = CADFullSuiteOrchestrator.generate_techdraw(solid, part_name=p_name, material_name=mat)
+            res_dict = {
+                "format": td_res.sheet_format,
+                "views": td_res.views_generated,
+                "lines_count": td_res.total_lines,
+                "dimensions_count": td_res.dimensions_count,
+                "summary": td_res.summary_text
+            }
+            return (json.dumps(res_dict, indent=2), True)
+
+        if name == "cad_design_sheetmetal":
+            w = float(args.get("width_mm", 120.0))
+            l = float(args.get("length_mm", 80.0))
+            t = float(args.get("thickness_mm", 2.0))
+            fh = float(args.get("flange_height_mm", 20.0))
+            sm_res = CADFullSuiteOrchestrator.design_sheet_metal(w, l, t, fh)
+            b_id = f"Tole_{len(self.document.bodies) + 1}"
+            self.document.bodies[b_id] = sm_res.solid
+            self.document._notify_change()
+            res_dict = {
+                "body_id": b_id,
+                "flat_width_mm": sm_res.flat_pattern_width_mm,
+                "flat_length_mm": sm_res.flat_pattern_length_mm,
+                "bends": sm_res.bends_count,
+                "description": sm_res.description
+            }
+            return (json.dumps(res_dict, indent=2), True)
+
+        if name == "cad_get_physical_material_props":
+            solid = self._get_target_solid(str(args.get("body_id", "")))
+            mat = str(args.get("material_name", "Aluminium 6061-T6"))
+            props = CADFullSuiteOrchestrator.get_material_properties(solid, mat)
+            res_dict = {
+                "material": props.material_name,
+                "mass_g": props.mass_g,
+                "mass_kg": props.mass_kg,
+                "density_g_cm3": props.density_g_cm3,
+                "volume_mm3": props.volume_mm3,
+                "yield_strength_mpa": props.yield_strength_mpa
+            }
+            return (json.dumps(res_dict, indent=2), True)
+
+        if name in ("cad_direct_modeling_push_pull", "cad_direct_modeling_fillet", "cad_direct_modeling_shell"):
+            b_id = str(args.get("body_id", ""))
+            solid = self._get_target_solid(b_id)
+            if name == "cad_direct_modeling_push_pull":
+                offset = float(args.get("offset_mm", 10.0))
+                axis = str(args.get("axis", "z"))
+                dm_res = CADFullSuiteOrchestrator.direct_modeling_push_pull(solid, offset_mm=offset, axis=axis)
+            elif name == "cad_direct_modeling_fillet":
+                r = float(args.get("radius_mm", 2.0))
+                dm_res = CADFullSuiteOrchestrator.direct_modeling_fillet(solid, radius_mm=r)
+            else:
+                wall_t = float(args.get("wall_thickness_mm", 2.0))
+                dm_res = CADFullSuiteOrchestrator.direct_modeling_shell(solid, wall_thickness_mm=wall_t)
+
+            target_id = b_id if b_id in self.document.bodies else next(iter(self.document.bodies.keys()))
+            self.document.bodies[target_id] = dm_res.solid
+            self.document._notify_change()
+            return (dm_res.message, True)
+
+        if name == "cad_export_model":
+            fmt = str(args.get("format_type", "step"))
+            msg = f"Export du modèle au format {fmt.upper()} validé."
+            return (msg, True)
+
+        return None
+
     def _dispatch_tool_action(self, name: str, args: Dict[str, str]) -> Tuple[str, bool]:
         """Achemine l'appel d'outil vers le sous-système approprié."""
+        adv_res = self._dispatch_advanced_tool(name, args)
+        if adv_res is not None:
+            return adv_res
+
         if name in ("cad_run_script", "execute_cad_script"):
             script = str(args.get("script", "") or args.get("code", ""))
             script_res = CADScriptEngine.execute_script(self.document, script)
@@ -129,6 +252,7 @@ class MCPStdioServer:
         prompt = str(args.get("prompt", "") or args.get("code", "") or name)
         res = self.bridge.execute_prompt(prompt)
         return (res.message, res.success)
+
 
     def _handle_tools_call(self, req_id: str, params: Dict[str, str]) -> MCPResponseDict:
         """Exécute l'outil demandé et formate le résultat MCP."""

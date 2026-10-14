@@ -177,7 +177,11 @@ class SketchConstraintSolver2D:
             target_value_v=float(ref_v)
         ))
 
-    def solve(self, tolerance: float = 1e-6) -> Tuple[bool, List[Point2D]]:
+    def solve(
+        self,
+        tolerance: float = 1e-6,
+        max_iterations: Optional[int] = None
+    ) -> Tuple[bool, List[Point2D]]:
         """
         Résout le système d'équations non-linéaires par moindres carrés amortis.
         Retourne (succès: bool, points_résolus: List[Point2D]).
@@ -196,6 +200,8 @@ class SketchConstraintSolver2D:
         if not self.constraints:
             return (True, list(self.points))
 
+        max_nfev = int(max_iterations) if max_iterations is not None else 2000
+
         # Résolution non-linéaire avec Jacobien analytique et TRF (Trust Region Reflective)
         opt_result = least_squares(
             self._evaluate_residuals,
@@ -205,7 +211,7 @@ class SketchConstraintSolver2D:
             ftol=tolerance,
             xtol=tolerance,
             gtol=tolerance,
-            max_nfev=2000
+            max_nfev=max_nfev
         )
 
 

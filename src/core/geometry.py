@@ -343,12 +343,15 @@ class Solid:
 def make_box(width: float, height: float, depth: float, center: bool = False, name: str = "Box") -> Solid:
     """
     Crée une boîte solide paramétrique.
-    - width : dimension selon l'axe X
+    - width : dimension selon l'axe X (clampée >= 0.001 pour garantir l'étanchéité manifold)
     - height : dimension selon l'axe Y
     - depth : dimension selon l'axe Z
     - center : centre la boîte sur l'origine si True
     """
-    manifold_box = m.Manifold.cube([max(0.001, width), max(0.001, height), max(0.001, depth)], center)
+    safe_w = max(0.001, abs(float(width)) if width != 0.0 else 0.001)
+    safe_h = max(0.001, abs(float(height)) if height != 0.0 else 0.001)
+    safe_d = max(0.001, abs(float(depth)) if depth != 0.0 else 0.001)
+    manifold_box = m.Manifold.cube([safe_w, safe_h, safe_d], center)
     return Solid(manifold_box, name)
 
 
@@ -359,9 +362,9 @@ def make_cylinder(radius: float, height: float, segments: int = 36, center: bool
     - height : hauteur du cylindre
     - segments : résolution circulaire
     """
-    safe_rad = max(0.001, radius)
-    safe_height = max(0.001, height)
-    manifold_cyl = m.Manifold.cylinder(safe_height, safe_rad, safe_rad, segments, center)
+    safe_rad = max(0.001, abs(float(radius)) if radius != 0.0 else 0.001)
+    safe_height = max(0.001, abs(float(height)) if height != 0.0 else 0.001)
+    manifold_cyl = m.Manifold.cylinder(safe_height, safe_rad, safe_rad, max(3, segments), center)
     return Solid(manifold_cyl, name)
 
 
@@ -371,8 +374,8 @@ def make_sphere(radius: float, segments: int = 36, name: str = "Sphere") -> Soli
     - radius : rayon de la sphère
     - segments : résolution angulaire
     """
-    safe_rad = max(0.001, radius)
-    manifold_sph = m.Manifold.sphere(safe_rad, segments)
+    safe_rad = max(0.001, abs(float(radius)) if radius != 0.0 else 0.001)
+    manifold_sph = m.Manifold.sphere(safe_rad, max(3, segments))
     return Solid(manifold_sph, name)
 
 
@@ -383,12 +386,12 @@ def make_cone(radius_bottom: float, radius_top: float, height: float, segments: 
     - radius_top : rayon supérieur à Z = height
     - height : hauteur totale
     """
-    safe_r_bottom = max(0.0, radius_bottom)
-    safe_r_top = max(0.0, radius_top)
+    safe_r_bottom = max(0.0, abs(float(radius_bottom)))
+    safe_r_top = max(0.0, abs(float(radius_top)))
     if safe_r_bottom <= 0.0 and safe_r_top <= 0.0:
         safe_r_bottom = 0.001
-    safe_height = max(0.001, height)
-    manifold_cone = m.Manifold.cylinder(safe_height, safe_r_bottom, safe_r_top, segments, False)
+    safe_height = max(0.001, abs(float(height)) if height != 0.0 else 0.001)
+    manifold_cone = m.Manifold.cylinder(safe_height, safe_r_bottom, safe_r_top, max(3, segments), False)
     return Solid(manifold_cone, name)
 
 

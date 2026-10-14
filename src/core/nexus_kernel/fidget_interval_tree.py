@@ -24,7 +24,7 @@ class CSGOpType(Enum):
     CONSTANT = "constant"
 
 
-@dataclass(frozen=True)
+@dataclass
 class SDFInterval:
     """Intervalle mathématique [min_val, max_val] pour l'évaluation rigoureuse des bornes de distance."""
     min_val: float
@@ -33,8 +33,7 @@ class SDFInterval:
     def __post_init__(self) -> None:
         if self.min_val > self.max_val:
             # Réordonnancement automatique en cas d'inversion flottante
-            object.__setattr__(self, "min_val", self.max_val)
-            object.__setattr__(self, "max_val", self.min_val)
+            self.min_val, self.max_val = self.max_val, self.min_val
 
     def add(self, other: SDFInterval) -> SDFInterval:
         return SDFInterval(self.min_val + other.min_val, self.max_val + other.max_val)

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QStatusBar, QLabel
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent
 
 from src.core.document import CADDocument
 from src.core.types import BooleanOperation, PlaneType, Point2D, Vector3D
@@ -58,6 +59,9 @@ from src.ui.dialogs import (
     FastenerDialog, SectionCutDialog
 )
 from src.ui.theme import FUSION_DARK_STYLESHEET
+from src.ui.ai_copilot_dock import AICopilotWidget
+from src.ai.cad_ai_bridge import CADAIExecutionResult
+from src.ai.ai_server import CADAIServer
 
 
 class CADMainWindow(QMainWindow):
@@ -83,6 +87,7 @@ class CADMainWindow(QMainWindow):
         self.active_flat_pattern: Optional[FlatPattern] = None
         self._feature_seq = 0
         self._sketch_seq = 0
+        self.ai_server: Optional[CADAIServer] = None
 
         # Initialisation UI
         self._setup_ui()
@@ -138,7 +143,23 @@ class CADMainWindow(QMainWindow):
         self.props_dock.setWidget(self.props_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.props_dock)
 
-        self.resizeDocks([self.browser_dock, self.props_dock], [270, 270], Qt.Orientation.Horizontal)
+        # 6. Copilote IA (Dockable)
+        self.copilot_dock = QDockWidget("Copilote IA 🤖", self)
+        self.copilot_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        self.copilot_dock.setMinimumWidth(280)
+        self.copilot_widget = AICopilotWidget(self.document, self)
+        self.copilot_dock.setWidget(self.copilot_widget)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.copilot_dock)
+        self.tabifyDockWidget(self.props_dock, self.copilot_dock)
+
+        # Serveur IA local (REST / JSON-RPC / MCP)
+        try:
+            self.ai_server = CADAIServer(self.copilot_widget.bridge, host="127.0.0.1", port=8765)
+            self.ai_server.start()
+        except Exception:
+            self.ai_server = None
+
+        self.resizeDocks([self.browser_dock, self.props_dock, self.copilot_dock], [260, 270, 290], Qt.Orientation.Horizontal)
 
         # Barre d'état professionnelle avec badges d'information
         self.status_bar = QStatusBar()
@@ -253,6 +274,9 @@ class CADMainWindow(QMainWindow):
         self.browser.delete_body_requested.connect(self._on_delete_single_body)
         self.browser.delete_sketch_requested.connect(self._on_delete_single_sketch)
 
+        # Copilote IA
+        self.copilot_widget.geometry_generated.connect(self._on_ai_geometry_generated)
+
     def _create_initial_sample(self) -> None:
         """Génère un exemple initial : Platine usinée avec alésage central."""
         self._feature_seq += 1
@@ -304,6 +328,8 @@ class CADMainWindow(QMainWindow):
                 self.viewport.on_document_changed()
                 self.timeline.refresh()
                 self.browser.refresh()
+                if hasattr(self, "copilot_widget"):
+                    self.copilot_widget.set_document(new_doc)
                 QMessageBox.information(self, "Projet Ouvert", f"Projet chargé avec succès :\n{new_doc.name} ({len(new_doc.features)} opérations)")
 
     # --- Paramètres Utilisateur fx ---
@@ -1098,3 +1124,16 @@ class CADMainWindow(QMainWindow):
         if sketch_id in self.document.sketches:
             self.document.remove_sketch(sketch_id)
             self.status_bar.showMessage(f"Esquisse {sketch_id} supprimée.", 3000)
+
+    def _on_ai_geometry_generated(self, result: CADAIExecutionResult) -> None:
+        """Gère la notification et l'ajustement de la vue après une commande exécutée par le Copilote IA."""
+        self.status_bar.showMessage(f"Copilote IA : {result.message}", 5000)
+        if result.success:
+            self.viewport.fit_view()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Ferme proprement le serveur IA et libère les ressources réseau et threads."""
+        if self.ai_server is not None:
+            self.ai_server.stop()
+            self.ai_server = None
+        super().closeEvent(event)

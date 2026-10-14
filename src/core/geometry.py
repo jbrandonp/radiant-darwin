@@ -17,10 +17,15 @@ class Solid:
     Encapsule le modèle géométrique sous-jacent et fournit les opérations volumiques.
     """
 
-    def __init__(self, internal_manifold: m.Manifold, name: str = "Solid") -> None:
-        """Initialise le solide avec une instance Manifold."""
-        self._manifold: m.Manifold = internal_manifold
-        self.name: str = name
+    def __init__(
+        self,
+        internal_manifold: Optional[m.Manifold] = None,
+        name: str = "Solid",
+        solid_name: Optional[str] = None
+    ) -> None:
+        """Initialise le solide avec une instance Manifold (ou vide par défaut)."""
+        self._manifold: m.Manifold = internal_manifold if internal_manifold is not None else m.Manifold()
+        self.name: str = solid_name if solid_name is not None else name
         self.color: ColorRGBA = ColorRGBA(0.72, 0.76, 0.82, 1.0)  # Gris aluminium Fusion 360
         self._cached_buffer: Optional[MeshBuffer] = None
 

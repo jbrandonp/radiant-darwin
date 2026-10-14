@@ -23,6 +23,14 @@ from src.core.interfaces import GeometryProvider, FeatureEvaluator, ExporterServ
 from src.core.event_bus import CADEventBus, CADEvent, DocumentModifiedEvent, FeatureEvaluatedEvent, SelectionChangedEvent, TimelineRollbackEvent, WorkbenchChangedEvent, global_event_bus
 from src.core.registry import FeatureRegistry, FeatureCategory, FeatureDescriptor, WorkbenchRegistry, WorkbenchDescriptor
 from src.core.pipeline import LegoPipeline, TranslateStage, RotateStage, ScaleStage, BooleanStage, SimplifyStage, InspectorCallbackStage
+from src.core.industrial_analyzer import (
+    compute_draft_angles, compute_wall_thickness, heal_and_validate_mesh,
+    DraftAngleResult, WallThicknessResult, MeshHealingReport
+)
+from src.core.generative_lattices import (
+    LatticeType, make_octet_cell, make_tpms_gyroid_cell,
+    generate_lattice_volume, create_lightweight_infilled_part
+)
 
 __all__ = [
     "Vector3D",
@@ -94,4 +102,15 @@ __all__ = [
     "BooleanStage",
     "SimplifyStage",
     "InspectorCallbackStage",
+    "compute_draft_angles",
+    "compute_wall_thickness",
+    "heal_and_validate_mesh",
+    "DraftAngleResult",
+    "WallThicknessResult",
+    "MeshHealingReport",
+    "LatticeType",
+    "make_octet_cell",
+    "make_tpms_gyroid_cell",
+    "generate_lattice_volume",
+    "create_lightweight_infilled_part",
 ]

@@ -73,6 +73,18 @@ class TechnicalDrawingGenerator:
         self.width = sheet_width
         self.height = sheet_height
 
+    @classmethod
+    def generate_views(
+        cls,
+        solid: Solid,
+        title: str = "Composant Mécanique",
+        author: str = "Brandon",
+        material_name: str = "Aluminium 6061-T6"
+    ) -> TechnicalSheet:
+        """Génère la planche technique normalisée directement depuis la classe."""
+        gen = cls()
+        return gen.generate_sheet(solid, title=title, author=author, material_name=material_name)
+
     def generate_sheet(
         self,
         solid: Solid,

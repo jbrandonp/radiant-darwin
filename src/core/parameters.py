@@ -80,14 +80,14 @@ class SafeExpressionEvaluator:
         "atan2": lambda y, x: math.degrees(math.atan2(y, x)),
         "floor": lambda x: float(math.floor(x)),
         "ceil": lambda x: float(math.ceil(x)),
-        "round": lambda x: float(round(x)),
+        "round": lambda x, n=0: float(round(x, int(n))),
         "exp": lambda x: float(math.exp(min(50.0, x))),
         "log": lambda x: float(math.log(max(1e-15, x))),
         "ln": lambda x: float(math.log(max(1e-15, x))),
         "log10": lambda x: float(math.log10(max(1e-15, x))),
         "abs": abs,
-        "min": min,
-        "max": max,
+        "min": lambda *args: float(min(args)) if args else 0.0,
+        "max": lambda *args: float(max(args)) if args else 0.0,
         "pi": lambda: math.pi,
     }
 

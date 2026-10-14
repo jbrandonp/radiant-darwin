@@ -10,16 +10,20 @@ import pytest
 import numpy as np
 import manifold3d as m
 
-from src.core.geometry import make_box, make_cylinder, make_sphere, make_cone, Solid
+from src.core.geometry import make_box, make_cylinder, make_sphere, make_cone, make_torus, make_wedge, Solid
 from src.core.types import PlaneType, BooleanOperation, Point2D, Vector3D, FeatureStatus
 from src.core.document import CADDocument
 from src.core.feature import BoxFeature, ExtrudeFeature, BooleanFeature
-from src.core.operations_advanced import HoleFeature, ShellFeature, LinearPatternFeature
+from src.core.operations_advanced import HoleFeature, ShellFeature, LinearPatternFeature, DraftFeature, FilletFeature, ChamferFeature
+from src.core.fasteners import FastenerFeature
+from src.core.section_tools import slice_solid_contours, create_sketch_from_cross_section
 from src.core.parameters import SafeExpressionEvaluator, ParameterTable
 from src.core.serializer import ProjectSerializer
 from src.solver.constraints_2d import SketchConstraintSolver2D
 from src.sheetmetal.sheet_metal import SheetMetalPart, SheetMetalRule
 from src.cam.cam_engine import CAMEngine
+from src.assembly.assembly_manager import AssemblyManager
+from src.drawing.drawing_generator import TechnicalDrawingGenerator
 from src.fea.fea_solver import FEASimulator
 from src.render.raytracer import PBRRaytracer
 from src.render.pbr_material import PBR_LIBRARY
@@ -197,3 +201,91 @@ def test_fea_zero_and_negative_loads() -> None:
     res_neg = sim.run_static_analysis(solid, applied_force_newtons=-500.0)
     assert res_neg is not None
     assert res_neg.max_stress_mpa >= 0.0
+
+
+def test_extreme_primitives_geometry() -> None:
+    """Vérifie la robustesse face à des primitives avec rayons nuls ou inversés."""
+    c = make_cone(radius_bottom=0.0, radius_top=0.0, height=10.0)
+    assert c is not None and c.is_manifold()
+
+    t = make_torus(major_radius=5.0, minor_radius=10.0)
+    assert t is not None and t.is_manifold()
+
+    w = make_wedge(dx=-10.0, dy=0.0, dz=-5.0)
+    assert w is not None and w.is_manifold()
+
+
+def test_section_cut_edge_cases() -> None:
+    """Vérifie les coupes de section hors limites et sur contours vides."""
+    box = make_box(10.0, 10.0, 10.0)
+    contours = slice_solid_contours(box, axis="Z", coordinate=500.0)
+    assert contours == []
+
+    sk = create_sketch_from_cross_section([], "Z", "sk_empty")
+    assert sk is None
+
+
+def test_fastener_unknown_metric_size() -> None:
+    """Vérifie le repli sécurisé sur M6 lorsqu'une taille métrique inconnue est demandée."""
+    feat = FastenerFeature("f_unk", "Vis Inconnue", fastener_type="hex_bolt", standard_size="M999_INVALIDE")
+    bodies = feat.evaluate({}, {})
+    assert "body_f_unk" in bodies
+    assert bodies["body_f_unk"].is_manifold()
+
+
+def test_draft_feature_multi_axes_and_extreme_angles() -> None:
+    """Vérifie la dépouille avec angle extrême (90°) et axes X, Y, Z."""
+    box = make_box(20.0, 20.0, 20.0)
+    # Angle extrême clampé sans explosion tangente
+    feat90 = DraftFeature("d90", "Draft 90", target_body_id="b1", draft_angle_deg=90.0, pull_axis="Z")
+    res90 = feat90.evaluate({"b1": box}, {})
+    assert "b1" in res90
+    assert res90["b1"].is_manifold()
+
+    # Axes X et Y
+    feat_x = DraftFeature("dx", "Draft X", target_body_id="b1", draft_angle_deg=5.0, pull_axis="X")
+    res_x = feat_x.evaluate({"b1": box}, {})
+    assert "b1" in res_x
+
+    feat_y = DraftFeature("dy", "Draft Y", target_body_id="b1", draft_angle_deg=-5.0, pull_axis="Y")
+    res_y = feat_y.evaluate({"b1": box}, {})
+    assert "b1" in res_y
+
+
+def test_solid_translate_polymorphism() -> None:
+    """Vérifie que translate accepte indifféremment Vector3D, liste ou 3 flottants."""
+    b = make_box(10.0, 10.0, 10.0)
+    t1 = b.translate(Vector3D(5.0, 0.0, 0.0))
+    t2 = b.translate([5.0, 0.0, 0.0])
+    t3 = b.translate(5.0, 0.0, 0.0)
+
+    assert t1.bounding_box()[0].x == pytest.approx(5.0)
+    assert t2.bounding_box()[0].x == pytest.approx(5.0)
+    assert t3.bounding_box()[0].x == pytest.approx(5.0)
+
+
+def test_cam_clearance_and_contour_depth_robustness() -> None:
+    """Vérifie que le moteur CAM positionne le dégagement au-dessus de la pièce."""
+    solid = make_box(30.0, 20.0, 15.0).translate(0.0, 0.0, 25.0)
+    cam = CAMEngine()
+    op = cam.generate_contour_toolpath(solid, depth_mm=5.0)
+    assert op is not None
+    # Le Z initial doit être au-dessus du sommet de la pièce (25 + 15 + safe_z = 45 mm)
+    assert op.points[0].pos.z >= 45.0
+
+
+def test_drawing_generator_classmethod_and_empty_solid() -> None:
+    """Vérifie la génération de plan via classmethod sur solide vide."""
+    empty_solid = Solid(make_box(0.001, 0.001, 0.001)._manifold, "Vide")
+    sheet = TechnicalDrawingGenerator.generate_views(empty_solid)
+    assert sheet is not None
+    assert len(sheet.lines) >= 4  # Cadre extérieur présent
+
+
+def test_parameters_round_min_max_multi_args() -> None:
+    """Vérifie la robustesse des fonctions round, min, max dans l'évaluateur."""
+    ctx = {"val": 3.14159}
+    assert SafeExpressionEvaluator.evaluate("round(val, 2)", ctx) == 3.14
+    assert SafeExpressionEvaluator.evaluate("round(val)", ctx) == 3.0
+    assert SafeExpressionEvaluator.evaluate("min(10, 5, 20)", ctx) == 5.0
+    assert SafeExpressionEvaluator.evaluate("max(10, 5, 20)", ctx) == 20.0

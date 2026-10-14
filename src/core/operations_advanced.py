@@ -12,7 +12,7 @@ from scipy.interpolate import interp1d
 
 from src.core.types import BooleanOperation, FeatureStatus, Vector3D, Point2D, PlaneType
 from src.core.geometry import Solid, make_cylinder, make_sphere, make_box, make_cone, _extract_sharp_edges
-from src.core.feature import Feature, _apply_boolean_operation
+from src.core.feature import Feature, _apply_boolean_operation, resolve_target_body_id
 from src.core.sketch import Sketch2D
 
 
@@ -95,11 +95,12 @@ class LinearPatternFeature(Feature):
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Génère la matrice d'occurrences répétées."""
         updated = dict(existing_bodies)
-        if self.source_body_id not in updated:
+        src_key = resolve_target_body_id(self.source_body_id, updated)
+        if not src_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        base_solid = updated[self.source_body_id]
+        base_solid = updated[src_key]
         nx = max(1, min(50, int(self.parameters["count_x"])))
         ny = max(1, min(50, int(self.parameters["count_y"])))
         if nx * ny > 500:
@@ -118,10 +119,10 @@ class LinearPatternFeature(Feature):
             combined = instances[0]
             for inst in instances[1:]:
                 combined = combined.union(inst)
-            updated[self.source_body_id] = combined
+            updated[src_key] = combined
         else:
             for idx, inst in enumerate(instances):
-                updated[f"{self.source_body_id}_pat_{idx}"] = inst
+                updated[f"{src_key}_pat_{idx}"] = inst
 
         self.status = FeatureStatus.OK
         return updated
@@ -153,11 +154,12 @@ class CircularPatternFeature(Feature):
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Génère les répétitions réparties angulairement."""
         updated = dict(existing_bodies)
-        if self.source_body_id not in updated:
+        src_key = resolve_target_body_id(self.source_body_id, updated)
+        if not src_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        base_solid = updated[self.source_body_id]
+        base_solid = updated[src_key]
         n = max(1, min(360, int(self.parameters["count"])))
         total_ang = float(self.parameters["total_angle"])
         step = total_ang / n if n > 0 else 0.0
@@ -171,10 +173,10 @@ class CircularPatternFeature(Feature):
             combined = instances[0]
             for inst in instances[1:]:
                 combined = combined.union(inst)
-            updated[self.source_body_id] = combined
+            updated[src_key] = combined
         else:
             for idx, inst in enumerate(instances):
-                updated[f"{self.source_body_id}_circ_{idx}"] = inst
+                updated[f"{src_key}_circ_{idx}"] = inst
 
         self.status = FeatureStatus.OK
         return updated
@@ -202,11 +204,12 @@ class MirrorFeature(Feature):
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Applique l'inversion de coordonnées selon le plan miroir."""
         updated = dict(existing_bodies)
-        if self.source_body_id not in updated:
+        src_key = resolve_target_body_id(self.source_body_id, updated)
+        if not src_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        base_solid = updated[self.source_body_id]
+        base_solid = updated[src_key]
         # Inversion selon l'axe normal au plan
         if self.mirror_plane == PlaneType.YZ:
             # Plan X = 0 -> Inversion de l'axe X
@@ -219,7 +222,7 @@ class MirrorFeature(Feature):
             mirrored = base_solid.scale(1.0, 1.0, -1.0)
 
         if self.join_with_source:
-            updated[self.source_body_id] = base_solid.union(mirrored)
+            updated[src_key] = base_solid.union(mirrored)
         else:
             updated[self.body_id] = mirrored
 
@@ -347,11 +350,12 @@ class ShellFeature(Feature):
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Évide le solide en soustrayant une copie réduite de l'épaisseur."""
         updated = dict(existing_bodies)
-        if self.target_body_id not in updated:
+        tgt_key = resolve_target_body_id(self.target_body_id, updated)
+        if not tgt_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        target = updated[self.target_body_id]
+        target = updated[tgt_key]
         b_min, b_max = target.bounding_box()
         dx = b_max.x - b_min.x
         dy = b_max.y - b_min.y
@@ -371,7 +375,7 @@ class ShellFeature(Feature):
         center = Vector3D((b_min.x + b_max.x) * 0.5, (b_min.y + b_max.y) * 0.5, (b_min.z + b_max.z) * 0.5)
         # Déplacer à l'origine, mettre à l'échelle, replacer
         inner = target.translate(center.scale(-1.0)).scale(sx, sy, sz).translate(center)
-        updated[self.target_body_id] = target.difference(inner)
+        updated[tgt_key] = target.difference(inner)
         self.status = FeatureStatus.OK
         return updated
 
@@ -622,11 +626,12 @@ class FilletFeature(Feature):
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Arrondit les arêtes du corps solide cible."""
         updated = dict(existing_bodies)
-        if self.target_body_id not in updated:
+        tgt_key = resolve_target_body_id(self.target_body_id, updated)
+        if not tgt_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        target = updated[self.target_body_id]
+        target = updated[tgt_key]
         r = max(0.05, float(self.parameters.get("radius", 2.0)))
         segs = max(8, min(32, int(self.parameters.get("segments", 16))))
         b_min, b_max = target.bounding_box()
@@ -643,12 +648,12 @@ class FilletFeature(Feature):
             sphere_kernel = m.Manifold.sphere(r, segs)
             rounded_m = shrunk.manifold.minkowski_sum(sphere_kernel)
             if not rounded_m.is_empty():
-                updated[self.target_body_id] = Solid(rounded_m, f"{target.name}_Fillet")
+                updated[tgt_key] = Solid(rounded_m, f"{target.name}_Fillet")
                 self.status = FeatureStatus.OK
                 return updated
 
         # Fallback de lissage si trop étroit pour Minkowski
-        updated[self.target_body_id] = target.simplify(r * 0.1)
+        updated[tgt_key] = target.simplify(r * 0.1)
         self.status = FeatureStatus.OK
         return updated
 
@@ -677,11 +682,12 @@ class ChamferFeature(Feature):
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Applique les biseaux de découpe par plans inclinés sur les arêtes cibles."""
         updated = dict(existing_bodies)
-        if self.target_body_id not in updated:
+        tgt_key = resolve_target_body_id(self.target_body_id, updated)
+        if not tgt_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        target = updated[self.target_body_id]
+        target = updated[tgt_key]
         d = max(0.01, float(self.parameters.get("distance", 2.0)))
         b_min, b_max = target.bounding_box()
         x0, x1 = b_min.x, b_max.x
@@ -718,7 +724,7 @@ class ChamferFeature(Feature):
             norm_3d = Vector3D(float(norm_v[0]), float(norm_v[1]), float(norm_v[2]))
             chamfered = chamfered.trim_by_plane(norm_3d.scale(-1.0), -cut_dist)
 
-        updated[self.target_body_id] = chamfered
+        updated[tgt_key] = chamfered
         self.status = FeatureStatus.OK
         return updated
 
@@ -735,40 +741,63 @@ class DraftFeature(Feature):
         name: str = "Draft",
         target_body_id: str = "",
         draft_angle_deg: float = 3.0,
-        pull_axis: str = "Z"
+        pull_axis: str = "Z",
+        draft_angle: Optional[float] = None
     ) -> None:
         super().__init__(feature_id, name)
         self.target_body_id = target_body_id
-        self.pull_axis = pull_axis
+        self.pull_axis = str(pull_axis).upper() if pull_axis else "Z"
+        actual_angle = float(draft_angle if draft_angle is not None else draft_angle_deg)
         self.parameters = {
-            "draft_angle": float(draft_angle_deg)
+            "draft_angle": actual_angle
         }
 
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Applique l'angle de dépouille en déformant les faces selon la direction de tirage."""
         updated = dict(existing_bodies)
-        if self.target_body_id not in updated:
+        tgt_key = resolve_target_body_id(self.target_body_id, updated)
+        if not tgt_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        target = updated[self.target_body_id]
-        angle_deg = self.parameters.get("draft_angle", 3.0)
+        target = updated[tgt_key]
+        angle_deg = max(-60.0, min(60.0, float(self.parameters.get("draft_angle", 3.0))))
         angle_rad = np.radians(angle_deg)
         b_min, b_max = target.bounding_box()
-        h_z = max(0.1, b_max.z - b_min.z)
         tan_a = float(np.tan(angle_rad))
-        cx = (b_min.x + b_max.x) * 0.5
-        cy = (b_min.y + b_max.y) * 0.5
 
-        def _draft_warp(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
-            x, y, z = v[0], v[1], v[2]
-            delta_z = z - b_min.z
-            scale_fac = max(0.05, 1.0 - (delta_z / h_z) * tan_a)
-            new_x = cx + (x - cx) * scale_fac
-            new_y = cy + (y - cy) * scale_fac
-            return (float(new_x), float(new_y), float(z))
+        axis_up = self.pull_axis.upper() if self.pull_axis else "Z"
+        if axis_up == "X":
+            h_dim = max(0.1, b_max.x - b_min.x)
+            cy = (b_min.y + b_max.y) * 0.5
+            cz = (b_min.z + b_max.z) * 0.5
+            def _draft_warp(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
+                x, y, z = v[0], v[1], v[2]
+                delta = x - b_min.x
+                scale_fac = max(0.05, 1.0 - (delta / h_dim) * tan_a)
+                return (float(x), float(cy + (y - cy) * scale_fac), float(cz + (z - cz) * scale_fac))
+        elif axis_up == "Y":
+            h_dim = max(0.1, b_max.y - b_min.y)
+            cx = (b_min.x + b_max.x) * 0.5
+            cz = (b_min.z + b_max.z) * 0.5
+            def _draft_warp(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
+                x, y, z = v[0], v[1], v[2]
+                delta = y - b_min.y
+                scale_fac = max(0.05, 1.0 - (delta / h_dim) * tan_a)
+                return (float(cx + (x - cx) * scale_fac), float(y), float(cz + (z - cz) * scale_fac))
+        else:
+            h_dim = max(0.1, b_max.z - b_min.z)
+            cx = (b_min.x + b_max.x) * 0.5
+            cy = (b_min.y + b_max.y) * 0.5
+            def _draft_warp(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
+                x, y, z = v[0], v[1], v[2]
+                delta = z - b_min.z
+                scale_fac = max(0.05, 1.0 - (delta / h_dim) * tan_a)
+                return (float(cx + (x - cx) * scale_fac), float(cy + (y - cy) * scale_fac), float(z))
 
-        updated[self.target_body_id] = target.warp(_draft_warp)
+        updated[tgt_key] = target.warp(_draft_warp)
+        self.status = FeatureStatus.OK
+        return updated
         self.status = FeatureStatus.OK
         return updated
 

@@ -4,7 +4,7 @@ Utilise manifold3d pour garantir des solides manifold (étanches) et des opérat
 """
 
 from __future__ import annotations
-from typing import List, Tuple, Optional, Sequence, Callable
+from typing import List, Tuple, Optional, Sequence, Callable, Union
 import numpy as np
 import manifold3d as m
 
@@ -55,9 +55,26 @@ class Solid:
         max_pt = Vector3D(float(box[3]), float(box[4]), float(box[5]))
         return (min_pt, max_pt)
 
-    def translate(self, offset: Vector3D) -> Solid:
-        """Applique une translation au solide."""
-        new_manifold = self._manifold.translate([offset.x, offset.y, offset.z])
+    def translate(
+        self,
+        offset_or_x: Union[Vector3D, float, Sequence[float]],
+        y: Optional[float] = None,
+        z: Optional[float] = None
+    ) -> Solid:
+        """
+        Applique une translation au solide.
+        Accepte un Vector3D, une séquence [x, y, z] ou 3 coordonnées scalaires (x, y, z).
+        """
+        if isinstance(offset_or_x, Vector3D):
+            tx, ty, tz = offset_or_x.x, offset_or_x.y, offset_or_x.z
+        elif isinstance(offset_or_x, (list, tuple, np.ndarray)):
+            tx, ty, tz = float(offset_or_x[0]), float(offset_or_x[1]), float(offset_or_x[2])
+        else:
+            tx = float(offset_or_x)
+            ty = float(y) if y is not None else 0.0
+            tz = float(z) if z is not None else 0.0
+
+        new_manifold = self._manifold.translate([tx, ty, tz])
         res = Solid(new_manifold, self.name)
         res.color = self.color
         return res
@@ -283,6 +300,8 @@ def make_cone(radius_bottom: float, radius_top: float, height: float, segments: 
     """
     safe_r_bottom = max(0.0, radius_bottom)
     safe_r_top = max(0.0, radius_top)
+    if safe_r_bottom <= 0.0 and safe_r_top <= 0.0:
+        safe_r_bottom = 0.001
     safe_height = max(0.001, height)
     manifold_cone = m.Manifold.cylinder(safe_height, safe_r_bottom, safe_r_top, segments, False)
     return Solid(manifold_cone, name)

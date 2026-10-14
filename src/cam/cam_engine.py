@@ -93,13 +93,15 @@ class CAMEngine:
         if current_z <= target_z:
             current_z = target_z + stepdown
 
+        clearance_z = max(stock_z + self.safe_z, target_z + self.safe_z, self.safe_z)
+
         while current_z > target_z:
             current_z = max(target_z, current_z - stepdown)
             y = y0
             direction = 1
 
             # Dégagement rapide vers le point de départ
-            op.points.append(ToolpathPoint(Vector3D(x0, y0, self.safe_z), is_rapid=True))
+            op.points.append(ToolpathPoint(Vector3D(x0, y0, clearance_z), is_rapid=True))
             op.points.append(ToolpathPoint(Vector3D(x0, y0, current_z), is_rapid=False))
 
             while y <= y1:
@@ -117,7 +119,7 @@ class CAMEngine:
                 direction = -direction
 
             if op.points:
-                op.points.append(ToolpathPoint(Vector3D(op.points[-1].pos.x, op.points[-1].pos.y, self.safe_z), is_rapid=True))
+                op.points.append(ToolpathPoint(Vector3D(op.points[-1].pos.x, op.points[-1].pos.y, clearance_z), is_rapid=True))
 
         return op
 
@@ -140,12 +142,14 @@ class CAMEngine:
         x0, x1 = b_min.x - tool_r, b_max.x + tool_r
         y0, y1 = b_min.y - tool_r, b_max.y + tool_r
 
+        start_z = b_max.z
+        clearance_z = max(start_z + self.safe_z, self.safe_z)
         safe_depth = max(0.1, abs(depth_mm))
         num_passes = max(1, int(np.ceil(safe_depth / self.stepdown_mm)))
         z_step = safe_depth / num_passes
 
         # Position initiale rapide
-        op.points.append(ToolpathPoint(Vector3D(x0, y0, self.safe_z), is_rapid=True))
+        op.points.append(ToolpathPoint(Vector3D(x0, y0, clearance_z), is_rapid=True))
 
         current_z = 0.0
         for _ in range(num_passes):
@@ -159,7 +163,7 @@ class CAMEngine:
             op.points.append(ToolpathPoint(Vector3D(x0, y0, current_z), is_rapid=False))
 
         # Dégagement final
-        op.points.append(ToolpathPoint(Vector3D(x0, y0, self.safe_z), is_rapid=True))
+        op.points.append(ToolpathPoint(Vector3D(x0, y0, clearance_z), is_rapid=True))
         return op
 
     def export_gcode(self, operations: List[ToolpathOperation], filepath: str) -> str:

@@ -330,16 +330,15 @@ class BooleanFeature(Feature):
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Exécute l'opération booléenne entre le corps cible et l'outil."""
         updated = dict(existing_bodies)
-        if self.target_body_id not in updated or self.tool_body_id not in updated:
+        tgt_key = resolve_target_body_id(self.target_body_id, updated)
+        tool_key = resolve_target_body_id(self.tool_body_id, updated)
+
+        if not tgt_key or not tool_key or tgt_key == tool_key:
             self.status = FeatureStatus.ERROR
             return updated
 
-        if self.target_body_id == self.tool_body_id:
-            self.status = FeatureStatus.ERROR
-            return updated
-
-        target_solid = updated[self.target_body_id]
-        tool_solid = updated[self.tool_body_id]
+        target_solid = updated[tgt_key]
+        tool_solid = updated[tool_key]
 
         if self.operation == BooleanOperation.JOIN:
             result = target_solid.union(tool_solid)
@@ -350,10 +349,26 @@ class BooleanFeature(Feature):
         else:
             result = target_solid
 
-        updated[self.target_body_id] = result
-        del updated[self.tool_body_id]  # L'outil est consommé dans l'opération
+        updated[tgt_key] = result
+        del updated[tool_key]  # L'outil est consommé dans l'opération
         self.status = FeatureStatus.OK
         return updated
+
+
+def resolve_target_body_id(target_body_id: Optional[str], bodies: Dict[str, Solid]) -> Optional[str]:
+    """
+    Résout de manière tolérante l'identifiant d'un corps solide cible dans un dictionnaire.
+    Prend en compte les préfixes 'body_' automatiques pour éviter les échecs silencieux.
+    """
+    if not target_body_id:
+        return None
+    if target_body_id in bodies:
+        return target_body_id
+    if f"body_{target_body_id}" in bodies:
+        return f"body_{target_body_id}"
+    if target_body_id.startswith("body_") and target_body_id[5:] in bodies:
+        return target_body_id[5:]
+    return None
 
 
 def _apply_boolean_operation(
@@ -365,9 +380,7 @@ def _apply_boolean_operation(
 ) -> Dict[str, Solid]:
     """Applique l'opération booléenne spécifiée sur la liste active des corps."""
     updated = dict(current_bodies)
-    resolved_target = target_body_id
-    if resolved_target and resolved_target not in updated and f"body_{resolved_target}" in updated:
-        resolved_target = f"body_{resolved_target}"
+    resolved_target = resolve_target_body_id(target_body_id, updated)
 
     if operation == BooleanOperation.NEW_BODY or not resolved_target or resolved_target not in updated:
         updated[new_body_id] = new_solid

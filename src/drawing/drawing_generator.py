@@ -29,9 +29,10 @@ class DrawingLine2D:
     y1: float
     x2: float
     y2: float
-    is_hidden: bool = False    # Ligne cachée en pointillés
-    is_dimension: bool = False # Ligne de cote
-    is_hatch: bool = False     # Ligne de hachure de coupe ISO 128
+    is_hidden: bool = False     # Ligne cachée en pointillés
+    is_dimension: bool = False  # Ligne de cote
+    is_hatch: bool = False      # Ligne de hachure de coupe ISO 128
+    is_centerline: bool = False # Trait d'axe mixte long-court ISO 128
 
 
 @dataclass
@@ -318,4 +319,64 @@ class TechnicalDrawingGenerator:
 
         sheet.dimensions.append(DimensionLabel(center_x, center_y - 80.0, f"Coupe A-A (Z = {cut_height:.1f} mm)"))
         return sheet
+
+    def add_centerline_cross(
+        self,
+        center_x: float,
+        center_y: float,
+        radius: float,
+        extension: float = 4.0,
+        sheet: Optional[TechnicalSheet] = None
+    ) -> List[DrawingLine2D]:
+        """
+        Ajoute une croix de traits d'axe normalisée ISO 128 (Centerline Cross)
+        au centre d'un alésage, cylindre ou cercle de perçage.
+        """
+        span = radius + extension
+        l_horiz = DrawingLine2D(center_x - span, center_y, center_x + span, center_y, is_centerline=True)
+        l_vert = DrawingLine2D(center_x, center_y - span, center_x, center_y + span, is_centerline=True)
+        lines = [l_horiz, l_vert]
+        if sheet is not None:
+            sheet.lines.extend(lines)
+        return lines
+
+    def add_bolt_circle_centerline(
+        self,
+        center_x: float,
+        center_y: float,
+        pitch_circle_radius: float,
+        num_holes: int = 4,
+        hole_radius: float = 3.0,
+        sheet: Optional[TechnicalSheet] = None
+    ) -> List[DrawingLine2D]:
+        """
+        Génère le cercle primitif d'axe (Pitch Circle Diameter PCD) et les croix
+        d'axes sur chaque perçage selon les règles du dessin technique ISO (FreeCAD TechDraw CenterLine).
+        """
+        lines: List[DrawingLine2D] = []
+        # Croix centrale
+        lines.extend(self.add_centerline_cross(center_x, center_y, pitch_circle_radius, extension=6.0))
+
+        # Discrétisation du cercle primitif en traits d'axe
+        angles = np.linspace(0.0, 2.0 * np.pi, max(16, num_holes * 8), endpoint=True)
+        for i in range(len(angles) - 1):
+            a1 = angles[i]
+            a2 = angles[i + 1]
+            x1 = center_x + pitch_circle_radius * float(np.cos(a1))
+            y1 = center_y + pitch_circle_radius * float(np.sin(a1))
+            x2 = center_x + pitch_circle_radius * float(np.cos(a2))
+            y2 = center_y + pitch_circle_radius * float(np.sin(a2))
+            lines.append(DrawingLine2D(x1, y1, x2, y2, is_centerline=True))
+
+        # Croix individuelles sur chaque trou
+        hole_angles = np.linspace(0.0, 2.0 * np.pi, num_holes, endpoint=False)
+        for ha in hole_angles:
+            hx = center_x + pitch_circle_radius * float(np.cos(ha))
+            hy = center_y + pitch_circle_radius * float(np.sin(ha))
+            lines.extend(self.add_centerline_cross(hx, hy, hole_radius, extension=2.0))
+
+        if sheet is not None:
+            sheet.lines.extend(lines)
+        return lines
+
 

@@ -1039,3 +1039,202 @@ class DatumPlaneFeature(Feature):
         sketch.plane = self.base_plane
         sketch.offset_distance = self.parameters.get("offset_distance", 0.0)
 
+
+class GrooveFeature(Feature):
+    """
+    Fonctionnalité de gorge / rainure de révolution soustractive (FreeCAD PartDesign Groove).
+    Effectue une révolution du profil d'esquisse et la soustrait du corps cible
+    pour créer des gorges de joints toriques, poulies, cannelures et alésages tournés.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Groove",
+        sketch_id: str = "",
+        angle_deg: float = 360.0,
+        segments: int = 48,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.sketch_id = sketch_id
+        self.target_body_id = target_body_id
+        self.parameters = {
+            "angle": float(angle_deg),
+            "segments": float(segments),
+        }
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Exécute la révolution soustractive du profil d'esquisse."""
+        if self.sketch_id not in sketches:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        sketch = sketches[self.sketch_id]
+        profile = sketch.get_primary_profile()
+        if not profile or len(profile) < 3:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        updated = dict(existing_bodies)
+        target_key = resolve_target_body_id(self.target_body_id, updated)
+        if not target_key or target_key not in updated:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        target_body = updated[target_key]
+        poly_coords: List[List[float]] = [[pt.u, pt.v] for pt in profile]
+        cs = m.CrossSection([poly_coords])
+        angle = max(1.0, min(360.0, self.parameters.get("angle", 360.0)))
+        segs = max(12, int(self.parameters.get("segments", 48)))
+
+        cutter_manifold = m.Manifold.revolve(cs, segs, angle)
+        if sketch.plane == PlaneType.XZ:
+            cutter_manifold = cutter_manifold.rotate([90.0, 0.0, 0.0])
+        elif sketch.plane == PlaneType.YZ:
+            cutter_manifold = cutter_manifold.rotate([0.0, -90.0, 0.0])
+
+        cutter_solid = Solid(cutter_manifold, f"{self.name}_cutter")
+        try:
+            result_body = target_body.difference(cutter_solid)
+            updated[target_key] = result_body
+            self.status = FeatureStatus.OK
+        except Exception:
+            self.status = FeatureStatus.ERROR
+
+        return updated
+
+
+class MultiTransformStep:
+    """Étape élémentaire de transformation dans un MultiTransform (FreeCAD PartDesign)."""
+
+    def __init__(
+        self,
+        transform_type: str,
+        count: int = 2,
+        spacing: float = 20.0,
+        axis: str = "X",
+        total_angle: float = 360.0,
+        mirror_plane: PlaneType = PlaneType.YZ,
+        scale_factor: float = 1.0
+    ) -> None:
+        self.transform_type: str = transform_type.lower()
+        self.count: int = max(1, count)
+        self.spacing: float = float(spacing)
+        self.axis: str = axis.upper()
+        self.total_angle: float = float(total_angle)
+        self.mirror_plane: PlaneType = mirror_plane
+        self.scale_factor: float = float(scale_factor)
+
+
+class MultiTransformFeature(Feature):
+    """
+    Fonctionnalité multi-transformation chaînée (FreeCAD PartDesign MultiTransform).
+    Permet d'enchaîner plusieurs répétitions et symétries (linéaire, polaire, miroir)
+    sur un corps dans une seule opération cohérente.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "MultiTransform",
+        source_body_id: str = "",
+        steps: Optional[List[MultiTransformStep]] = None,
+        join_bodies: bool = True
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.source_body_id = source_body_id
+        self.steps: List[MultiTransformStep] = steps if steps is not None else []
+        self.join_bodies: bool = join_bodies
+        self.body_id = f"body_{feature_id}"
+
+    def add_linear_step(self, count: int = 3, spacing: float = 30.0, axis: str = "X") -> MultiTransformStep:
+        """Ajoute une étape de répétition linéaire."""
+        step = MultiTransformStep("linear", count=count, spacing=spacing, axis=axis)
+        self.steps.append(step)
+        return step
+
+    def add_circular_step(self, count: int = 4, total_angle: float = 360.0, axis: str = "Z") -> MultiTransformStep:
+        """Ajoute une étape de répétition circulaire."""
+        step = MultiTransformStep("circular", count=count, total_angle=total_angle, axis=axis)
+        self.steps.append(step)
+        return step
+
+    def add_mirror_step(self, mirror_plane: PlaneType = PlaneType.YZ) -> MultiTransformStep:
+        """Ajoute une étape de symétrie miroir."""
+        step = MultiTransformStep("mirror", mirror_plane=mirror_plane)
+        self.steps.append(step)
+        return step
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Applique séquentiellement toutes les transformations configurées."""
+        updated = dict(existing_bodies)
+        src_key = resolve_target_body_id(self.source_body_id, updated)
+        if not src_key or src_key not in updated:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        base_solid = updated[src_key]
+        current_solids: List[Solid] = [base_solid]
+
+        for step in self.steps:
+            new_set: List[Solid] = []
+            if step.transform_type == "linear":
+                for s in current_solids:
+                    for i in range(step.count):
+                        disp = float(i) * step.spacing
+                        if step.axis == "Y":
+                            t = [0.0, disp, 0.0]
+                        elif step.axis == "Z":
+                            t = [0.0, 0.0, disp]
+                        else:
+                            t = [disp, 0.0, 0.0]
+                        new_set.append(s.translate(t))
+
+            elif step.transform_type == "circular":
+                for s in current_solids:
+                    num = step.count
+                    step_ang = step.total_angle / float(num) if num > 1 else 0.0
+                    for i in range(num):
+                        ang = float(i) * step_ang
+                        if step.axis == "X":
+                            rot = [ang, 0.0, 0.0]
+                        elif step.axis == "Y":
+                            rot = [0.0, ang, 0.0]
+                        else:
+                            rot = [0.0, 0.0, ang]
+                        new_set.append(s.rotate(rot[0], rot[1], rot[2]))
+
+            elif step.transform_type == "mirror":
+                for s in current_solids:
+                    new_set.append(s)
+                    if step.mirror_plane == PlaneType.XY:
+                        m_solid = s.scale(1.0, 1.0, -1.0)
+                    elif step.mirror_plane == PlaneType.XZ:
+                        m_solid = s.scale(1.0, -1.0, 1.0)
+                    else:
+                        m_solid = s.scale(-1.0, 1.0, 1.0)
+                    new_set.append(m_solid)
+
+            if new_set:
+                current_solids = new_set
+
+        if not current_solids:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        if self.join_bodies:
+            result = current_solids[0]
+            for s in current_solids[1:]:
+                result = result.union(s)
+            result.name = self.name
+            updated[self.body_id] = result
+        else:
+            for idx, s in enumerate(current_solids):
+                s.name = f"{self.name}_{idx+1}"
+                updated[f"{self.body_id}_{idx+1}"] = s
+
+        self.status = FeatureStatus.OK
+        return updated
+
+

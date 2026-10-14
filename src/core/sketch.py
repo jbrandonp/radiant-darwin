@@ -22,6 +22,8 @@ class EntityType(Enum):
     SLOT = "slot"
     REGULAR_POLYGON = "regular_polygon"
     ELLIPSE = "ellipse"
+    BSPLINE = "bspline"
+    BEZIER = "bezier"
 
 
 class SketchEntity:
@@ -190,6 +192,146 @@ class SketchEllipse(SketchEntity):
         return self.get_points()
 
 
+class SketchBSpline(SketchEntity):
+    """
+    Courbe B-Spline 2D paramétrique de degré p (FreeCAD Sketcher B-Spline).
+    Définie par une liste de points de contrôle (pôles) et évaluée par l'algorithme de De Boor.
+    """
+
+    def __init__(
+        self,
+        entity_id: str,
+        control_points: List[Point2D],
+        degree: int = 3,
+        closed: bool = False,
+        segments: int = 40,
+        is_construction: bool = False
+    ) -> None:
+        super().__init__(entity_id, EntityType.BSPLINE, is_construction=is_construction)
+        self.control_points: List[Point2D] = list(control_points)
+        self.closed: bool = closed
+        self.degree: int = max(1, min(degree, len(control_points) - 1)) if len(control_points) > 1 else 1
+        self.segments: int = max(10, segments)
+
+    def get_points(self) -> List[Point2D]:
+        """Évalue la B-spline sur self.segments échantillons via l'algorithme De Boor."""
+        pts = self.control_points
+        n = len(pts)
+        if n == 0:
+            return []
+        if n == 1:
+            return [pts[0]]
+        if n == 2:
+            return [pts[0], pts[1]]
+
+        p = self.degree
+        if self.closed:
+            ctrl_pts_ext = list(pts) + list(pts[:p])
+            n_ext = len(ctrl_pts_ext)
+            m = n_ext + p + 1
+            knots = np.linspace(0.0, 1.0, m)
+            t_eval = np.linspace(knots[p], knots[n_ext], self.segments, endpoint=False)
+            evaluated: List[Point2D] = []
+            for t in t_eval:
+                k = int(np.searchsorted(knots, t, side="right") - 1)
+                k = max(p, min(k, n_ext - 1))
+                d_u = [pt.u for pt in ctrl_pts_ext]
+                d_v = [pt.v for pt in ctrl_pts_ext]
+                for r in range(1, p + 1):
+                    for j in range(k, k - p + r - 1, -1):
+                        denom = knots[j + p + 1 - r] - knots[j]
+                        alpha = (t - knots[j]) / denom if abs(denom) > 1e-9 else 0.0
+                        d_u[j] = (1.0 - alpha) * d_u[j - 1] + alpha * d_u[j]
+                        d_v[j] = (1.0 - alpha) * d_v[j - 1] + alpha * d_v[j]
+                evaluated.append(Point2D(float(d_u[k]), float(d_v[k])))
+            if evaluated:
+                evaluated.append(evaluated[0])
+            return evaluated
+        else:
+            m = n + p + 1
+            knots = np.zeros(m, dtype=np.float64)
+            knots[p:m - p] = np.linspace(0.0, 1.0, m - 2 * p)
+            knots[m - p:] = 1.0
+            t_eval = np.linspace(0.0, 1.0, self.segments, endpoint=True)
+
+            evaluated: List[Point2D] = []
+            for t in t_eval:
+                if t >= 1.0:
+                    evaluated.append(pts[-1])
+                    continue
+                k = int(np.searchsorted(knots, t, side="right") - 1)
+                k = max(p, min(k, n - 1))
+                d_u = [pt.u for pt in pts]
+                d_v = [pt.v for pt in pts]
+                for r in range(1, p + 1):
+                    for j in range(k, k - p + r - 1, -1):
+                        denom = knots[j + p + 1 - r] - knots[j]
+                        alpha = (t - knots[j]) / denom if abs(denom) > 1e-9 else 0.0
+                        d_u[j] = (1.0 - alpha) * d_u[j - 1] + alpha * d_u[j]
+                        d_v[j] = (1.0 - alpha) * d_v[j - 1] + alpha * d_v[j]
+                evaluated.append(Point2D(float(d_u[k]), float(d_v[k])))
+            return evaluated
+
+    def to_profile_points(self, num_segments: Optional[int] = None) -> List[Point2D]:
+        """Génère les points ordonnés du profil pour extrusion ou révolution."""
+        if num_segments is not None:
+            self.segments = max(6, num_segments)
+        return self.get_points()
+
+
+class SketchBezier(SketchEntity):
+    """
+    Courbe de Bézier 2D paramétrique de degré N (FreeCAD Sketcher Bézier).
+    Définie par ses points de contrôle et évaluée par les polynômes de Bernstein.
+    """
+
+    def __init__(
+        self,
+        entity_id: str,
+        control_points: List[Point2D],
+        closed: bool = False,
+        segments: int = 40,
+        is_construction: bool = False
+    ) -> None:
+        super().__init__(entity_id, EntityType.BEZIER, is_construction=is_construction)
+        self.control_points: List[Point2D] = list(control_points)
+        self.closed: bool = closed
+        self.segments: int = max(10, segments)
+
+    def get_points(self) -> List[Point2D]:
+        """Évalue la courbe de Bézier via l'algorithme polynomial de De Casteljau."""
+        pts = self.control_points
+        n = len(pts)
+        if n == 0:
+            return []
+        if n <= 2:
+            return pts
+
+        t_steps = np.linspace(0.0, 1.0, self.segments, endpoint=not self.closed)
+        u_pts = np.array([p.u for p in pts], dtype=np.float64)
+        v_pts = np.array([p.v for p in pts], dtype=np.float64)
+
+        evaluated: List[Point2D] = []
+        for t in t_steps:
+            curr_u = u_pts.copy()
+            curr_v = v_pts.copy()
+            for r in range(1, n):
+                curr_u = (1.0 - t) * curr_u[:-1] + t * curr_u[1:]
+                curr_v = (1.0 - t) * curr_v[:-1] + t * curr_v[1:]
+            evaluated.append(Point2D(float(curr_u[0]), float(curr_v[0])))
+
+        if self.closed and len(evaluated) > 0:
+            evaluated.append(evaluated[0])
+
+        return evaluated
+
+    def to_profile_points(self, num_segments: Optional[int] = None) -> List[Point2D]:
+        """Génère les sommets du contour."""
+        if num_segments is not None:
+            self.segments = max(6, num_segments)
+        return self.get_points()
+
+
 class Sketch2D:
     """
     Conteneur d'esquisse 2D positionnée sur un plan de référence.
@@ -271,6 +413,36 @@ class Sketch2D:
         ellipse = SketchEllipse(entity_id, center, ru, rv, segments, is_construction=is_construction)
         self.entities.append(ellipse)
         return ellipse
+
+    def add_bspline(
+        self,
+        control_points: List[Point2D],
+        degree: int = 3,
+        closed: bool = False,
+        segments: int = 40,
+        is_construction: bool = False
+    ) -> SketchBSpline:
+        """Ajoute une courbe B-Spline paramétrique (FreeCAD Sketcher B-Spline)."""
+        self._counter += 1
+        entity_id = f"bspline_{self._counter}"
+        bspline = SketchBSpline(entity_id, control_points, degree, closed, segments, is_construction=is_construction)
+        self.entities.append(bspline)
+        return bspline
+
+    def add_bezier(
+        self,
+        control_points: List[Point2D],
+        closed: bool = False,
+        segments: int = 40,
+        is_construction: bool = False
+    ) -> SketchBezier:
+        """Ajoute une courbe de Bézier paramétrique (FreeCAD Sketcher Bézier)."""
+        self._counter += 1
+        entity_id = f"bezier_{self._counter}"
+        bezier = SketchBezier(entity_id, control_points, closed, segments, is_construction=is_construction)
+        self.entities.append(bezier)
+        return bezier
+
 
     def get_solid_entities(self) -> List[SketchEntity]:
         """Retourne uniquement les entités réelles (non construction) destinées à générer de la matière 3D."""

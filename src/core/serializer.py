@@ -23,7 +23,7 @@ from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
     LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature,
-    PocketFeature, DatumPlaneFeature
+    PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature, MultiTransformStep
 )
 from src.core.fasteners import FastenerFeature
 from src.sheetmetal.sheet_metal import SheetMetalFeature
@@ -55,12 +55,17 @@ class ProjectSerializer:
             for ent in sk.entities:
                 pts = [[pt.u, pt.v] for pt in ent.get_points()]
                 cast_entities: List[object] = sk_data["entities"]  # type: ignore[assignment]
-                cast_entities.append({
+                ent_dict: Dict[str, object] = {
                     "id": ent.entity_id,
                     "type": ent.entity_type.value,
                     "points": pts,
                     "is_construction": ent.is_construction
-                })
+                }
+                if hasattr(ent, "degree"):
+                    ent_dict["degree"] = getattr(ent, "degree")
+                if hasattr(ent, "closed"):
+                    ent_dict["closed"] = getattr(ent, "closed")
+                cast_entities.append(ent_dict)
             cast_sketches: List[object] = data["sketches"]  # type: ignore[assignment]
             cast_sketches.append(sk_data)
 
@@ -118,6 +123,20 @@ class ProjectSerializer:
                 f_dict["reversed_dir"] = getattr(feat, "reversed_dir")
             if hasattr(feat, "base_plane") and isinstance(feat.base_plane, PlaneType):
                 f_dict["base_plane"] = feat.base_plane.value
+            if hasattr(feat, "steps") and isinstance(getattr(feat, "steps"), list):
+                raw_st: List[object] = getattr(feat, "steps")
+                st_list: List[object] = []
+                for st in raw_st:
+                    st_list.append({
+                        "type": getattr(st, "transform_type", "linear"),
+                        "count": getattr(st, "count", 2),
+                        "spacing": getattr(st, "spacing", 20.0),
+                        "axis": getattr(st, "axis", "X"),
+                        "total_angle": getattr(st, "total_angle", 360.0),
+                        "mirror_plane": getattr(st, "mirror_plane").value if hasattr(st, "mirror_plane") and isinstance(getattr(st, "mirror_plane"), PlaneType) else "YZ",
+                        "scale_factor": getattr(st, "scale_factor", 1.0)
+                    })
+                f_dict["steps"] = st_list
 
             data["features"].append(f_dict)
 
@@ -172,7 +191,15 @@ class ProjectSerializer:
                                             pts.append(Point2D(float(coord[0]), float(coord[1])))
                                         except (ValueError, TypeError):
                                             pass
-                                if len(pts) >= 3:
+                                e_type = str(ent_dict.get("type", "polygon"))
+                                if e_type == "bspline":
+                                    deg = int(ent_dict.get("degree", 3))
+                                    cls_spl = bool(ent_dict.get("closed", False))
+                                    sketch.add_bspline(pts, degree=deg, closed=cls_spl, is_construction=is_const)
+                                elif e_type == "bezier":
+                                    cls_bez = bool(ent_dict.get("closed", False))
+                                    sketch.add_bezier(pts, closed=cls_bez, is_construction=is_const)
+                                elif len(pts) >= 3:
                                     sketch.add_polygon(pts, is_construction=is_const)
                                 elif len(pts) == 2:
                                     sketch.add_line(pts[0], pts[1], is_construction=is_const)
@@ -356,6 +383,31 @@ class ProjectSerializer:
                         bp = PlaneType(bp_str) if bp_str in PlaneType._value2member_map_ else PlaneType.XY
                         off = float(params.get("offset_distance", 0.0))
                         feat = DatumPlaneFeature(f_id, f_name, bp, off)
+
+                    elif f_cls == "GrooveFeature":
+                        s_id = str(f_data.get("sketch_id", ""))
+                        ang = float(params.get("angle", 360.0))
+                        segs = int(params.get("segments", 48))
+                        feat = GrooveFeature(f_id, f_name, s_id, ang, segs, target_id)
+
+                    elif f_cls == "MultiTransformFeature":
+                        src = str(f_data.get("source_body_id", ""))
+                        join_b = bool(f_data.get("join_bodies", True))
+                        raw_steps = f_data.get("steps", [])
+                        steps_objs: List[MultiTransformStep] = []
+                        if isinstance(raw_steps, list):
+                            for st_data in raw_steps:
+                                if isinstance(st_data, dict):
+                                    t_type = str(st_data.get("type", "linear"))
+                                    cnt = int(st_data.get("count", 2))
+                                    spc = float(st_data.get("spacing", 20.0))
+                                    ax = str(st_data.get("axis", "X"))
+                                    tot_ang = float(st_data.get("total_angle", 360.0))
+                                    mp_str = str(st_data.get("mirror_plane", "YZ"))
+                                    mp = PlaneType(mp_str) if mp_str in PlaneType._value2member_map_ else PlaneType.YZ
+                                    s_fact = float(st_data.get("scale_factor", 1.0))
+                                    steps_objs.append(MultiTransformStep(t_type, cnt, spc, ax, tot_ang, mp, s_fact))
+                        feat = MultiTransformFeature(f_id, f_name, src, steps_objs, join_b)
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

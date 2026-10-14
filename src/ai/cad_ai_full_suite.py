@@ -150,7 +150,16 @@ class CADFullSuiteOrchestrator:
         )
 
         if operation_type == "facing":
-            op = cam.generate_facing_toolpath(solid, depth_mm=depth_mm, tool=tool)
+            b_min, b_max = solid.bounding_box()
+            op = cam.generate_facing_toolpath(
+                min_x=b_min.x,
+                max_x=b_max.x,
+                min_y=b_min.y,
+                max_y=b_max.y,
+                stock_z=b_max.z,
+                target_z=b_max.z - depth_mm,
+                tool=tool
+            )
         else:
             op = cam.generate_contour_toolpath(solid, depth_mm=depth_mm, tool=tool)
 
@@ -394,10 +403,18 @@ class CADFullSuiteOrchestrator:
         vol_init = solid.volume()
         t = max(0.5, wall_thickness_mm)
         p_min, p_max = solid.bounding_box()
+        dx = abs(p_max.x - p_min.x)
+        dy = abs(p_max.y - p_min.y)
+        dz = abs(p_max.z - p_min.z)
 
-        inner_w = max(0.1, (p_max.x - p_min.x) - 2 * t)
-        inner_l = max(0.1, (p_max.y - p_min.y) - 2 * t)
-        inner_h = max(0.1, (p_max.z - p_min.z) - t)
+        if t >= dx / 2.0 or t >= dy / 2.0 or t >= dz:
+            raise ValueError(
+                f"L'épaisseur de paroi (wall thickness {t:.1f} mm) dépasse la géométrie de la pièce ({dx:.1f} x {dy:.1f} x {dz:.1f} mm)."
+            )
+
+        inner_w = dx - 2 * t
+        inner_l = dy - 2 * t
+        inner_h = dz - t
 
         cavity = make_box(inner_w, inner_l, inner_h, center=False)
         cavity = cavity.translate(p_min.x + t, p_min.y + t, p_min.z + t)

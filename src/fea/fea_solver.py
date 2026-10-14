@@ -108,6 +108,9 @@ class FEASimulator:
         if mesh_buf.is_empty():
             return MeshBuffer.empty()
 
+        if len(mesh_buf.vertices) != len(fea_result.displacements):
+            return mesh_buf
+
         vertices = mesh_buf.vertices + fea_result.displacements
         stresses = fea_result.nodal_stresses
         s_min = fea_result.min_stress_mpa

@@ -882,15 +882,18 @@ class PipeFeature(Feature):
             else:
                 k = np.cross(z, v_norm)
                 k_len = float(np.linalg.norm(k))
-                k = k / k_len
-                c = dot
-                s = k_len
-                skew_k = np.array([
-                    [0.0, -k[2], k[1]],
-                    [k[2], 0.0, -k[0]],
-                    [-k[1], k[0], 0.0]
-                ], dtype=np.float32)
-                rot_mat = np.eye(3, dtype=np.float32) + s * skew_k + (1.0 - c) * (skew_k @ skew_k)
+                if k_len < 1e-7:
+                    rot_mat = np.eye(3, dtype=np.float32)
+                else:
+                    k = k / k_len
+                    c = dot
+                    s = k_len
+                    skew_k = np.array([
+                        [0.0, -k[2], k[1]],
+                        [k[2], 0.0, -k[0]],
+                        [-k[1], k[0], 0.0]
+                    ], dtype=np.float32)
+                    rot_mat = np.eye(3, dtype=np.float32) + s * skew_k + (1.0 - c) * (skew_k @ skew_k)
 
             trans_mat = np.zeros((3, 4), dtype=np.float32)
             trans_mat[:3, :3] = rot_mat

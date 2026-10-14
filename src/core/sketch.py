@@ -847,11 +847,11 @@ class Sketch2D:
         v0 = np.array([p0.u - corner.u, p0.v - corner.v], dtype=np.float64)
         v1 = np.array([p1.u - corner.u, p1.v - corner.v], dtype=np.float64)
         norm0, norm1 = float(np.linalg.norm(v0)), float(np.linalg.norm(v1))
-        if norm0 < distance or norm1 < distance:
+        if distance <= 1e-9 or norm0 < distance or norm1 < distance:
             return None
 
-        d0 = distance * (v0 / norm0)
-        d1 = distance * (v1 / norm1)
+        d0 = distance * (v0 / max(norm0, 1e-12))
+        d1 = distance * (v1 / max(norm1, 1e-12))
 
         c0 = Point2D(corner.u + float(d0[0]), corner.v + float(d0[1]))
         c1 = Point2D(corner.u + float(d1[0]), corner.v + float(d1[1]))

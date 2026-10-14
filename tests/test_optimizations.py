@@ -223,3 +223,24 @@ def test_document_remove_sketch_and_body() -> None:
 
     doc.remove_feature("box_feat")
     assert "body_box_feat" not in doc.bodies
+
+
+def test_vectorized_tpms_field_computation() -> None:
+    """Valide l'évaluation 3D ultra-rapide et vectorisée du champ TPMS."""
+    from src.core.generative_lattices import compute_tpms_field, LatticeType
+    from src.core.types import Vector3D
+
+    b_min = Vector3D(0.0, 0.0, 0.0)
+    b_max = Vector3D(20.0, 20.0, 20.0)
+
+    t0 = time.perf_counter()
+    X, Y, Z, field = compute_tpms_field(b_min, b_max, resolution=(25, 25, 25), lattice_type=LatticeType.GYROID)
+    dt = time.perf_counter() - t0
+
+    assert X.shape == (25, 25, 25)
+    assert field.shape == (25, 25, 25)
+    # L'évaluation vectorisée de 25^3 = 15625 points doit prendre moins de 50 millisecondes
+    assert dt < 0.05
+    assert np.min(field) < 0.0
+    assert np.max(field) > 0.0
+

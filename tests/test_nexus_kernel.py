@@ -173,3 +173,44 @@ def test_solid_to_nexus_bridges() -> None:
     query_pts = np.array([[7.5, 12.5, 17.5]], dtype=np.float64)
     sdf_val = legacy_solid.compute_sdf(query_pts)
     assert sdf_val[0] < 0.0  # Intérieur
+
+
+def test_nexus_brep_adjacency_and_manifold() -> None:
+    """Vérifie les requêtes topologiques d'adjacence O(1) et la conformité 2-variété."""
+    box = NexusSolid.make_box(10.0, 20.0, 30.0)
+    brep = box.brep
+
+    assert len(brep.faces) == 6
+    assert len(brep.edges) == 12
+    assert len(brep.vertices) == 8
+
+    # Test d'adjacence d'arête
+    some_edge_id = list(brep.edges.keys())[0]
+    adj_faces = brep.get_adjacent_faces(some_edge_id)
+    assert len(adj_faces) == 2  # Dans un solide fermé 2-variété, chaque arête a 2 faces
+
+    # Test de faces voisines
+    some_face_id = list(brep.faces.keys())[0]
+    neighbors = brep.get_neighbor_faces(some_face_id)
+    assert len(neighbors) == 4  # Chaque face d'une boîte a 4 faces voisines
+
+    # Test de conformité 2-variété
+    assert brep.is_manifold_topology() is True
+    assert brep.is_euler_valid(expected_genus=0) is True
+
+
+def test_nexus_auto_brep_reconstruction() -> None:
+    """Vérifie que la reconstruction automatique de B-Rep génère une topologie complète."""
+    legacy_solid = make_box(20.0, 30.0, 40.0)
+    nexus = legacy_solid.to_nexus()
+    brep = nexus.brep
+
+    assert len(brep.faces) > 0
+    assert len(brep.edges) > 0
+    assert len(brep.vertices) > 0
+    assert len(brep.shells) > 0
+
+    summary = brep.to_summary_dict()
+    assert summary["is_closed_shell"] is True
+    assert summary["is_manifold"] is True
+

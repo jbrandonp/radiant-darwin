@@ -210,3 +210,68 @@ class NonlinearFEASolver:
             "total_normal_contact_force_n": float(total_contact_normal),
             "total_friction_force_n": float(total_contact_friction)
         }
+
+    @staticmethod
+    def assemble_global_sparse_stiffness(
+        elements: List[Tet10Element],
+        node_coords: np.ndarray,
+        material: BilinearPlasticMaterial
+    ) -> scipy.sparse.csr_matrix:
+        """
+        Assemble la matrice de rigidité globale sous forme de matrice creuse (Sparse CSR).
+        Utilise le format COO (triplet ligne, colonne, valeur) pour une empreinte mémoire O(N).
+        """
+        import scipy.sparse as sp
+
+        num_nodes = len(node_coords)
+        total_dofs = 3 * num_nodes
+
+        rows: List[int] = []
+        cols: List[int] = []
+        data: List[float] = []
+
+        for elem in elements:
+            ke = elem.calculate_stiffness_matrix(node_coords, material)
+            indices = elem.node_indices
+            for i in range(10):
+                node_i = indices[i]
+                for j in range(10):
+                    node_j = indices[j]
+                    for d_i in range(3):
+                        dof_i = 3 * node_i + d_i
+                        for d_j in range(3):
+                            dof_j = 3 * node_j + d_j
+                            val = float(ke[3 * i + d_i, 3 * j + d_j])
+                            if abs(val) > 1e-12:
+                                rows.append(dof_i)
+                                cols.append(dof_j)
+                                data.append(val)
+
+        coo = sp.coo_matrix((data, (rows, cols)), shape=(total_dofs, total_dofs), dtype=np.float64)
+        return coo.tocsr()
+
+    @staticmethod
+    def solve_sparse_system(
+        k_global_csr: scipy.sparse.csr_matrix,
+        force_vector: np.ndarray,
+        fixed_dofs: List[int]
+    ) -> np.ndarray:
+        """
+        Résout le système global K * u = F par le solveur direct clairsemé SuperLU.
+        """
+        import scipy.sparse.linalg as spla
+
+        n_dof = k_global_csr.shape[0]
+        free_mask = np.ones(n_dof, dtype=bool)
+        free_mask[fixed_dofs] = False
+        free_dofs = np.where(free_mask)[0]
+
+        k_free = k_global_csr[free_dofs, :][:, free_dofs]
+        f_free = force_vector[free_dofs]
+
+        u_free = spla.spsolve(k_free, f_free)
+
+        u_total = np.zeros(n_dof, dtype=np.float64)
+        u_total[free_dofs] = u_free
+        return u_total
+

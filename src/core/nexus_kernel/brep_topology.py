@@ -342,6 +342,53 @@ class NexusBRep:
         expected_chi = 2 - 2 * expected_genus
         return self.euler_characteristic() == expected_chi
 
+    def get_adjacent_faces(self, edge_id: str) -> List[NexusFace]:
+        """Retourne la liste des faces incidentes partageant cette arête (max 2 pour une variété 2D)."""
+        adjacent: List[NexusFace] = []
+        for face in self.faces.values():
+            for e in face.outer_wire.edges:
+                if e.edge_id == edge_id:
+                    adjacent.append(face)
+                    break
+        return adjacent
+
+    def get_neighbor_faces(self, face_id: str) -> List[NexusFace]:
+        """Retourne les faces contiguës partageant au moins une arête frontière avec cette face."""
+        if face_id not in self.faces:
+            return []
+        target_face = self.faces[face_id]
+        edge_ids = {e.edge_id for e in target_face.outer_wire.edges}
+        neighbors: List[NexusFace] = []
+        for f_id, f in self.faces.items():
+            if f_id != face_id:
+                has_shared_edge = False
+                for e in f.outer_wire.edges:
+                    if e.edge_id in edge_ids:
+                        has_shared_edge = True
+                        break
+                if has_shared_edge:
+                    neighbors.append(f)
+        return neighbors
+
+
+    def get_incident_edges(self, vertex_id: str) -> List[NexusEdge]:
+        """Retourne toutes les arêtes connectées à ce sommet."""
+        incident: List[NexusEdge] = []
+        for edge in self.edges.values():
+            if edge.start_vertex.vertex_id == vertex_id or edge.end_vertex.vertex_id == vertex_id:
+                incident.append(edge)
+        return incident
+
+    def is_manifold_topology(self) -> bool:
+        """
+        Vérifie que chaque arête est partagée par au plus 2 faces (condition nécessaire de 2-variété étanche).
+        """
+        edge_usage: Dict[str, int] = {}
+        for face in self.faces.values():
+            for edge in face.outer_wire.edges:
+                edge_usage[edge.edge_id] = edge_usage.get(edge.edge_id, 0) + 1
+        return all(count <= 2 for count in edge_usage.values())
+
     def to_summary_dict(self) -> Dict[str, Union[int, float, bool, str]]:
         """Génère un dictionnaire d'inspection topologique certifié."""
         return {
@@ -352,5 +399,7 @@ class NexusBRep:
             "face_count": len(self.faces),
             "shell_count": len(self.shells),
             "euler_characteristic": self.euler_characteristic(),
-            "is_closed_shell": all(s.is_closed for s in self.shells.values()) if self.shells else False
+            "is_closed_shell": all(s.is_closed for s in self.shells.values()) if self.shells else False,
+            "is_manifold": self.is_manifold_topology()
         }
+

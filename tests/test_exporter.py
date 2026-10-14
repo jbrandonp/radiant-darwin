@@ -34,3 +34,27 @@ def test_export_stl_obj_ply() -> None:
         assert CADExporter.export_ply(bodies, ply_path)
         assert os.path.exists(ply_path)
         assert os.path.getsize(ply_path) > 0
+
+
+def test_step_nexus_advanced_brep_export() -> None:
+    """Valide l'exportation d'un NexusSolid en STEP AP242 avec entités ADVANCED_FACE et MANIFOLD_SOLID_BREP."""
+    from src.core.nexus_kernel.hybrid_solid import NexusSolid
+    from src.core.step_exporter import STEPExporter
+
+    box = NexusSolid.make_box(20.0, 30.0, 40.0, name="PrecisionCube")
+    step_str = STEPExporter.export_nexus_brep_to_string(box)
+
+    assert "ISO-10303-21;" in step_str
+    assert "ADVANCED_BREP_SHAPE_REPRESENTATION" in step_str
+    assert "MANIFOLD_SOLID_BREP" in step_str
+    assert "ADVANCED_FACE" in step_str
+    assert "EDGE_CURVE" in step_str
+    assert "ORIENTED_EDGE" in step_str
+    assert "END-ISO-10303-21;" in step_str
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        step_path = os.path.join(tmp_dir, "nexus_box.step")
+        assert STEPExporter.export_nexus_solid(box, step_path) is True
+        assert os.path.exists(step_path)
+        assert os.path.getsize(step_path) > 500
+

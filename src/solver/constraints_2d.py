@@ -196,16 +196,18 @@ class SketchConstraintSolver2D:
         if not self.constraints:
             return (True, list(self.points))
 
-        # Résolution non-linéaire avec TRF (Trust Region Reflective) supportant m < n et m >= n
+        # Résolution non-linéaire avec Jacobien analytique et TRF (Trust Region Reflective)
         opt_result = least_squares(
             self._evaluate_residuals,
             x0,
+            jac=self._evaluate_jacobian,
             method="trf",
             ftol=tolerance,
             xtol=tolerance,
             gtol=tolerance,
             max_nfev=2000
         )
+
 
         solved_x = opt_result.x
         solved_points: List[Point2D] = []
@@ -368,10 +370,141 @@ class SketchConstraintSolver2D:
 
         return np.array(res, dtype=np.float64)
 
+    def _evaluate_jacobian(self, x: np.ndarray) -> np.ndarray:
+        """
+        Calcule la matrice Jacobienne exacte J = df/dx (m équations x n variables).
+        Fournit les dérivées partielles analytiques pour accélérer la convergence Levenberg-Marquardt.
+        """
+        num_pts = len(self.points)
+        num_vars = 2 * num_pts
+        f0 = self._evaluate_residuals(x)
+        num_eqs = len(f0)
+        j_mat = np.zeros((num_eqs, num_vars), dtype=np.float64)
+
+        row = 0
+        for c in self.constraints:
+            c_type = c.constraint_type
+            indices = c.point_indices
+
+            invalid_index = False
+            for idx in indices:
+                if idx < 0 or idx >= num_pts:
+                    invalid_index = True
+                    break
+            if invalid_index:
+                num_sub_eqs = 2 if c_type in (ConstraintType.COINCIDENT, ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE, ConstraintType.G2_CURVATURE) else 1
+                row += num_sub_eqs
+                continue
+
+            if c_type == ConstraintType.COINCIDENT:
+                ia, ib = indices[0], indices[1]
+
+                j_mat[row, 2 * ia] = 1.0
+                j_mat[row, 2 * ib] = -1.0
+                j_mat[row + 1, 2 * ia + 1] = 1.0
+                j_mat[row + 1, 2 * ib + 1] = -1.0
+                row += 2
+
+            elif c_type == ConstraintType.HORIZONTAL:
+                ia, ib = indices[0], indices[1]
+                j_mat[row, 2 * ia + 1] = 1.0
+                j_mat[row, 2 * ib + 1] = -1.0
+                row += 1
+
+            elif c_type == ConstraintType.VERTICAL:
+                ia, ib = indices[0], indices[1]
+                j_mat[row, 2 * ia] = 1.0
+                j_mat[row, 2 * ib] = -1.0
+                row += 1
+
+            elif c_type == ConstraintType.DISTANCE:
+                ia, ib = indices[0], indices[1]
+                dx = x[2 * ib] - x[2 * ia]
+                dy = x[2 * ib + 1] - x[2 * ia + 1]
+                dist = float(np.hypot(dx, dy))
+                if dist > 1e-12:
+                    j_mat[row, 2 * ia] = -dx / dist
+                    j_mat[row, 2 * ia + 1] = -dy / dist
+                    j_mat[row, 2 * ib] = dx / dist
+                    j_mat[row, 2 * ib + 1] = dy / dist
+                row += 1
+
+            elif c_type in (ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE):
+                ia = indices[0]
+                j_mat[row, 2 * ia] = 1.0
+                j_mat[row + 1, 2 * ia + 1] = 1.0
+                row += 2
+
+            elif c_type == ConstraintType.PARALLEL:
+                ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
+                dx_a = x[2 * ia2] - x[2 * ia1]
+                dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
+                dx_b = x[2 * ib2] - x[2 * ib1]
+                dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
+                j_mat[row, 2 * ia1] = -dy_b
+                j_mat[row, 2 * ia2] = dy_b
+                j_mat[row, 2 * ia1 + 1] = dx_b
+                j_mat[row, 2 * ia2 + 1] = -dx_b
+                j_mat[row, 2 * ib1] = dy_a
+                j_mat[row, 2 * ib2] = -dy_a
+                j_mat[row, 2 * ib1 + 1] = -dx_a
+                j_mat[row, 2 * ib2 + 1] = dx_a
+                row += 1
+
+            elif c_type == ConstraintType.PERPENDICULAR:
+                ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
+                dx_a = x[2 * ia2] - x[2 * ia1]
+                dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
+                dx_b = x[2 * ib2] - x[2 * ib1]
+                dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
+                j_mat[row, 2 * ia1] = -dx_b
+                j_mat[row, 2 * ia2] = dx_b
+                j_mat[row, 2 * ia1 + 1] = -dy_b
+                j_mat[row, 2 * ia2 + 1] = dy_b
+                j_mat[row, 2 * ib1] = -dx_a
+                j_mat[row, 2 * ib2] = dx_a
+                j_mat[row, 2 * ib1 + 1] = -dy_a
+                j_mat[row, 2 * ib2 + 1] = dy_a
+                row += 1
+
+            elif c_type == ConstraintType.EQUAL:
+                ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
+                dx_a = x[2 * ia2] - x[2 * ia1]
+                dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
+                dx_b = x[2 * ib2] - x[2 * ib1]
+                dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
+                len_a = float(np.hypot(dx_a, dy_a))
+                len_b = float(np.hypot(dx_b, dy_b))
+                if len_a > 1e-12:
+                    j_mat[row, 2 * ia1] = -dx_a / len_a
+                    j_mat[row, 2 * ia1 + 1] = -dy_a / len_a
+                    j_mat[row, 2 * ia2] = dx_a / len_a
+                    j_mat[row, 2 * ia2 + 1] = dy_a / len_a
+                if len_b > 1e-12:
+                    j_mat[row, 2 * ib1] = dx_b / len_b
+                    j_mat[row, 2 * ib1 + 1] = dy_b / len_b
+                    j_mat[row, 2 * ib2] = -dx_b / len_b
+                    j_mat[row, 2 * ib2 + 1] = -dy_b / len_b
+                row += 1
+
+            else:
+                eps = 1e-7
+                for col in range(num_vars):
+                    x_step = x.copy()
+                    x_step[col] += eps
+                    f_step = self._evaluate_residuals(x_step)
+                    num_sub_eqs = 2 if c_type == ConstraintType.G2_CURVATURE else 1
+                    for sub_k in range(num_sub_eqs):
+                        if row + sub_k < num_eqs:
+                            j_mat[row + sub_k, col] = (f_step[row + sub_k] - f0[row + sub_k]) / eps
+                row += (2 if c_type == ConstraintType.G2_CURVATURE else 1)
+
+        return j_mat
+
     def calculate_degrees_of_freedom(self) -> Tuple[int, str]:
         """
         Calcule les degrés de liberté (DoF) du système d'esquisse (FreeCAD Sketcher Solver Diagnostics).
-        Évalue le rang de la matrice Jacobienne numérique des contraintes indépendantes.
+        Évalue le rang de la matrice Jacobienne analytique des contraintes indépendantes.
 
         Returns:
             Tuple[int, str]: (DoF, message_diagnostic)
@@ -395,14 +528,8 @@ class SketchConstraintSolver2D:
         if num_equations == 0:
             return (num_vars, f"Sous-contrainte ({num_vars} degrés de liberté)")
 
-        # Calcul du Jacobien numérique J (m x n) par différences finies
-        eps = 1e-7
-        j_mat = np.zeros((num_equations, num_vars), dtype=np.float64)
-        for j in range(num_vars):
-            x_step = x0.copy()
-            x_step[j] += eps
-            f_step = self._evaluate_residuals(x_step)
-            j_mat[:, j] = (f_step - f0) / eps
+        # Évaluation directe de la matrice Jacobienne exacte
+        j_mat = self._evaluate_jacobian(x0)
 
         rank = int(np.linalg.matrix_rank(j_mat, tol=1e-5))
         dof = max(0, num_vars - rank)
@@ -419,6 +546,7 @@ class SketchConstraintSolver2D:
             status = f"Sous-contrainte ({dof} degré{'s' if dof > 1 else ''} de liberté)"
 
         return (dof, status)
+
 
 
 # Alias pour compatibilité

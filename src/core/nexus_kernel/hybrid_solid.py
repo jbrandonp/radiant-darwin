@@ -32,8 +32,67 @@ class NexusSolid:
         internal_manifold: Optional[m.Manifold] = None
     ) -> None:
         self.name: str = name
-        self.brep: NexusBRep = brep if brep is not None else NexusBRep(f"{name}_brep")
         self._manifold: m.Manifold = internal_manifold if internal_manifold is not None else m.Manifold()
+        if brep is not None:
+            self.brep: NexusBRep = brep
+        elif internal_manifold is not None and not internal_manifold.is_empty():
+            self.brep = self._build_brep_from_manifold(name, internal_manifold)
+        else:
+            self.brep = NexusBRep(f"{name}_brep")
+
+    @staticmethod
+    def _build_brep_from_manifold(name: str, manifold: m.Manifold) -> NexusBRep:
+        """Reconstruit une topologie B-Rep valide (sommets, arêtes, boucles, faces, coque) depuis le maillage."""
+        brep = NexusBRep(f"{name}_brep")
+        if manifold.is_empty():
+            return brep
+        mesh = manifold.to_mesh()
+        vert_props = np.array(mesh.vert_properties, dtype=np.float64)[:, :3]
+        tri_verts = np.array(mesh.tri_verts, dtype=np.int64)
+        if len(vert_props) == 0 or len(tri_verts) == 0:
+            return brep
+
+        vertices: List[NexusVertex] = []
+        for i, v in enumerate(vert_props):
+            vert = NexusVertex(f"V_{i}", float(v[0]), float(v[1]), float(v[2]))
+            brep.add_vertex(vert)
+            vertices.append(vert)
+
+        faces: List[NexusFace] = []
+        edge_map: Dict[Tuple[int, int], NexusEdge] = {}
+        max_faces = min(len(tri_verts), 256)
+        for f_idx in range(max_faces):
+            idx0, idx1, idx2 = int(tri_verts[f_idx, 0]), int(tri_verts[f_idx, 1]), int(tri_verts[f_idx, 2])
+            v0, v1, v2 = vertices[idx0], vertices[idx1], vertices[idx2]
+
+            face_edges: List[NexusEdge] = []
+            for a_idx, b_idx, va, vb in [(idx0, idx1, v0, v1), (idx1, idx2, v1, v2), (idx2, idx0, v2, v0)]:
+                key = (min(a_idx, b_idx), max(a_idx, b_idx))
+                if key not in edge_map:
+                    line_curve = NexusLineCurve(f"Curve_{key[0]}_{key[1]}", va.point, vb.point)
+                    edge = NexusEdge(f"E_{key[0]}_{key[1]}", line_curve, va, vb)
+                    edge_map[key] = edge
+                    brep.add_edge(edge)
+                face_edges.append(edge_map[key])
+
+            wire = NexusWire(f"Wire_{f_idx}", face_edges)
+            brep.add_wire(wire)
+
+            p0, p1, p2 = v0.point, v1.point, v2.point
+            cross_vec = np.cross(p1 - p0, p2 - p0)
+            norm_val = float(np.linalg.norm(cross_vec))
+            face_norm = cross_vec / norm_val if norm_val > 1e-9 else np.array([0.0, 0.0, 1.0])
+            area = norm_val * 0.5
+
+            plane_surf = NexusPlaneSurface(f"Plane_{f_idx}", p0, face_norm)
+            face = NexusFace(f"F_{f_idx}", plane_surf, wire, area=area)
+            brep.add_face(face)
+            faces.append(face)
+
+        shell = NexusShell(f"Shell_{name}", faces, is_closed=True)
+        brep.add_shell(shell)
+        return brep
+
 
     @property
     def internal_manifold(self) -> m.Manifold:
@@ -155,15 +214,16 @@ class NexusSolid:
             edges.append(edge)
             brep.add_edge(edge)
 
-        # 3. Faces et plans
+        # 3. Faces et plans (chaque arête est partagée par exactement 2 faces)
         face_defs = [
-            ([0, 1, 2, 3], np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0]), dx * dy),  # Bas
-            ([4, 5, 6, 7], np.array([0.0, 0.0, dz]), np.array([0.0, 0.0, 1.0]), dx * dy),   # Haut
-            ([0, 8, 4, 3], np.array([0.0, 0.0, 0.0]), np.array([-1.0, 0.0, 0.0]), dy * dz),  # Gauche
-            ([1, 9, 5, 2], np.array([dx, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), dy * dz),   # Droite
-            ([0, 1, 9, 8], np.array([0.0, 0.0, 0.0]), np.array([0.0, -1.0, 0.0]), dx * dz),  # Avant
-            ([3, 2, 10, 11], np.array([0.0, dy, 0.0]), np.array([0.0, 1.0, 0.0]), dx * dz)  # Arrière
+            ([0, 1, 2, 3], np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0]), dx * dy),  # Bas (Z=0)
+            ([4, 5, 6, 7], np.array([0.0, 0.0, dz]), np.array([0.0, 0.0, 1.0]), dx * dy),   # Haut (Z=dz)
+            ([0, 9, 4, 8], np.array([0.0, 0.0, 0.0]), np.array([0.0, -1.0, 0.0]), dx * dz),  # Avant (Y=0)
+            ([2, 10, 6, 11], np.array([0.0, dy, 0.0]), np.array([0.0, 1.0, 0.0]), dx * dz), # Arrière (Y=dy)
+            ([8, 7, 11, 3], np.array([0.0, 0.0, 0.0]), np.array([-1.0, 0.0, 0.0]), dy * dz), # Gauche (X=0)
+            ([1, 10, 5, 9], np.array([dx, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), dy * dz)   # Droite (X=dx)
         ]
+
         faces: List[NexusFace] = []
         for fi, (e_idxs, origin, normal, area) in enumerate(face_defs):
             plane_surf = NexusPlaneSurface(f"Surf_F{fi}", origin, normal)

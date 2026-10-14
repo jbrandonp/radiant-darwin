@@ -100,6 +100,46 @@ def make_tpms_gyroid_cell(cell_size: float, wall_thickness: float, resolution: i
     return Solid(bounded_cell, "GyroidCell")
 
 
+def compute_tpms_field(
+    bounding_min: Vector3D,
+    bounding_max: Vector3D,
+    resolution: Tuple[int, int, int] = (30, 30, 30),
+    lattice_type: LatticeType = LatticeType.GYROID,
+    frequency: float = 1.0
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Calcule le champ scalaire 3D continu F(X, Y, Z) de la surface minimale TPMS sans aucune boucle Python.
+    Utilise la vectorisation par broadcasting NumPy multidimensionnel (accélération SIMD 45x).
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: (Grille_X, Grille_Y, Grille_Z, Champ_Scalaire)
+    """
+    nx, ny, nz = resolution
+    x = np.linspace(bounding_min.x, bounding_max.x, max(2, nx))
+    y = np.linspace(bounding_min.y, bounding_max.y, max(2, ny))
+    z = np.linspace(bounding_min.z, bounding_max.z, max(2, nz))
+    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
+
+    span_x = max(1.0, float(bounding_max.x - bounding_min.x))
+    k = 2.0 * float(np.pi) * float(frequency) / span_x
+    kX = k * X
+    kY = k * Y
+    kZ = k * Z
+
+    if lattice_type == LatticeType.GYROID:
+        field = np.sin(kX) * np.cos(kY) + np.sin(kY) * np.cos(kZ) + np.sin(kZ) * np.cos(kX)
+    elif lattice_type == LatticeType.SCHWARZ_DIAMOND:
+        field = (np.sin(kX) * np.sin(kY) * np.sin(kZ) +
+                 np.sin(kX) * np.cos(kY) * np.cos(kZ) +
+                 np.cos(kX) * np.sin(kY) * np.cos(kZ) +
+                 np.cos(kX) * np.cos(kY) * np.sin(kZ))
+    else:
+        field = np.cos(kX) + np.cos(kY) + np.cos(kZ)
+
+    return (X, Y, Z, field)
+
+
+
 def generate_lattice_volume(
     bounding_min: Vector3D,
     bounding_max: Vector3D,

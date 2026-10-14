@@ -306,7 +306,7 @@ class ExtrudeFeature(Feature):
         dist = float(self.parameters["distance"])
         if abs(dist) < 0.001:
             dist = 0.001
-        new_solid = extrude_polygon(profile, dist, plane=sketch.plane, name=self.name)
+        new_solid = extrude_polygon(profile, dist, plane=sketch.plane, plane_offset=sketch.offset_distance, name=self.name)
         self.status = FeatureStatus.OK
         return _apply_boolean_operation(existing_bodies, new_solid, self.operation, self.body_id, self.target_body_id)
 

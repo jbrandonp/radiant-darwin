@@ -24,29 +24,40 @@ class EntityType(Enum):
     ELLIPSE = "ellipse"
 
 
-@dataclass
 class SketchEntity:
-    """Classe de base pour une entité d'esquisse."""
-    entity_id: str
-    entity_type: EntityType
+    """Classe de base pour une entité d'esquisse (FreeCAD Sketcher Entity)."""
+
+    def __init__(self, entity_id: str, entity_type: EntityType, is_construction: bool = False) -> None:
+        self.entity_id: str = entity_id
+        self.entity_type: EntityType = entity_type
+        self.is_construction: bool = is_construction
 
     def get_points(self) -> List[Point2D]:
         """Retourne la liste des points ordonnés constituant l'entité."""
         raise NotImplementedError
 
 
-@dataclass
+class SketchLine(SketchEntity):
+    """Segment de droite 2D (FreeCAD Sketcher Line)."""
+
+    def __init__(self, entity_id: str, p1: Point2D, p2: Point2D, is_construction: bool = False) -> None:
+        super().__init__(entity_id, EntityType.LINE, is_construction=is_construction)
+        self.p1: Point2D = p1
+        self.p2: Point2D = p2
+
+    def get_points(self) -> List[Point2D]:
+        """Retourne les extrémités du segment."""
+        return [self.p1, self.p2]
+
+
 class SketchRectangle(SketchEntity):
     """Rectangle 2D défini par son coin inférieur gauche et ses dimensions."""
-    origin: Point2D
-    width: float
-    height: float
 
-    def __init__(self, entity_id: str, origin: Point2D, width: float, height: float) -> None:
-        super().__init__(entity_id, EntityType.RECTANGLE)
-        self.origin = origin
-        self.width = width
-        self.height = height
+    def __init__(self, entity_id: str, origin: Point2D, width: float, height: float, is_construction: bool = False) -> None:
+        super().__init__(entity_id, EntityType.RECTANGLE, is_construction=is_construction)
+        self.origin: Point2D = origin
+        self.width: float = width
+        self.height: float = height
 
     def get_points(self) -> List[Point2D]:
         """Retourne les 4 sommets ordonnés dans le sens trigonométrique."""
@@ -60,18 +71,14 @@ class SketchRectangle(SketchEntity):
         ]
 
 
-@dataclass
 class SketchCircle(SketchEntity):
     """Cercle 2D discrétisé en polygone régulier pour l'extrusion."""
-    center: Point2D
-    radius: float
-    segments: int = 36
 
-    def __init__(self, entity_id: str, center: Point2D, radius: float, segments: int = 36) -> None:
-        super().__init__(entity_id, EntityType.CIRCLE)
-        self.center = center
-        self.radius = radius
-        self.segments = max(12, segments)
+    def __init__(self, entity_id: str, center: Point2D, radius: float, segments: int = 36, is_construction: bool = False) -> None:
+        super().__init__(entity_id, EntityType.CIRCLE, is_construction=is_construction)
+        self.center: Point2D = center
+        self.radius: float = radius
+        self.segments: int = max(12, segments)
 
     def get_points(self) -> List[Point2D]:
         """Génère les sommets du contour circulaire discret."""
@@ -84,34 +91,27 @@ class SketchCircle(SketchEntity):
         return pts
 
 
-@dataclass
 class SketchPolygon(SketchEntity):
     """Polygone 2D libre défini par une suite de sommets ordonnés."""
-    points: List[Point2D]
 
-    def __init__(self, entity_id: str, points: List[Point2D]) -> None:
-        super().__init__(entity_id, EntityType.POLYGON)
-        self.points = points
+    def __init__(self, entity_id: str, points: List[Point2D], is_construction: bool = False) -> None:
+        super().__init__(entity_id, EntityType.POLYGON, is_construction=is_construction)
+        self.points: List[Point2D] = points
 
     def get_points(self) -> List[Point2D]:
         """Retourne la séquence des points du polygone."""
         return self.points
 
 
-@dataclass
 class SketchSlot(SketchEntity):
     """Rainure oblongue 2D (FreeCAD Sketcher Slot) définie par deux centres et un rayon."""
-    p1: Point2D
-    p2: Point2D
-    radius: float
-    segments: int = 16
 
-    def __init__(self, entity_id: str, p1: Point2D, p2: Point2D, radius: float, segments: int = 16) -> None:
-        super().__init__(entity_id, EntityType.SLOT)
-        self.p1 = p1
-        self.p2 = p2
-        self.radius = max(0.01, radius)
-        self.segments = max(8, segments)
+    def __init__(self, entity_id: str, p1: Point2D, p2: Point2D, radius: float, segments: int = 16, is_construction: bool = False) -> None:
+        super().__init__(entity_id, EntityType.SLOT, is_construction=is_construction)
+        self.p1: Point2D = p1
+        self.p2: Point2D = p2
+        self.radius: float = max(0.01, radius)
+        self.segments: int = max(8, segments)
 
     def get_points(self) -> List[Point2D]:
         """Génère le contour fermé composé de deux demi-cercles et deux segments parallèles."""
@@ -143,18 +143,14 @@ class SketchSlot(SketchEntity):
         return self.get_points()
 
 
-@dataclass
 class SketchRegularPolygon(SketchEntity):
     """Polygone régulier 2D inscrit (FreeCAD Regular Polygon) à N côtés."""
-    center: Point2D
-    radius: float
-    sides: int = 6
 
-    def __init__(self, entity_id: str, center: Point2D, radius: float, sides: int = 6) -> None:
-        super().__init__(entity_id, EntityType.REGULAR_POLYGON)
-        self.center = center
-        self.radius = max(0.01, radius)
-        self.sides = max(3, sides)
+    def __init__(self, entity_id: str, center: Point2D, radius: float, sides: int = 6, is_construction: bool = False) -> None:
+        super().__init__(entity_id, EntityType.REGULAR_POLYGON, is_construction=is_construction)
+        self.center: Point2D = center
+        self.radius: float = max(0.01, radius)
+        self.sides: int = max(3, sides)
 
     def get_points(self) -> List[Point2D]:
         """Génère les N sommets réguliers."""
@@ -169,20 +165,15 @@ class SketchRegularPolygon(SketchEntity):
         return self.get_points()
 
 
-@dataclass
 class SketchEllipse(SketchEntity):
     """Ellipse 2D paramétrique (FreeCAD Sketcher Ellipse)."""
-    center: Point2D
-    radius_u: float
-    radius_v: float
-    segments: int = 36
 
-    def __init__(self, entity_id: str, center: Point2D, radius_u: float, radius_v: float, segments: int = 36) -> None:
-        super().__init__(entity_id, EntityType.ELLIPSE)
-        self.center = center
-        self.radius_u = max(0.01, radius_u)
-        self.radius_v = max(0.01, radius_v)
-        self.segments = max(12, segments)
+    def __init__(self, entity_id: str, center: Point2D, radius_u: float, radius_v: float, segments: int = 36, is_construction: bool = False) -> None:
+        super().__init__(entity_id, EntityType.ELLIPSE, is_construction=is_construction)
+        self.center: Point2D = center
+        self.radius_u: float = max(0.01, radius_u)
+        self.radius_v: float = max(0.01, radius_v)
+        self.segments: int = max(12, segments)
 
     def get_points(self) -> List[Point2D]:
         """Génère les sommets discrétisés de l'ellipse."""
@@ -205,51 +196,60 @@ class Sketch2D:
     Permet d'ajouter des formes et d'extraire des profils pour la CAO 3D.
     """
 
-    def __init__(self, sketch_id: str, name: str = "Sketch", plane: PlaneType = PlaneType.XY) -> None:
-        """Initialise une nouvelle esquisse sur le plan indiqué."""
+    def __init__(self, sketch_id: str, name: str = "Sketch", plane: PlaneType = PlaneType.XY, offset_distance: float = 0.0) -> None:
+        """Initialise une nouvelle esquisse sur le plan indiqué avec un éventuel décalage normal."""
         self.sketch_id: str = sketch_id
         self.name: str = name
         self.plane: PlaneType = plane
+        self.offset_distance: float = float(offset_distance)
         self.entities: List[SketchEntity] = []
         self._counter: int = 0
 
-    def add_rectangle(self, origin: Point2D, width: float, height: float) -> SketchRectangle:
+    def add_line(self, p1: Point2D, p2: Point2D, is_construction: bool = False) -> SketchLine:
+        """Ajoute un segment de ligne à l'esquisse (FreeCAD Sketcher Line)."""
+        self._counter += 1
+        entity_id = f"line_{self._counter}"
+        line = SketchLine(entity_id, p1, p2, is_construction=is_construction)
+        self.entities.append(line)
+        return line
+
+    def add_rectangle(self, origin: Point2D, width: float, height: float, is_construction: bool = False) -> SketchRectangle:
         """Ajoute un rectangle paramétrique à l'esquisse."""
         self._counter += 1
         entity_id = f"rect_{self._counter}"
-        rect = SketchRectangle(entity_id, origin, width, height)
+        rect = SketchRectangle(entity_id, origin, width, height, is_construction=is_construction)
         self.entities.append(rect)
         return rect
 
-    def add_circle(self, center: Point2D, radius: float, segments: int = 36) -> SketchCircle:
+    def add_circle(self, center: Point2D, radius: float, segments: int = 36, is_construction: bool = False) -> SketchCircle:
         """Ajoute un cercle paramétrique à l'esquisse."""
         self._counter += 1
         entity_id = f"circle_{self._counter}"
-        circle = SketchCircle(entity_id, center, radius, segments)
+        circle = SketchCircle(entity_id, center, radius, segments, is_construction=is_construction)
         self.entities.append(circle)
         return circle
 
-    def add_polygon(self, points: List[Point2D]) -> SketchPolygon:
+    def add_polygon(self, points: List[Point2D], is_construction: bool = False) -> SketchPolygon:
         """Ajoute un polygone libre à l'esquisse."""
         self._counter += 1
         entity_id = f"poly_{self._counter}"
-        poly = SketchPolygon(entity_id, points)
+        poly = SketchPolygon(entity_id, points, is_construction=is_construction)
         self.entities.append(poly)
         return poly
 
-    def add_slot(self, p1: Point2D, p2: Point2D, radius: float, segments: int = 16) -> SketchSlot:
+    def add_slot(self, p1: Point2D, p2: Point2D, radius: float, segments: int = 16, is_construction: bool = False) -> SketchSlot:
         """Ajoute une rainure oblongue (slot) paramétrique à l'esquisse."""
         self._counter += 1
         entity_id = f"slot_{self._counter}"
-        slot = SketchSlot(entity_id, p1, p2, radius, segments)
+        slot = SketchSlot(entity_id, p1, p2, radius, segments, is_construction=is_construction)
         self.entities.append(slot)
         return slot
 
-    def add_regular_polygon(self, center: Point2D, radius: float, sides: int = 6) -> SketchRegularPolygon:
+    def add_regular_polygon(self, center: Point2D, radius: float, sides: int = 6, is_construction: bool = False) -> SketchRegularPolygon:
         """Ajoute un polygone régulier (hexagone, octogone, etc.) à l'esquisse."""
         self._counter += 1
         entity_id = f"regpoly_{self._counter}"
-        reg_poly = SketchRegularPolygon(entity_id, center, radius, sides)
+        reg_poly = SketchRegularPolygon(entity_id, center, radius, sides, is_construction=is_construction)
         self.entities.append(reg_poly)
         return reg_poly
 
@@ -260,29 +260,38 @@ class Sketch2D:
         radius_v: float = 5.0,
         segments: int = 36,
         radius_x: Optional[float] = None,
-        radius_y: Optional[float] = None
+        radius_y: Optional[float] = None,
+        is_construction: bool = False
     ) -> SketchEllipse:
         """Ajoute une ellipse paramétrique à l'esquisse."""
         ru = radius_x if radius_x is not None else radius_u
         rv = radius_y if radius_y is not None else radius_v
         self._counter += 1
         entity_id = f"ellipse_{self._counter}"
-        ellipse = SketchEllipse(entity_id, center, ru, rv, segments)
+        ellipse = SketchEllipse(entity_id, center, ru, rv, segments, is_construction=is_construction)
         self.entities.append(ellipse)
         return ellipse
 
+    def get_solid_entities(self) -> List[SketchEntity]:
+        """Retourne uniquement les entités réelles (non construction) destinées à générer de la matière 3D."""
+        return [e for e in self.entities if not e.is_construction]
+
+    def get_construction_entities(self) -> List[SketchEntity]:
+        """Retourne uniquement les entités de construction (d'aide/référence) ignorées par les opérations solides."""
+        return [e for e in self.entities if e.is_construction]
+
     def get_primary_profile(self) -> Optional[List[Point2D]]:
         """
-        Extrait le premier profil fermé valide pour l'extrusion 3D.
-        Retourne None si l'esquisse ne contient aucun profil.
+        Extrait le premier profil fermé réel (non de construction) valide pour l'extrusion 3D.
+        Retourne None si l'esquisse ne contient aucun profil valide.
         """
-        if not self.entities:
+        solids = self.get_solid_entities()
+        if not solids:
             return None
-        # On extrait la première entité fermée
-        first_entity = self.entities[0]
-        points = first_entity.get_points()
-        if len(points) >= 3:
-            return points
+        for entity in solids:
+            points = entity.get_points()
+            if len(points) >= 3:
+                return points
         return None
 
     def is_closed_profile(self) -> bool:
@@ -290,11 +299,12 @@ class Sketch2D:
         return self.get_primary_profile() is not None
 
     def to_3d_coordinates(self, pt2d: Point2D) -> Vector3D:
-        """Projette un point 2D local d'esquisse dans le repère 3D global selon le plan."""
+        """Projette un point 2D local d'esquisse dans le repère 3D global selon le plan et le décalage normal."""
         if self.plane == PlaneType.XY:
-            return Vector3D(pt2d.u, pt2d.v, 0.0)
+            return Vector3D(pt2d.u, pt2d.v, self.offset_distance)
         elif self.plane == PlaneType.XZ:
-            return Vector3D(pt2d.u, 0.0, pt2d.v)
+            return Vector3D(pt2d.u, self.offset_distance, pt2d.v)
         elif self.plane == PlaneType.YZ:
-            return Vector3D(0.0, pt2d.u, pt2d.v)
-        return Vector3D(pt2d.u, pt2d.v, 0.0)
+            return Vector3D(self.offset_distance, pt2d.u, pt2d.v)
+        return Vector3D(pt2d.u, pt2d.v, self.offset_distance)
+

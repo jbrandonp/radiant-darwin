@@ -185,6 +185,11 @@ class Solid:
                 result.append(contour)
         return result
 
+    def slice(self, height: float = 0.0) -> List[List[Point2D]]:
+        """Alias pour slice_cross_section."""
+        return self.slice_cross_section(height)
+
+
     def to_mesh_buffer(self) -> MeshBuffer:
         """
         Convertit le solide en MeshBuffer optimisé pour le rendu OpenGL.
@@ -392,6 +397,7 @@ def extrude_polygon(
     points: Sequence[Point2D],
     height: float,
     plane: PlaneType = PlaneType.XY,
+    plane_offset: float = 0.0,
     name: str = "Extrude"
 ) -> Solid:
     """
@@ -399,6 +405,7 @@ def extrude_polygon(
     - points : liste ordonnée des sommets du polygone 2D
     - height : distance d'extrusion normale au plan
     - plane : plan d'esquisse de référence (XY, XZ ou YZ)
+    - plane_offset : décalage le long de l'axe normal au plan (Datum Plane)
     """
     if len(points) < 3:
         raise ValueError("Un polygone d'extrusion nécessite au moins 3 points.")
@@ -419,6 +426,14 @@ def extrude_polygon(
     elif plane == PlaneType.YZ:
         # Rotation pour coucher le plan XY sur YZ (-90 deg autour de Y)
         solid_manifold = solid_manifold.rotate([0.0, -90.0, 0.0])
+
+    if abs(plane_offset) > 1e-9:
+        if plane == PlaneType.XY:
+            solid_manifold = solid_manifold.translate([0.0, 0.0, plane_offset])
+        elif plane == PlaneType.XZ:
+            solid_manifold = solid_manifold.translate([0.0, plane_offset, 0.0])
+        elif plane == PlaneType.YZ:
+            solid_manifold = solid_manifold.translate([plane_offset, 0.0, 0.0])
 
     return Solid(solid_manifold, name)
 

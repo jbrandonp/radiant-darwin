@@ -29,8 +29,9 @@ class DrawingLine2D:
     y1: float
     x2: float
     y2: float
-    is_hidden: bool = False   # Ligne cachée en pointillés
+    is_hidden: bool = False    # Ligne cachée en pointillés
     is_dimension: bool = False # Ligne de cote
+    is_hatch: bool = False     # Ligne de hachure de coupe ISO 128
 
 
 @dataclass
@@ -218,3 +219,103 @@ class TechnicalDrawingGenerator:
             x2 = center_x + (iso_x[i1] - mean_x) * scale
             y2 = center_y + (iso_y[i1] - mean_y) * scale
             sheet.lines.append(DrawingLine2D(x1, y1, x2, y2))
+
+    def generate_section_view(
+        self,
+        solid: Solid,
+        cut_height: float = 0.0,
+        center_x: float = 210.0,
+        center_y: float = 150.0,
+        scale: float = 1.0,
+        hatch_spacing: float = 4.0,
+        title: str = "Coupe A-A (Section View ISO)"
+    ) -> TechnicalSheet:
+        """
+        Génère une vue en coupe technique normalisée (FreeCAD TechDraw Section View).
+        Découpe le solide à la hauteur cut_height, projette le contour et applique
+        des hachures diagonales à 45° selon la norme ISO 128.
+        """
+        sheet = TechnicalSheet(
+            width_mm=self.width,
+            height_mm=self.height,
+            title_block=TitleBlock(project_title=title)
+        )
+        # Cadre extérieur (Marge 10 mm)
+        sheet.lines.extend([
+            DrawingLine2D(10.0, 10.0, self.width - 10.0, 10.0),
+            DrawingLine2D(self.width - 10.0, 10.0, self.width - 10.0, self.height - 10.0),
+            DrawingLine2D(self.width - 10.0, self.height - 10.0, 10.0, self.height - 10.0),
+            DrawingLine2D(10.0, self.height - 10.0, 10.0, 10.0),
+        ])
+
+        if solid.is_empty():
+            return sheet
+
+        contours = solid.slice(cut_height)
+        if not contours:
+            return sheet
+
+        # Calcul du centre moyen pour centrer la coupe à (center_x, center_y)
+        all_u: List[float] = [pt.u for poly in contours for pt in poly]
+        all_v: List[float] = [pt.v for poly in contours for pt in poly]
+        mean_u = float(np.mean(all_u)) if all_u else 0.0
+        mean_v = float(np.mean(all_v)) if all_v else 0.0
+
+        for poly in contours:
+            n = len(poly)
+            if n < 3:
+                continue
+
+            # 1. Dessiner les arêtes du contour extérieur de coupe
+            for i in range(n):
+                p_curr = poly[i]
+                p_next = poly[(i + 1) % n]
+                x1 = center_x + (p_curr.u - mean_u) * scale
+                y1 = center_y + (p_curr.v - mean_v) * scale
+                x2 = center_x + (p_next.u - mean_u) * scale
+                y2 = center_y + (p_next.v - mean_v) * scale
+                sheet.lines.append(DrawingLine2D(x1, y1, x2, y2))
+
+            # 2. Hachures ISO à 45 degrés dans le polygone
+            poly_u = [pt.u for pt in poly]
+            poly_v = [pt.v for pt in poly]
+            min_u, max_u = min(poly_u), max(poly_u)
+            min_v, max_v = min(poly_v), max(poly_v)
+
+            # Ligne à 45 deg : v = u + c  =>  c = v - u
+            c_min = min_v - max_u
+            c_max = max_v - min_u
+            step = hatch_spacing / scale if scale > 1e-4 else hatch_spacing
+
+            c_val = c_min
+            while c_val <= c_max:
+                intersections: List[float] = []
+                for i in range(n):
+                    pa = poly[i]
+                    pb = poly[(i + 1) % n]
+                    du = pb.u - pa.u
+                    dv = pb.v - pa.v
+                    denom = dv - du
+                    if abs(denom) > 1e-7:
+                        t = (c_val - (pa.v - pa.u)) / denom
+                        if 0.0 <= t <= 1.0:
+                            intersections.append(pa.u + t * du)
+
+                intersections.sort()
+                for k in range(0, len(intersections) - 1, 2):
+                    u_start = intersections[k]
+                    u_end = intersections[k + 1]
+                    v_start = u_start + c_val
+                    v_end = u_end + c_val
+
+                    hx1 = center_x + (u_start - mean_u) * scale
+                    hy1 = center_y + (v_start - mean_v) * scale
+                    hx2 = center_x + (u_end - mean_u) * scale
+                    hy2 = center_y + (v_end - mean_v) * scale
+                    sheet.lines.append(DrawingLine2D(hx1, hy1, hx2, hy2, is_hatch=True))
+
+                c_val += step
+
+        sheet.dimensions.append(DimensionLabel(center_x, center_y - 80.0, f"Coupe A-A (Z = {cut_height:.1f} mm)"))
+        return sheet
+

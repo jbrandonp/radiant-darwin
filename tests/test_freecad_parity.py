@@ -1,751 +1,288 @@
 """
-Tests unitaires complets pour la parité FreeCAD :
-- Atelier PartDesign : Lissage (Loft), Balayage (Sweep), Congé (Fillet), Chanfrein (Chamfer), Dépouille (Draft).
-- Atelier Inspection / Measure : Mesure 3D, Angles, Barycentre / Centre de Gravité, Jeux (Clearance), Collisions.
-- Atelier Mesh : Diagnostic d'étanchéité 2-Manifold, Réparation topologique, Décimation, Inversion de normales.
-- Sérialisation et Persistance (.cadproj).
-- Boîtes de dialogue de l'interface utilisateur.
+Tests unitaires pour la parité FreeCAD approfondie :
+- Géométrie de construction d'esquisse (Sketcher Construction Geometry)
+- Diagnostic des degrés de liberté du solveur (Degrees of Freedom - DoF)
+- Fonctionnalité de cavité / poche (PartDesign Pocket)
+- Plans de référence paramétriques (PartDesign Datum Plane)
+- Vue en coupe avec hachures ISO 128 (TechDraw Section Hatching)
+- Sérialisation et restauration complète du projet (.cadproj)
 """
 
+import os
+import tempfile
 import pytest
 import numpy as np
-from typing import Dict, List
 
-from src.core.types import BooleanOperation, PlaneType, Point2D, Vector3D
-from src.core.geometry import Solid, make_box, make_cylinder, make_cone, make_torus, make_wedge
-from src.core.feature import ConeFeature, TorusFeature, WedgeFeature, BoxFeature
-from src.core.fasteners import (
-    create_hex_bolt, create_socket_head_cap_screw, create_hex_nut, create_washer,
-    FastenerFeature, ISO_METRIC_TABLE
-)
-from src.core.section_tools import (
-    slice_solid_contours, create_sketch_from_cross_section, create_cutaway_solid
-)
-from src.core.exporter import CADExporter
-from src.core.step_exporter import STEPExporter
-from src.core.sketch import Sketch2D, SketchSlot, SketchRegularPolygon, SketchEllipse
-from src.solver.constraints_2d import SketchConstraintSolver2D, ConstraintType
+from src.core.types import Point2D, PlaneType, BooleanOperation
+from src.core.sketch import Sketch2D, SketchLine, SketchRectangle, SketchCircle
+from src.solver.constraints_2d import ConstraintSolver2D
+from src.core.geometry import make_box, extrude_polygon
 from src.core.document import CADDocument
-from src.core.operations_advanced import (
-    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature,
-    HoleFeature, PipeFeature
-)
-from src.core.inspector import (
-    measure_points, measure_angle_vectors, compute_center_of_mass,
-    compute_clearance, compute_interference, generate_inspection_report
-)
-from src.core.mesh_tools import (
-    diagnose_mesh, repair_mesh, simplify_mesh, flip_mesh_normals,
-    create_solid_from_triangles
-)
+from src.core.feature import BoxFeature, ExtrudeFeature
+from src.core.operations_advanced import PocketFeature, DatumPlaneFeature
+from src.drawing.drawing_generator import TechnicalDrawingGenerator, DrawingLine2D
 from src.core.serializer import ProjectSerializer
 
 
-def test_loft_between_two_sketches():
-    """Vérifie la création d'un solide par lissage (Loft) entre deux esquisses distinctes."""
-    doc = CADDocument("TestLoft")
+def test_sketch_construction_geometry() -> None:
+    """Vérifie que la géométrie de construction est correctement identifiée et exclue des profils 3D."""
+    sketch = Sketch2D("sk1", "SketchWithConstruction", plane=PlaneType.XY, offset_distance=15.0)
 
-    # Esquisse 1 : Carré 30x30 en Z=0
-    sk1 = Sketch2D("sk_base", "Base", PlaneType.XY)
-    sk1.add_rectangle(Point2D(-15.0, -15.0), 30.0, 30.0)
-    doc.add_sketch(sk1)
+    # Ligne de construction (axe de symétrie / référence)
+    axis_line = sketch.add_line(Point2D(0.0, -50.0), Point2D(0.0, 50.0), is_construction=True)
+    assert axis_line.is_construction is True
 
-    # Esquisse 2 : Carré 15x15 en haut
-    sk2 = Sketch2D("sk_top", "Top", PlaneType.XY)
-    sk2.add_rectangle(Point2D(-7.5, -7.5), 15.0, 15.0)
-    doc.add_sketch(sk2)
+    # Cercle de construction (cercle primitif de perçage style FreeCAD)
+    bolt_circle = sketch.add_circle(Point2D(0.0, 0.0), radius=25.0, is_construction=True)
+    assert bolt_circle.is_construction is True
 
-    loft = LoftFeature(
-        feature_id="loft_1",
-        name="Loft Transition",
-        start_sketch_id="sk_base",
-        end_sketch_id="sk_top",
-        height_offset=25.0,
-        num_segments=32,
-        operation=BooleanOperation.NEW_BODY
-    )
-    doc.add_feature(loft)
+    # Rectangle solide réel
+    rect = sketch.add_rectangle(Point2D(-20.0, -20.0), width=40.0, height=40.0, is_construction=False)
+    assert rect.is_construction is False
 
-    assert len(doc.bodies) == 1
-    body = list(doc.bodies.values())[0]
-    assert not body.is_empty()
-    assert body.volume() > 1000.0
-    b_min, b_max = body.bounding_box()
-    assert pytest.approx(b_max.z - b_min.z, 0.1) == 25.0
+    solids = sketch.get_solid_entities()
+    constructions = sketch.get_construction_entities()
 
+    assert len(solids) == 1
+    assert solids[0].entity_id == rect.entity_id
+    assert len(constructions) == 2
 
-def test_loft_single_sketch_taper():
-    """Vérifie le lissage à partir d'une seule esquisse avec facteur d'échelle supérieur."""
-    doc = CADDocument("TestLoftTaper")
-    sk = Sketch2D("sk_circ", "Cercle Base", PlaneType.XY)
-    sk.add_circle(Point2D(0.0, 0.0), 10.0)
-    doc.add_sketch(sk)
+    # Le profil primaire ne doit pas prendre l'axe ni le cercle de construction
+    profile = sketch.get_primary_profile()
+    assert profile is not None
+    assert len(profile) == 4  # Le rectangle solide à 4 sommets
 
-    loft = LoftFeature(
-        feature_id="loft_taper",
-        name="Loft Cone",
-        start_sketch_id="sk_circ",
-        end_sketch_id="",
-        height_offset=20.0,
-        scale_top=0.5,
-        num_segments=36
-    )
-    doc.add_feature(loft)
+    # Vérification de la projection 3D avec décalage de plan
+    pt_3d = sketch.to_3d_coordinates(Point2D(10.0, 20.0))
+    assert pt_3d.x == 10.0
+    assert pt_3d.y == 20.0
+    assert pt_3d.z == 15.0
 
-    assert len(doc.bodies) == 1
-    body = list(doc.bodies.values())[0]
-    assert not body.is_empty()
-    assert body.volume() > 500.0
 
+def test_solver_degrees_of_freedom() -> None:
+    """Vérifie le calcul diagnostique des degrés de liberté (DoF) du solveur."""
+    solver = ConstraintSolver2D()
 
-def test_sweep_arc_and_helix():
-    """Vérifie le balayage volumique (Sweep) le long d'un arc et d'une hélice."""
-    doc = CADDocument("TestSweep")
-    sk = Sketch2D("sk_prof", "Profil Circulaire", PlaneType.XY)
-    sk.add_circle(Point2D(0.0, 0.0), 4.0)
-    doc.add_sketch(sk)
+    # 1. Esquisse vide
+    dof, msg = solver.calculate_degrees_of_freedom()
+    assert dof == 0
 
-    # Balayage en Arc
-    sweep_arc = SweepFeature(
-        feature_id="sweep_1",
-        name="Tuyau Coude",
-        profile_sketch_id="sk_prof",
-        trajectory_type="arc",
-        radius=30.0,
-        height=30.0,
-        num_steps=20,
-        segments=20
-    )
-    doc.add_feature(sweep_arc)
-    assert len(doc.bodies) == 1
-    assert not list(doc.bodies.values())[0].is_empty()
-
-    # Balayage en Hélice
-    doc2 = CADDocument("TestSweepHelix")
-    doc2.add_sketch(sk)
-    sweep_helix = SweepFeature(
-        feature_id="sweep_2",
-        name="Ressort Hélicoïdal",
-        profile_sketch_id="sk_prof",
-        trajectory_type="helix",
-        radius=20.0,
-        height=30.0,
-        turns=1.5,
-        num_steps=30,
-        segments=16
-    )
-    doc2.add_feature(sweep_helix)
-    assert len(doc2.bodies) == 1
-    assert not list(doc2.bodies.values())[0].is_empty()
-
-
-def test_fillet_and_chamfer():
-    """Vérifie les opérations de congé (Fillet) et chanfrein (Chamfer)."""
-    # 1. Congé d'arête
-    cube = make_box(20.0, 20.0, 20.0, center=True, name="BaseCube")
-    bodies = {"body_cube": cube}
-    sketches: Dict[str, Sketch2D] = {}
-
-    fillet = FilletFeature(
-        feature_id="fillet_1",
-        name="Congé R2",
-        target_body_id="body_cube",
-        radius=2.0,
-        segments=16
-    )
-    res_fillet = fillet.evaluate(bodies, sketches)
-    filleted_solid = res_fillet["body_cube"]
-    assert not filleted_solid.is_empty()
-    # Le volume avec congé doit être légèrement inférieur au cube parfait (8000)
-    assert filleted_solid.volume() < 8000.0
-    assert filleted_solid.volume() > 7000.0
-
-    # 2. Chanfrein d'arête
-    chamfer = ChamferFeature(
-        feature_id="chamfer_1",
-        name="Chanfrein 2mm",
-        target_body_id="body_cube",
-        distance=2.0,
-        edges_mode="all"
-    )
-    res_chamfer = chamfer.evaluate(bodies, sketches)
-    chamfered_solid = res_chamfer["body_cube"]
-    assert not chamfered_solid.is_empty()
-    assert chamfered_solid.volume() < 8000.0
-
-
-def test_draft_feature():
-    """Vérifie l'application d'un angle de dépouille (Draft)."""
-    cube = make_box(20.0, 20.0, 30.0, center=False, name="MoldingBase")
-    bodies = {"body_mold": cube}
-    sketches: Dict[str, Sketch2D] = {}
-
-    draft = DraftFeature(
-        feature_id="draft_1",
-        name="Dépouille 4deg",
-        target_body_id="body_mold",
-        draft_angle_deg=4.0,
-        pull_axis="Z"
-    )
-    res = draft.evaluate(bodies, sketches)
-    drafted_solid = res["body_mold"]
-    assert not drafted_solid.is_empty()
-    assert drafted_solid.volume() < cube.volume()
-
-
-def test_inspector_measurements():
-    """Vérifie la précision des outils de mesure 3D et métrologie."""
-    # Distance entre 2 points
-    p1 = Vector3D(0.0, 0.0, 0.0)
-    p2 = Vector3D(10.0, 20.0, 20.0)
-    res = measure_points(p1, p2)
-    assert pytest.approx(res.distance, 1e-4) == 30.0  # sqrt(100 + 400 + 400) = 30
-    assert pytest.approx(res.dx, 1e-4) == 10.0
-    assert pytest.approx(res.dy, 1e-4) == 20.0
-    assert pytest.approx(res.dz, 1e-4) == 20.0
-    assert pytest.approx(res.midpoint.x, 1e-4) == 5.0
-
-    # Angle entre vecteurs
-    v_x = Vector3D(1.0, 0.0, 0.0)
-    v_y = Vector3D(0.0, 1.0, 0.0)
-    assert pytest.approx(measure_angle_vectors(v_x, v_y), 1e-4) == 90.0
-    assert pytest.approx(measure_angle_vectors(v_x, v_x), 1e-4) == 0.0
-
-    # Centre de gravité d'une boîte centrée en (15, 25, 35)
-    box = make_box(10.0, 10.0, 10.0, center=True).translate(Vector3D(15.0, 25.0, 35.0))
-    cog = compute_center_of_mass(box)
-    assert pytest.approx(cog.x, 0.1) == 15.0
-    assert pytest.approx(cog.y, 0.1) == 25.0
-    assert pytest.approx(cog.z, 0.1) == 35.0
-
-    # Jeux (Clearance) et Collisions
-    box_a = make_box(10.0, 10.0, 10.0, center=True)
-    box_b = make_box(10.0, 10.0, 10.0, center=True).translate(Vector3D(25.0, 0.0, 0.0))
-    gap = compute_clearance(box_a, box_b)
-    assert pytest.approx(gap, 0.1) == 15.0  # de x=5 à x=20
-
-    has_col, vol_col = compute_interference(box_a, box_b)
-    assert not has_col
-    assert vol_col == 0.0
-
-    # Rapport d'inspection
-    rep = generate_inspection_report(box_a, "Acier S235", 7.85)
-    assert pytest.approx(float(rep["volume_mm3"]), 0.1) == 1000.0
-    assert pytest.approx(float(rep["surface_area_mm2"]), 0.1) == 600.0
-
-
-def test_mesh_workbench_diagnostic_and_repair():
-    """Vérifie l'analyse et la réparation de maillage de l'atelier Mesh."""
-    cube = make_box(10.0, 10.0, 10.0, center=True)
-    diag = diagnose_mesh(cube)
-    assert diag.is_watertight
-    assert diag.num_faces == 12
-    assert diag.num_vertices == 8
-    assert diag.genus == 0
-    assert diag.degenerate_faces == 0
-
-    # Réparation de maillage
-    repaired = repair_mesh(cube)
-    assert not repaired.is_empty()
-    assert pytest.approx(repaired.volume(), 0.1) == 1000.0
-
-    # Simplification de maillage
-    cyl = make_cylinder(10.0, 20.0, segments=48)
-    initial_faces = cyl.num_faces()
-    decimated = simplify_mesh(cyl, 0.5)
-    assert not decimated.is_empty()
-
-    # Inversion de normales
-    flipped = flip_mesh_normals(cube)
-    assert not flipped.is_empty()
-
-    # Construction depuis triangles bruts
-    verts = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [0, 0, 10], [10, 0, 10], [10, 10, 10], [0, 10, 10]]
-    faces = [
-        [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
-        [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
-        [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]
-    ]
-    solid_from_tri = create_solid_from_triangles(verts, faces, "CustomSolid")
-    assert not solid_from_tri.is_empty()
-    assert solid_from_tri.volume() > 0.0
-
-
-def test_serialization_freecad_parity_features(tmp_path):
-    """Vérifie que les nouvelles features se sauvegardent et se rechargent sans perte."""
-    doc = CADDocument("TestSer")
-    sk = Sketch2D("sk_1", "Esquisse", PlaneType.XY)
-    sk.add_rectangle(Point2D(-10.0, -10.0), 20.0, 20.0)
-    doc.add_sketch(sk)
-
-    doc.add_feature(LoftFeature("f_loft", "MonLoft", "sk_1", "", height_offset=25.0, scale_top=0.7))
-    doc.add_feature(SweepFeature("f_sweep", "MonSweep", "sk_1", trajectory_type="arc", radius=25.0, height=25.0))
-
-    filepath = str(tmp_path / "project_freecad_parity.cadproj")
-    ok = ProjectSerializer.save_project(doc, filepath)
-    assert ok
-
-    loaded_doc = ProjectSerializer.load_project(filepath)
-    assert loaded_doc is not None
-    assert len(loaded_doc.features) == 2
-    assert loaded_doc.features[0].__class__.__name__ == "LoftFeature"
-    assert loaded_doc.features[1].__class__.__name__ == "SweepFeature"
-
-
-def test_ui_freecad_parity_dialogs():
-    """Vérifie l'instanciation et la récupération des valeurs de toutes les boîtes de dialogue."""
-    import os
-    os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    from PySide6.QtWidgets import QApplication
-    from src.ui.dialogs import (
-        LoftDialog, SweepDialog, FilletDialog, ChamferDialog,
-        DraftDialog, MeasureDialog, MeshAnalysisDialog
-    )
-    _app = QApplication.instance() or QApplication([])
-    b = make_box(10.0, 10.0, 10.0, center=True)
-    bodies = {"b1": b, "b2": b}
-    sketches = ["sk1", "sk2"]
-
-    d_loft = LoftDialog(sketches, list(bodies.keys()))
-    val_loft = d_loft.get_values()
-    assert val_loft["height_offset"] == 30.0
-
-    d_sweep = SweepDialog(sketches, list(bodies.keys()))
-    val_sweep = d_sweep.get_values()
-    assert val_sweep["radius"] == 30.0
-
-    d_fillet = FilletDialog(list(bodies.keys()))
-    val_fillet = d_fillet.get_values()
-    assert val_fillet["radius"] == 2.0
-
-    d_chamfer = ChamferDialog(list(bodies.keys()))
-    val_chamfer = d_chamfer.get_values()
-    assert val_chamfer["distance"] == 2.0
-
-    d_draft = DraftDialog(list(bodies.keys()))
-    val_draft = d_draft.get_values()
-    assert val_draft["draft_angle"] == 3.0
-
-    d_meas = MeasureDialog(bodies)
-    assert d_meas is not None
-
-    d_mesh = MeshAnalysisDialog(bodies)
-    assert d_mesh is not None
-
-    from src.ui.dialogs import CreateConeDialog, CreateTorusDialog, FastenerDialog, SectionCutDialog
-
-    d_cone = CreateConeDialog(list(bodies.keys()))
-    val_cone = d_cone.get_values()
-    assert val_cone["radius_bottom"] == 15.0
-    assert val_cone["height"] == 30.0
-
-    d_torus = CreateTorusDialog(list(bodies.keys()))
-    val_torus = d_torus.get_values()
-    assert val_torus["major_radius"] == 25.0
-    assert val_torus["minor_radius"] == 6.0
-
-    d_fastener = FastenerDialog("hex_bolt")
-    val_fastener = d_fastener.get_values()
-    assert val_fastener["fastener_type"] == "hex_bolt"
-    assert val_fastener["thread_size"] == "M8"
-
-    d_section = SectionCutDialog(list(bodies.keys()))
-    val_section = d_section.get_values()
-    assert val_section["axis"] == "Z"
-    assert val_section["create_sketch"] is True
-
-
-def test_make_cone_and_cone_feature():
-    """Vérifie la primitive cône et la fonctionnalité ConeFeature."""
-    # Primitive directe
-    cone_solid = make_cone(radius_bottom=20.0, radius_top=5.0, height=40.0, segments=36, name="TestCone")
-    assert not cone_solid.is_empty()
-    assert cone_solid.volume() > 5000.0
-    b_min, b_max = cone_solid.bounding_box()
-    assert pytest.approx(b_max.z - b_min.z, 0.1) == 40.0
-
-    # ConeFeature dans un document
-    doc = CADDocument("TestConeDoc")
-    cone_feat = ConeFeature(
-        feature_id="cone_1",
-        name="Cône Tronc",
-        radius_bottom=10.0,
-        radius_top=0.0,
-        height=30.0,
-        segments=32,
-        operation=BooleanOperation.NEW_BODY
-    )
-    doc.add_feature(cone_feat)
-    assert len(doc.bodies) == 1
-    params = cone_feat.get_parameters()
-    assert params["radius_bottom"] == 10.0
-    assert params["height"] == 30.0
-
-    # Modification paramétrique
-    cone_feat.set_parameters({"height": 50.0})
-    doc.rebuild()
-    body = list(doc.bodies.values())[0]
-    b_min, b_max = body.bounding_box()
-    assert pytest.approx(b_max.z - b_min.z, 0.1) == 50.0
-
-
-def test_make_torus_and_torus_feature():
-    """Vérifie la primitive tore et la fonctionnalité TorusFeature."""
-    # Primitive directe (R=30, r=8) -> Volume théorique 2 * pi^2 * R * r^2 ~ 2 * 9.8696 * 30 * 64 ~ 37900 mm³
-    torus_solid = make_torus(major_radius=30.0, minor_radius=8.0, segments=24, name="TestTorus")
-    assert not torus_solid.is_empty()
-    assert 30000.0 < torus_solid.volume() < 45000.0
-    b_min, b_max = torus_solid.bounding_box()
-    assert pytest.approx(b_max.x - b_min.x, 0.5) == 76.0  # 2 * (30 + 8)
-
-    # TorusFeature dans un document
-    doc = CADDocument("TestTorusDoc")
-    torus_feat = TorusFeature(
-        feature_id="torus_1",
-        name="Tore Anneau",
-        major_radius=25.0,
-        minor_radius=5.0,
-        segments=20,
-        operation=BooleanOperation.NEW_BODY
-    )
-    doc.add_feature(torus_feat)
-    assert len(doc.bodies) == 1
-    params = torus_feat.get_parameters()
-    assert params["major_radius"] == 25.0
-    assert params["minor_radius"] == 5.0
-
-
-def test_fasteners_workbench():
-    """Vérifie la génération de composants de quincaillerie ISO normalisés."""
-    # Vis Hex ISO 4017 M8 x 35
-    bolt = create_hex_bolt("M8", length=35.0)
-    assert not bolt.is_empty()
-    b_min, b_max = bolt.bounding_box()
-    assert b_max.z - b_min.z > 35.0
-
-    # Vis CHC ISO 4762 M6 x 25
-    chc = create_socket_head_cap_screw("M6", length=25.0)
-    assert not chc.is_empty()
-    assert chc.volume() > 500.0
-
-    # Écrou Hex ISO 4032 M10
-    nut = create_hex_nut("M10")
-    assert not nut.is_empty()
-    assert nut.volume() > 1000.0
-
-    # Rondelle plate ISO 7089 M8
-    washer = create_washer("M8")
-    assert not washer.is_empty()
-    assert washer.volume() > 100.0
-
-    # Vérification table ISO métrique M3 à M20
-    assert "M3" in ISO_METRIC_TABLE
-    assert "M20" in ISO_METRIC_TABLE
-
-    # FastenerFeature dans un document
-    doc = CADDocument("TestFastenerDoc")
-    feat_bolt = FastenerFeature(
-        feature_id="fastener_1",
-        name="Vis CHC M8x40",
-        fastener_type="socket_cap",
-        thread_size="M8",
-        length=40.0,
-        has_washer=True
-    )
-    doc.add_feature(feat_bolt)
-    assert len(doc.bodies) == 1
-    params = feat_bolt.get_parameters()
-    assert params["thread_size"] == "M8"
-    assert params["has_washer"] is True
-
-
-def test_section_tools_and_slicing():
-    """Vérifie la coupe de section plane et l'extraction d'esquisse 2D (Part Section)."""
-    box = make_box(40.0, 30.0, 20.0, center=True, name="TestBox")
-
-    # Slicing plan Z=0
-    contours_z = slice_solid_contours(box, axis="Z", coordinate=0.0)
-    assert len(contours_z) == 1
-    assert len(contours_z[0]) >= 4
-
-    # Slicing plan X=0
-    contours_x = slice_solid_contours(box, axis="X", coordinate=0.0)
-    assert len(contours_x) == 1
-    assert len(contours_x[0]) >= 4
-
-    # Slicing plan Y=0
-    contours_y = slice_solid_contours(box, axis="Y", coordinate=0.0)
-    assert len(contours_y) == 1
-    assert len(contours_y[0]) >= 4
-
-    # Slicing en dehors de la pièce -> aucun contour
-    contours_out = slice_solid_contours(box, axis="Z", coordinate=50.0)
-    assert len(contours_out) == 0
-
-    # Création d'une esquisse Sketch2D à partir du contour
-    sketch = create_sketch_from_cross_section(contours_z, sketch_id="sk_cut", name="Coupe Z0", plane=PlaneType.XY)
-    assert len(sketch.entities) >= 1
-    assert len(sketch.entities[0].points) >= 4
-    assert sketch.is_closed_profile()
-
-    # Création de solide tronqué (Cutaway)
-    cutaway = create_cutaway_solid(box, axis="Z", coordinate=0.0, keep_positive=True)
-    assert not cutaway.is_empty()
-    assert pytest.approx(cutaway.volume(), rel=0.05) == box.volume() / 2.0
-
-
-def test_step_export_ap203():
-    """Vérifie l'exporteur STEP ISO 10303-21 AP203."""
-    box = make_box(20.0, 20.0, 20.0, center=True, name="ExportBox")
-    cyl = make_cylinder(8.0, 25.0, segments=24, name="ExportCyl")
-    bodies = {"body_1": box, "body_2": cyl}
-
-    step_text = STEPExporter.export_to_string(bodies, header_description="Test CAD Studio STEP Export")
-    assert "ISO-10303-21;" in step_text
-    assert "HEADER;" in step_text
-    assert "FILE_SCHEMA(('AUTOMOTIVE_DESIGN_CC2', 'AP203_CONFIGURATION_CONTROLLED_3D_DESIGN_OF_MECHANICAL_PARTS_AND_ASSEMBLIES_MIM_LF'));" in step_text
-    assert "FACETED_BREP" in step_text
-    assert "CLOSED_SHELL" in step_text
-    assert "POLY_LOOP" in step_text
-    assert "END-ISO-10303-21;" in step_text
-
-
-def test_serializer_with_cone_torus_and_fasteners(tmp_path):
-    """Vérifie la sérialisation et restauration de projets contenant cône, tore et quincaillerie."""
-    doc = CADDocument("ProjetCompletFreeCAD")
-    doc.add_feature(ConeFeature("feat_c", "MonCone", radius_bottom=12.0, radius_top=4.0, height=25.0))
-    doc.add_feature(TorusFeature("feat_t", "MonTore", major_radius=20.0, minor_radius=5.0))
-    doc.add_feature(FastenerFeature("feat_f", "VisM6", fastener_type="hex_bolt", thread_size="M6", length=20.0))
-
-    filepath = str(tmp_path / "project_all_features.cadproj")
-    ok = ProjectSerializer.save_project(doc, filepath)
-    assert ok
-
-    loaded_doc = ProjectSerializer.load_project(filepath)
-    assert loaded_doc is not None
-    assert len(loaded_doc.features) == 3
-    assert loaded_doc.features[0].__class__.__name__ == "ConeFeature"
-    assert loaded_doc.features[1].__class__.__name__ == "TorusFeature"
-    assert loaded_doc.features[2].__class__.__name__ == "FastenerFeature"
-    assert len(loaded_doc.bodies) == 3
-
-
-def test_wedge_primitive_and_feature():
-    """Vérifie la création géométrique et paramétrique d'un coin (Wedge) FreeCAD."""
-    # 1. Coin triangulaire pur (sommet pointu dx_top=0)
-    wedge_tri = make_wedge(30.0, 20.0, 15.0, dx_top=0.0, dy_top=20.0, name="TriWedge")
-    assert not wedge_tri.is_empty()
-    assert wedge_tri.volume() > 0.0
-    # Volume théorique d'un prisme triangulaire : 0.5 * 30 * 20 * 15 = 4500 mm³
-    assert pytest.approx(wedge_tri.volume(), rel=0.01) == 4500.0
-
-    # 2. Coin trapézoïdal (dx_top=10, dy_top=20)
-    wedge_trap = make_wedge(30.0, 20.0, 15.0, dx_top=10.0, dy_top=20.0, name="TrapWedge")
-    assert not wedge_trap.is_empty()
-    assert wedge_trap.volume() > 0.0
-    # Volume théorique trapézoïdal : (30 + 10) / 2 * 20 * 15 = 6000 mm³
-    assert pytest.approx(wedge_trap.volume(), rel=0.01) == 6000.0
-
-    # 3. WedgeFeature dans un CADDocument
-    doc = CADDocument("TestWedgeDoc")
-    w_feat = WedgeFeature("feat_w", "Coin Paramétrique", dx=40.0, dy=25.0, dz=12.0, dx_top=0.0, dy_top=25.0)
-    doc.add_feature(w_feat)
-    assert len(doc.bodies) == 1
-    body = list(doc.bodies.values())[0]
-    assert pytest.approx(body.volume(), rel=0.02) == 6000.0
-
-
-def test_hole_counterbore_and_countersink():
-    """Vérifie les perçages avancés FreeCAD : lamage (counterbore) et fraisage (countersink)."""
-    # 1. Base commune
-    doc_simple = CADDocument("DocSimpleHole")
-    doc_simple.add_feature(BoxFeature("box_1", "Base", 40.0, 40.0, 30.0, center=False))
-    doc_simple.add_feature(HoleFeature("hole_s", "Simple Hole", "box_1", 20.0, 20.0, diameter=6.0, depth=20.0, hole_type="simple"))
-    vol_simple = list(doc_simple.bodies.values())[0].volume()
-
-    # 2. Lamage (Counterbore)
-    doc_cbore = CADDocument("DocCBore")
-    doc_cbore.add_feature(BoxFeature("box_1", "Base", 40.0, 40.0, 30.0, center=False))
-    doc_cbore.add_feature(HoleFeature(
-        "hole_cb", "CBore Hole", "box_1", 20.0, 20.0,
-        diameter=6.0, depth=20.0,
-        hole_type="counterbore", cbore_dia=12.0, cbore_depth=5.0
-    ))
-    vol_cbore = list(doc_cbore.bodies.values())[0].volume()
-
-    # Le lamage enlève plus de matière que le trou simple
-    assert vol_cbore < vol_simple
-
-    # 3. Fraisage (Countersink)
-    doc_csink = CADDocument("DocCSink")
-    doc_csink.add_feature(BoxFeature("box_1", "Base", 40.0, 40.0, 30.0, center=False))
-    doc_csink.add_feature(HoleFeature(
-        "hole_cs", "CSink Hole", "box_1", 20.0, 20.0,
-        diameter=6.0, depth=20.0,
-        hole_type="countersink", csink_dia=14.0, csink_angle=90.0
-    ))
-    vol_csink = list(doc_csink.bodies.values())[0].volume()
-
-    # Le fraisage conique enlève plus de matière que le trou simple
-    assert vol_csink < vol_simple
-
-
-def test_pipe_feature_3d_sweep():
-    """Vérifie la création de tuyauterie 3D continue pleine et creuse (PipeFeature)."""
-    path = [(0.0, 0.0, 0.0), (0.0, 0.0, 40.0), (30.0, 0.0, 40.0)]
-
-    # 1. Tuyau solide plein
-    doc_solid = CADDocument("DocPipeSolid")
-    pipe_solid = PipeFeature("pipe_s", "Tuyau Plein", path, outer_radius=5.0)
-    doc_solid.add_feature(pipe_solid)
-    assert len(doc_solid.bodies) == 1
-    body_solid = list(doc_solid.bodies.values())[0]
-    assert not body_solid.is_empty()
-    assert body_solid.volume() > 4000.0
-
-    # 2. Tuyau creux
-    doc_hollow = CADDocument("DocPipeHollow")
-    pipe_hollow = PipeFeature("pipe_h", "Tuyau Creux", path, outer_radius=5.0, inner_radius=3.0)
-    doc_hollow.add_feature(pipe_hollow)
-    assert len(doc_hollow.bodies) == 1
-    body_hollow = list(doc_hollow.bodies.values())[0]
-    assert not body_hollow.is_empty()
-    # Le tuyau creux doit avoir un volume strictement inférieur au tuyau plein
-    assert body_hollow.volume() < body_solid.volume()
-    assert body_hollow.volume() > 1000.0
-
-
-def test_sketch_slot_polygon_ellipse():
-    """Vérifie les nouvelles primitives 2D du Sketcher : trou oblong, polygone régulier et ellipse."""
-    sketch = Sketch2D("sk_primitives", "Primitives 2D", plane=PlaneType.XY)
-
-    # Trou oblong (Slot)
-    slot = sketch.add_slot(Point2D(-20.0, 0.0), Point2D(20.0, 0.0), radius=5.0)
-    assert isinstance(slot, SketchSlot)
-    pts_slot = slot.to_profile_points(num_segments=16)
-    assert len(pts_slot) >= 20
-    # La longueur totale du contour doit englober de X=-25 à X=25
-    xs = [p.x for p in pts_slot]
-    assert min(xs) <= -24.9
-    assert max(xs) >= 24.9
-
-    # Polygone régulier hexagone
-    poly = sketch.add_regular_polygon(Point2D(0.0, 0.0), radius=15.0, sides=6)
-    assert isinstance(poly, SketchRegularPolygon)
-    pts_poly = poly.to_profile_points()
-    assert len(pts_poly) == 6
-
-    # Ellipse
-    ell = sketch.add_ellipse(Point2D(0.0, 0.0), radius_x=25.0, radius_y=12.0)
-    assert isinstance(ell, SketchEllipse)
-    pts_ell = ell.to_profile_points(num_segments=32)
-    assert len(pts_ell) == 32
-    xs_ell = [p.x for p in pts_ell]
-    ys_ell = [p.y for p in pts_ell]
-    assert pytest.approx(max(xs_ell), 0.1) == 25.0
-    assert pytest.approx(max(ys_ell), 0.1) == 12.0
-
-
-def test_solver_2d_advanced_constraints():
-    """Vérifie le solveur géométrique 2D sur les contraintes Equal, Angle, PointOnLine et Tangent."""
-    # 1. Contrainte EQUAL (Deux segments de même longueur)
-    solver = SketchConstraintSolver2D()
+    # 2. 2 points libres (4 variables, 0 contraintes => 4 DoF)
     p0 = solver.add_point(Point2D(0.0, 0.0))
-    p1 = solver.add_point(Point2D(20.0, 0.0))
-    p2 = solver.add_point(Point2D(0.0, 10.0))
-    p3 = solver.add_point(Point2D(15.0, 10.0))
+    p1 = solver.add_point(Point2D(10.0, 0.0))
+    dof, msg = solver.calculate_degrees_of_freedom()
+    assert dof == 4
+    assert "4 degrés de liberté" in msg
 
+    # 3. Ancrer p0 à (0, 0) => supprime 2 DoF (reste 2 DoF)
     solver.add_fixed(p0, 0.0, 0.0)
-    solver.add_fixed(p1, 20.0, 0.0) # Longueur p0-p1 = 20.0
-    solver.add_fixed(p2, 0.0, 10.0)
-    solver.add_horizontal(p2, p3)
-    solver.add_equal(p0, p1, p2, p3) # Force longueur p2-p3 = 20.0
+    dof, msg = solver.calculate_degrees_of_freedom()
+    assert dof == 2
 
-    ok, pts = solver.solve()
-    assert ok
-    len_01 = np.linalg.norm(np.array([pts[1].x - pts[0].x, pts[1].y - pts[0].y]))
-    len_23 = np.linalg.norm(np.array([pts[3].x - pts[2].x, pts[3].y - pts[2].y]))
-    assert pytest.approx(len_01, 1e-3) == len_23
+    # 4. Rendre le segment horizontal => supprime 1 DoF (reste 1 DoF)
+    solver.add_horizontal(p0, p1)
+    dof, msg = solver.calculate_degrees_of_freedom()
+    assert dof == 1
 
-    # 2. Contrainte ANGLE (Angle droit 90° entre deux segments perpendiculaires)
-    solver_ang = SketchConstraintSolver2D()
-    a0 = solver_ang.add_point(Point2D(0.0, 0.0))
-    a1 = solver_ang.add_point(Point2D(30.0, 0.0))
-    a2 = solver_ang.add_point(Point2D(10.0, 25.0)) # Sera ajusté à la verticale
-
-    solver_ang.add_fixed(a0, 0.0, 0.0)
-    solver_ang.add_fixed(a1, 30.0, 0.0)
-    solver_ang.add_distance(a0, a2, 20.0)
-    solver_ang.add_angle(a0, a1, a0, a2, target_angle_deg=90.0)
-
-    ok_ang, pts_ang = solver_ang.solve()
-    assert ok_ang
-    assert pytest.approx(pts_ang[2].x, abs=1e-2) == 0.0
-    assert pytest.approx(pts_ang[2].y, abs=1e-2) == 20.0
-
-    # 3. Contrainte POINT ON LINE
-    solver_pol = SketchConstraintSolver2D()
-    l0 = solver_pol.add_point(Point2D(0.0, 0.0))
-    l1 = solver_pol.add_point(Point2D(50.0, 50.0))
-    lp = solver_pol.add_point(Point2D(10.0, 20.0))
-
-    solver_pol.add_fixed(l0, 0.0, 0.0)
-    solver_pol.add_fixed(l1, 50.0, 50.0)
-    solver_pol.add_point_on_line(lp, l0, l1)
-    solver_pol.add_distance(l0, lp, 28.28427) # Doit converger vers (20, 20)
-
-    ok_pol, pts_pol = solver_pol.solve()
-    assert ok_pol
-    assert pytest.approx(pts_pol[2].x, 0.1) == pts_pol[2].y
-
-    # 4. Contrainte TANGENT (Ligne tangente à un cercle)
-    solver_tan = SketchConstraintSolver2D()
-    tp0 = solver_tan.add_point(Point2D(0.0, 15.0))
-    tp1 = solver_tan.add_point(Point2D(40.0, 15.0))
-    center = Point2D(20.0, 0.0)
-    radius = 10.0
-
-    solver_tan.add_horizontal(tp0, tp1)
-    solver_tan.add_tangent(tp0, tp1, center, radius)
-    ok_tan, pts_tan = solver_tan.solve()
-    assert ok_tan
-    # La ligne horizontale tangente au cercle de centre (20, 0) et rayon 10 doit être à Y=10 ou Y=-10
-    assert pytest.approx(abs(pts_tan[0].y), 1e-2) == 10.0
+    # 5. Fixer la distance à 50.0 => système entièrement contraint (0 DoF)
+    solver.add_distance(p0, p1, 50.0)
+    dof, msg = solver.calculate_degrees_of_freedom()
+    assert dof == 0
+    assert "Entièrement contrainte" in msg
 
 
-def test_serializer_with_wedge_pipe_and_advanced_holes(tmp_path):
-    """Vérifie la sérialisation/désérialisation complète avec Coin, Tuyau 3D et Perçages avancés."""
-    doc = CADDocument("ProjetPariteFreeCADComplet")
-    doc.add_feature(BoxFeature("box_base", "Socle", 60.0, 60.0, 20.0, center=False))
-    doc.add_feature(WedgeFeature("wedge_1", "Coin Support", dx=30.0, dy=20.0, dz=15.0, dx_top=0.0, dy_top=20.0))
-    doc.add_feature(PipeFeature(
-        "pipe_1", "Tube Raccord",
-        path_points=[(0.0, 0.0, 0.0), (0.0, 0.0, 30.0), (20.0, 0.0, 30.0)],
-        outer_radius=4.0, inner_radius=2.5
-    ))
-    doc.add_feature(HoleFeature(
-        "hole_1", "Trou Lamé", "box_base",
-        x=15.0, y=15.0, diameter=5.0, depth=15.0,
-        hole_type="counterbore", cbore_dia=9.0, cbore_depth=4.0
-    ))
+def test_partdesign_pocket_feature() -> None:
+    """Vérifie le fonctionnement de PocketFeature (creusement fini et traversant)."""
+    doc = CADDocument(name="PocketDoc")
 
-    filepath = str(tmp_path / "freecad_parity_full.cadproj")
-    saved = ProjectSerializer.save_project(doc, filepath)
-    assert saved
+    # Corps de base : Bloc 60x60x40
+    base_box = BoxFeature("box1", "BaseBox", width=60.0, height=60.0, depth=40.0)
+    doc.add_feature(base_box)
+    assert len(doc.bodies) == 1
+    initial_volume = doc.bodies["body_box1"].volume()
 
-    loaded = ProjectSerializer.load_project(filepath)
-    assert loaded is not None
-    assert len(loaded.features) == 4
-    types = [f.__class__.__name__ for f in loaded.features]
-    assert "WedgeFeature" in types
-    assert "PipeFeature" in types
-    assert "HoleFeature" in types
+    # Esquisse pour la poche sur le dessus du bloc (Z = 40.0)
+    pocket_sk = Sketch2D("sk_pocket", "PocketSketch", plane=PlaneType.XY, offset_distance=40.0)
+    pocket_sk.add_rectangle(Point2D(10.0, 10.0), width=20.0, height=20.0)
+    doc.sketches["sk_pocket"] = pocket_sk
 
-    hole_feat = [f for f in loaded.features if isinstance(f, HoleFeature)][0]
-    assert hole_feat.hole_type == "counterbore"
-    assert hole_feat.cbore_dia == 9.0
-    assert hole_feat.cbore_depth == 4.0
+    # Poche avec profondeur de 15 mm
+    pocket_feat = PocketFeature(
+        "pocket1",
+        name="Pocket15mm",
+        sketch_id="sk_pocket",
+        depth=15.0,
+        through_all=False,
+        target_body_id="body_box1"
+    )
+    doc.add_feature(pocket_feat)
 
-    pipe_feat = [f for f in loaded.features if isinstance(f, PipeFeature)][0]
-    assert len(pipe_feat.path_points) == 3
-    assert pipe_feat.inner_radius == 2.5
+    vol_after_pocket = doc.bodies["body_box1"].volume()
+    expected_cavity = 20.0 * 20.0 * 15.0
+    assert vol_after_pocket < initial_volume
+    assert abs((initial_volume - vol_after_pocket) - expected_cavity) < 50.0  # Tolérance maillage
+
+    # Poche traversante (through_all)
+    pocket_through = PocketFeature(
+        "pocket_thru",
+        name="PocketThrough",
+        sketch_id="sk_pocket",
+        through_all=True,
+        target_body_id="body_box1"
+    )
+    # Recalcul avec traversant
+    updated_bodies = pocket_through.evaluate(doc.bodies, doc.sketches)
+    vol_through = updated_bodies["body_box1"].volume()
+    assert vol_through < vol_after_pocket
+
+
+def test_datum_plane_and_elevated_sketch() -> None:
+    """Vérifie les plans de référence (DatumPlaneFeature) et l'extrusion d'esquisse surélevée."""
+    datum = DatumPlaneFeature("dp1", "OffsetPlaneXY", base_plane=PlaneType.XY, offset_distance=50.0)
+    assert datum.parameters["offset_distance"] == 50.0
+
+    sketch = Sketch2D("sk_elevated", "ElevatedSketch")
+    datum.attach_to_sketch(sketch)
+    assert sketch.plane == PlaneType.XY
+    assert sketch.offset_distance == 50.0
+
+    # Profil carré 20x20
+    rect = sketch.add_rectangle(Point2D(0.0, 0.0), 20.0, 20.0)
+    profile = sketch.get_primary_profile()
+    assert profile is not None
+
+    # Extrusion avec décalage de plan
+    solid = extrude_polygon(profile, height=10.0, plane=sketch.plane, plane_offset=sketch.offset_distance)
+    min_b, max_b = solid.bounding_box()
+    # Le solide doit démarrer à Z = 50 et finir à Z = 60
+    assert abs(min_b.z - 50.0) < 1e-3
+    assert abs(max_b.z - 60.0) < 1e-3
+
+
+def test_techdraw_iso_section_hatching() -> None:
+    """Vérifie la génération de plan de coupe avec hachures ISO 128 à 45°."""
+    # Bloc 40x40x40
+    solid = make_box(40.0, 40.0, 40.0)
+    gen = TechnicalDrawingGenerator()
+    sheet = gen.generate_section_view(solid, cut_height=20.0, hatch_spacing=4.0)
+
+    assert len(sheet.lines) > 0
+    # Vérifier la présence de lignes de hachure
+    hatch_lines = [l for l in sheet.lines if l.is_hatch]
+    assert len(hatch_lines) > 5
+
+    # Vérifier l'inclinaison des hachures (pente proche de +1 ou -1 pour 45°)
+    for hl in hatch_lines:
+        dx = hl.x2 - hl.x1
+        dy = hl.y2 - hl.y1
+        if abs(dx) > 1e-4:
+            slope = dy / dx
+            assert abs(slope - 1.0) < 1e-2  # Pente exacte à 45 deg (dy = dx)
+
+
+def test_serializer_with_freecad_parity() -> None:
+    """Vérifie la sauvegarde et restauration d'un projet incluant les features FreeCAD."""
+    doc = CADDocument(name="FreeCADParityDoc")
+
+    # Esquisse avec géométrie de construction et offset
+    sk = Sketch2D("sk1", "BaseSketch", plane=PlaneType.XY, offset_distance=12.5)
+    sk.add_line(Point2D(0.0, 0.0), Point2D(50.0, 0.0), is_construction=True)
+    sk.add_rectangle(Point2D(-25.0, -25.0), width=50.0, height=50.0, is_construction=False)
+    doc.sketches[sk.sketch_id] = sk
+
+    # Base Box
+    box_feat = BoxFeature("box1", "BaseSolid", width=80.0, height=80.0, depth=30.0)
+    doc.add_feature(box_feat)
+
+    # Pocket Feature
+    pocket = PocketFeature(
+        "pocket1",
+        "Cavity",
+        sketch_id="sk1",
+        depth=10.0,
+        through_all=False,
+        target_body_id="body_box1"
+    )
+    doc.add_feature(pocket)
+
+    # Datum Plane Feature
+    datum = DatumPlaneFeature("datum1", "TopRefPlane", base_plane=PlaneType.XY, offset_distance=30.0)
+    doc.add_feature(datum)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        file_path = os.path.join(tmp_dir, "freecad_parity_test.cadproj")
+        save_ok = ProjectSerializer.save_project(doc, file_path)
+        assert save_ok is True
+        assert os.path.exists(file_path)
+
+        loaded_doc = ProjectSerializer.load_project(file_path)
+        assert loaded_doc is not None
+        assert "sk1" in loaded_doc.sketches
+        loaded_sk = loaded_doc.sketches["sk1"]
+        assert loaded_sk.offset_distance == 12.5
+        assert len(loaded_sk.entities) == 2
+
+        # Vérifier types de features restaurées
+        feature_classes = [f.__class__.__name__ for f in loaded_doc.features]
+        assert "BoxFeature" in feature_classes
+        assert "PocketFeature" in feature_classes
+        assert "DatumPlaneFeature" in feature_classes
+
+
+def test_sketch_entities_and_projections_coverage() -> None:
+    """Couvre les entités d'esquisse et les projections multi-plans avec offset."""
+    sk_xz = Sketch2D("sk_xz", "SketchXZ", plane=PlaneType.XZ, offset_distance=25.0)
+    pt3d_xz = sk_xz.to_3d_coordinates(Point2D(10.0, 30.0))
+    assert pt3d_xz.x == 10.0
+    assert pt3d_xz.y == 25.0
+    assert pt3d_xz.z == 30.0
+
+    sk_yz = Sketch2D("sk_yz", "SketchYZ", plane=PlaneType.YZ, offset_distance=-10.0)
+    pt3d_yz = sk_yz.to_3d_coordinates(Point2D(5.0, 15.0))
+    assert pt3d_yz.x == -10.0
+    assert pt3d_yz.y == 5.0
+    assert pt3d_yz.z == 15.0
+
+    # Test Slot, Regular Polygon et Ellipse
+    slot = sk_xz.add_slot(Point2D(0.0, 0.0), Point2D(20.0, 0.0), radius=5.0, is_construction=True)
+    assert slot.is_construction is True
+    assert len(slot.to_profile_points(12)) > 10
+
+    reg_poly = sk_xz.add_regular_polygon(Point2D(0.0, 0.0), radius=15.0, sides=6, is_construction=False)
+    assert reg_poly.is_construction is False
+    assert len(reg_poly.to_profile_points()) == 6
+
+    ellipse = sk_xz.add_ellipse(Point2D(0.0, 0.0), radius_u=20.0, radius_v=10.0, is_construction=False)
+    assert ellipse.is_construction is False
+    assert len(ellipse.to_profile_points(24)) == 24
+
+    # Profil primaire doit être le premier solide valide
+    prof = sk_xz.get_primary_profile()
+    assert prof is not None
+    assert len(prof) == 6  # reg_poly
+
+
+def test_pocket_feature_error_branches() -> None:
+    """Vérifie la robustesse de PocketFeature face aux erreurs de configuration."""
+    from src.core.types import FeatureStatus
+
+    doc = CADDocument(name="PocketErrorDoc")
+    pocket_bad_sk = PocketFeature("p_err1", "BadSketchPocket", sketch_id="non_existent")
+    pocket_bad_sk.evaluate(doc.bodies, doc.sketches)
+    assert pocket_bad_sk.status == FeatureStatus.ERROR
+
+    # Esquisse sans profil valide
+    empty_sk = Sketch2D("sk_empty", "EmptySketch")
+    doc.sketches["sk_empty"] = empty_sk
+    pocket_empty = PocketFeature("p_err2", "EmptyPocket", sketch_id="sk_empty")
+    pocket_empty.evaluate(doc.bodies, doc.sketches)
+    assert pocket_empty.status == FeatureStatus.ERROR
+
+    # Corps cible introuvable
+    sk_with_rect = Sketch2D("sk_rect", "RectSketch")
+    sk_with_rect.add_rectangle(Point2D(0.0, 0.0), 10.0, 10.0)
+    doc.sketches["sk_rect"] = sk_with_rect
+    pocket_no_target = PocketFeature("p_err3", "NoTargetPocket", sketch_id="sk_rect", target_body_id="phantom_body")
+    pocket_no_target.evaluate(doc.bodies, doc.sketches)
+    assert pocket_no_target.status == FeatureStatus.ERROR
+

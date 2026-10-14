@@ -11,7 +11,7 @@ import manifold3d as m
 from scipy.interpolate import interp1d
 
 from src.core.types import BooleanOperation, FeatureStatus, Vector3D, Point2D, PlaneType
-from src.core.geometry import Solid, make_cylinder, make_sphere, make_box, make_cone, _extract_sharp_edges
+from src.core.geometry import Solid, make_cylinder, make_sphere, make_box, make_cone, extrude_polygon, _extract_sharp_edges
 from src.core.feature import Feature, _apply_boolean_operation, resolve_target_body_id
 from src.core.sketch import Sketch2D
 
@@ -912,3 +912,130 @@ class PipeFeature(Feature):
         solid_total = solid_total.union(last_sph)
         solid_total.name = name
         return solid_total
+
+
+class PocketFeature(Feature):
+    """
+    Fonctionnalité de cavité / poche soustractive (FreeCAD PartDesign Pocket).
+    Permet de creuser une forme 2D dans un corps avec profondeur finie ou traversante (through_all).
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Pocket",
+        sketch_id: str = "",
+        depth: float = 10.0,
+        through_all: bool = False,
+        reversed_dir: bool = False,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.sketch_id = sketch_id
+        self.through_all = through_all
+        self.reversed_dir = reversed_dir
+        self.target_body_id = target_body_id
+        self.parameters = {
+            "depth": float(depth),
+            "through_all": 1.0 if through_all else 0.0,
+            "reversed": 1.0 if reversed_dir else 0.0,
+        }
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Creuse la cavité dans le corps cible par soustraction booléenne."""
+        if self.sketch_id not in sketches:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        sketch = sketches[self.sketch_id]
+        profile = sketch.get_primary_profile()
+        if not profile or len(profile) < 3:
+            self.status = FeatureStatus.ERROR
+            return dict(existing_bodies)
+
+        updated = dict(existing_bodies)
+        target_key = resolve_target_body_id(self.target_body_id, updated)
+        if not target_key or target_key not in updated:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        target_body = updated[target_key]
+        min_b, max_b = target_body.bounding_box()
+        diag_span = float(np.linalg.norm(np.array([max_b.x - min_b.x, max_b.y - min_b.y, max_b.z - min_b.z])))
+
+        is_through = bool(self.through_all or self.parameters.get("through_all", 0.0) > 0.5)
+        is_rev = bool(self.reversed_dir or self.parameters.get("reversed", 0.0) > 0.5)
+
+        if is_through:
+            cut_depth = max(100.0, diag_span * 2.0)
+            # Traverse complètement le solide des deux côtés du plan
+            tool_solid = extrude_polygon(
+                profile,
+                2.0 * cut_depth,
+                plane=sketch.plane,
+                plane_offset=sketch.offset_distance - cut_depth,
+                name=f"{self.name}_cutter"
+            )
+        else:
+            cut_depth = max(0.001, self.parameters.get("depth", 10.0))
+            h = -cut_depth if is_rev else cut_depth
+            tool_solid = extrude_polygon(
+                profile,
+                h,
+                plane=sketch.plane,
+                plane_offset=sketch.offset_distance,
+                name=f"{self.name}_cutter"
+            )
+
+        try:
+            result_body = target_body.difference(tool_solid)
+            if not is_through and abs(result_body.volume() - target_body.volume()) < 1e-4:
+                # Si l'extrusion dans le sens h n'a touché aucune matière, on teste dans le sens opposé
+                alt_tool = extrude_polygon(
+                    profile,
+                    -h,
+                    plane=sketch.plane,
+                    plane_offset=sketch.offset_distance,
+                    name=f"{self.name}_cutter"
+                )
+                alt_result = target_body.difference(alt_tool)
+                if abs(alt_result.volume() - target_body.volume()) > 1e-4:
+                    result_body = alt_result
+
+            updated[target_key] = result_body
+            self.status = FeatureStatus.OK
+        except Exception:
+            self.status = FeatureStatus.ERROR
+
+        return updated
+
+
+class DatumPlaneFeature(Feature):
+    """
+    Plan de référence paramétrique auxiliaire (FreeCAD PartDesign Datum Plane).
+    Définit un plan de construction décalé ou orienté pour y attacher des esquisses.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Datum Plane",
+        base_plane: PlaneType = PlaneType.XY,
+        offset_distance: float = 0.0
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.base_plane = base_plane
+        self.parameters = {
+            "offset_distance": float(offset_distance),
+        }
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Un plan de référence est un élément de construction non volumique."""
+        self.status = FeatureStatus.OK
+        return dict(existing_bodies)
+
+    def attach_to_sketch(self, sketch: Sketch2D) -> None:
+        """Associe ce plan de référence à une esquisse pour définir son plan et son décalage."""
+        sketch.plane = self.base_plane
+        sketch.offset_distance = self.parameters.get("offset_distance", 0.0)
+

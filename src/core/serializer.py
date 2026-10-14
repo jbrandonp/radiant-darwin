@@ -22,7 +22,8 @@ from src.core.feature import (
 from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
-    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature
+    LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature,
+    PocketFeature, DatumPlaneFeature
 )
 from src.core.fasteners import FastenerFeature
 from src.sheetmetal.sheet_metal import SheetMetalFeature
@@ -48,6 +49,7 @@ class ProjectSerializer:
                 "id": sk.sketch_id,
                 "name": sk.name,
                 "plane": sk.plane.value,
+                "offset_distance": sk.offset_distance,
                 "entities": []
             }
             for ent in sk.entities:
@@ -56,7 +58,8 @@ class ProjectSerializer:
                 cast_entities.append({
                     "id": ent.entity_id,
                     "type": ent.entity_type.value,
-                    "points": pts
+                    "points": pts,
+                    "is_construction": ent.is_construction
                 })
             cast_sketches: List[object] = data["sketches"]  # type: ignore[assignment]
             cast_sketches.append(sk_data)
@@ -109,6 +112,12 @@ class ProjectSerializer:
                 f_dict["hole_type"] = getattr(feat, "hole_type")
             if hasattr(feat, "path_points"):
                 f_dict["path_points"] = getattr(feat, "path_points")
+            if hasattr(feat, "through_all"):
+                f_dict["through_all"] = getattr(feat, "through_all")
+            if hasattr(feat, "reversed_dir"):
+                f_dict["reversed_dir"] = getattr(feat, "reversed_dir")
+            if hasattr(feat, "base_plane") and isinstance(feat.base_plane, PlaneType):
+                f_dict["base_plane"] = feat.base_plane.value
 
             data["features"].append(f_dict)
 
@@ -145,7 +154,8 @@ class ProjectSerializer:
                         continue
                     plane_val = str(sk_data.get("plane", "XY"))
                     plane = PlaneType(plane_val) if plane_val in PlaneType._value2member_map_ else PlaneType.XY
-                    sketch = Sketch2D(str(sk_data["id"]), str(sk_data.get("name", "Esquisse")), plane=plane)
+                    offset_d = float(sk_data.get("offset_distance", 0.0))
+                    sketch = Sketch2D(str(sk_data["id"]), str(sk_data.get("name", "Esquisse")), plane=plane, offset_distance=offset_d)
 
                     entities_data = sk_data.get("entities", [])
                     if isinstance(entities_data, list):
@@ -153,6 +163,7 @@ class ProjectSerializer:
                             if not isinstance(ent_dict, dict):
                                 continue
                             raw_pts = ent_dict.get("points", [])
+                            is_const = bool(ent_dict.get("is_construction", False))
                             if isinstance(raw_pts, list):
                                 pts: List[Point2D] = []
                                 for coord in raw_pts:
@@ -162,7 +173,9 @@ class ProjectSerializer:
                                         except (ValueError, TypeError):
                                             pass
                                 if len(pts) >= 3:
-                                    sketch.add_polygon(pts)
+                                    sketch.add_polygon(pts, is_construction=is_const)
+                                elif len(pts) == 2:
+                                    sketch.add_line(pts[0], pts[1], is_construction=is_const)
 
                     doc.sketches[sketch.sketch_id] = sketch
 
@@ -330,6 +343,19 @@ class ProjectSerializer:
                         r_out = float(params.get("outer_radius", 6.0))
                         r_in = float(params.get("inner_radius", 0.0))
                         feat = PipeFeature(f_id, f_name, pts_list, r_out, r_in, op, target_id)
+
+                    elif f_cls == "PocketFeature":
+                        s_id = str(f_data.get("sketch_id", ""))
+                        dep = float(params.get("depth", 10.0))
+                        thru = bool(f_data.get("through_all", False) or params.get("through_all", 0.0) > 0.5)
+                        rev = bool(f_data.get("reversed_dir", False) or params.get("reversed", 0.0) > 0.5)
+                        feat = PocketFeature(f_id, f_name, s_id, dep, thru, rev, target_id)
+
+                    elif f_cls == "DatumPlaneFeature":
+                        bp_str = str(f_data.get("base_plane", "XY"))
+                        bp = PlaneType(bp_str) if bp_str in PlaneType._value2member_map_ else PlaneType.XY
+                        off = float(params.get("offset_distance", 0.0))
+                        feat = DatumPlaneFeature(f_id, f_name, bp, off)
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

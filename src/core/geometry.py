@@ -237,6 +237,26 @@ class Solid:
         return self.slice_cross_section(height)
 
 
+    def to_nexus(self) -> 'NexusSolid':
+        """Convertit le solide en solide hybride NexusSolid pour l'analyse IA et B-Rep."""
+        from src.core.nexus_kernel.hybrid_solid import NexusSolid
+        return NexusSolid(name=self.name, internal_manifold=self._manifold)
+
+    def compute_sdf(self, query_points: np.ndarray) -> np.ndarray:
+        """Calcule le champ de distance signée (SDF) pour l'IA 3D."""
+        from src.core.nexus_kernel.ai_interfaces import NeuralSDFEngine
+        return NeuralSDFEngine.compute_signed_distance(self.to_nexus(), query_points)
+
+    def get_ai_tokens(self) -> List[str]:
+        """Génère la séquence de tokens CAO pour les LLMs et copilotes IA."""
+        from src.core.nexus_kernel.ai_interfaces import CADTokenizer
+        return CADTokenizer.tokenize(self.to_nexus())
+
+    def get_latent_embedding(self, embedding_dim: int = 64) -> np.ndarray:
+        """Génère le vecteur d'empreinte géométrique invariante pour la recherche de formes."""
+        from src.core.nexus_kernel.ai_interfaces import LatentShapeEmbedding
+        return LatentShapeEmbedding.compute_embedding(self.to_nexus(), embedding_dim)
+
     def to_mesh_buffer(self) -> MeshBuffer:
         """
         Convertit le solide en MeshBuffer optimisé pour le rendu OpenGL.

@@ -31,6 +31,10 @@ from src.core.generative_lattices import (
     LatticeType, make_octet_cell, make_tpms_gyroid_cell,
     generate_lattice_volume, create_lightweight_infilled_part
 )
+from src.core.nexus_kernel import (
+    NexusSolid, NexusBRep, NexusVertex, NexusEdge, NexusWire, NexusFace, NexusShell,
+    NeuralSDFEngine, DifferentiableGeometryEngine, CADTokenizer, LatentShapeEmbedding
+)
 
 __all__ = [
     "Vector3D",
@@ -113,4 +117,15 @@ __all__ = [
     "make_tpms_gyroid_cell",
     "generate_lattice_volume",
     "create_lightweight_infilled_part",
+    "NexusSolid",
+    "NexusBRep",
+    "NexusVertex",
+    "NexusEdge",
+    "NexusWire",
+    "NexusFace",
+    "NexusShell",
+    "NeuralSDFEngine",
+    "DifferentiableGeometryEngine",
+    "CADTokenizer",
+    "LatentShapeEmbedding",
 ]

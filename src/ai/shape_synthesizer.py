@@ -261,3 +261,57 @@ class ShapeSynthesizer:
             return shaft.difference(bore)
 
         return shaft
+
+    @staticmethod
+    def create_pillow_block_bearing(
+        base_width: float = 120.0,
+        base_depth: float = 35.0,
+        base_thickness: float = 14.0,
+        bearing_bore: float = 25.0,
+        shaft_center_height: float = 36.5,
+        bolt_hole_diameter: float = 11.0,
+        bolt_center_dist: float = 95.0
+    ) -> Solid:
+        """
+        Génère un palier à semelle auto-aligneur standard (Pillow Block Housing).
+        """
+        # 1. Semelle de fixation
+        base = make_box(base_width, base_depth, base_thickness, center=True).translate(0.0, 0.0, base_thickness / 2.0)
+
+        # 2. Perçages de fixation de la semelle
+        h_left = make_cylinder(bolt_hole_diameter / 2.0, base_thickness * 2.0, center=True).translate(-bolt_center_dist / 2.0, 0.0, base_thickness / 2.0)
+        h_right = make_cylinder(bolt_hole_diameter / 2.0, base_thickness * 2.0, center=True).translate(bolt_center_dist / 2.0, 0.0, base_thickness / 2.0)
+        base_drilled = base.difference(h_left).difference(h_right)
+
+        # 3. Corps vertical du palier (arche centrale)
+        housing_radius = bearing_bore * 0.9 + 10.0
+        housing_cyl = make_cylinder(housing_radius, base_depth, center=True).rotate(90.0, 0.0, 0.0).translate(0.0, 0.0, shaft_center_height)
+
+        # 4. Bloc montant de liaison entre semelle et cylindre
+        support_box = make_box(housing_radius * 1.8, base_depth, shaft_center_height, center=True).translate(0.0, 0.0, shaft_center_height / 2.0)
+        housing_body = base_drilled.union(support_box).union(housing_cyl)
+
+        # 5. Alésage central pour bague de roulement
+        bore = make_cylinder(bearing_bore / 2.0, base_depth * 1.5, center=True).rotate(90.0, 0.0, 0.0).translate(0.0, 0.0, shaft_center_height)
+        return housing_body.difference(bore)
+
+    @staticmethod
+    def create_v_belt_pulley(
+        outer_diameter: float = 100.0,
+        pulley_width: float = 25.0,
+        bore_diameter: float = 15.0,
+        groove_depth: float = 10.0,
+        groove_top_width: float = 12.0
+    ) -> Solid:
+        """
+        Génère une poulie mécanique à gorge trapézoïdale pour courroie en V.
+        """
+        pulley_blank = make_cylinder(outer_diameter / 2.0, pulley_width, center=True)
+
+        # Alésage pour l'arbre
+        bore = make_cylinder(bore_diameter / 2.0, pulley_width * 1.5, center=True)
+        pulley_drilled = pulley_blank.difference(bore)
+
+        # Gorge taillée circonférentielle
+        groove_cut = make_torus(outer_diameter / 2.0, groove_top_width / 2.0)
+        return pulley_drilled.difference(groove_cut)

@@ -5,10 +5,21 @@ Fournit la passerelle déclarative et le synthétiseur de formes pour les agents
 
 from src.ai.shape_synthesizer import ShapeSynthesizer
 from src.ai.cad_ai_bridge import CADAIBridge, CADAIExecutionResult, AICommandType
+from src.ai.cad_validator import CADValidator, ValidationReport, InterferenceReport
+from src.ai.cad_script_engine import CADScriptEngine, CADScriptContext, ScriptExecutionResult
+from src.ai.mcp_schema import MCPToolRegistry, MCPToolDefinition
 
 __all__ = [
     "ShapeSynthesizer",
     "CADAIBridge",
     "CADAIExecutionResult",
-    "AICommandType"
+    "AICommandType",
+    "CADValidator",
+    "ValidationReport",
+    "InterferenceReport",
+    "CADScriptEngine",
+    "CADScriptContext",
+    "ScriptExecutionResult",
+    "MCPToolRegistry",
+    "MCPToolDefinition"
 ]

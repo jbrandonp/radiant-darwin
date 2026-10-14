@@ -19,6 +19,7 @@ from src.core.document import CADDocument
 from src.core.feature import Feature
 from src.core.exporter import CADExporter
 from src.ai.shape_synthesizer import ShapeSynthesizer
+from src.ai.cad_validator import CADValidator, ValidationReport
 
 
 class AICommandType(Enum):
@@ -42,6 +43,8 @@ class AICommandType(Enum):
     CREATE_ELECTRONICS_ENCLOSURE = "create_electronics_enclosure"
     CREATE_REINFORCED_BRACKET = "create_reinforced_bracket"
     CREATE_STEPPED_SHAFT = "create_stepped_shaft"
+    CREATE_PILLOW_BLOCK = "create_pillow_block"
+    CREATE_PULLEY = "create_pulley"
     EXPORT_STL = "export_stl"
     EXPORT_STEP = "export_step"
     UNKNOWN = "unknown"
@@ -60,6 +63,8 @@ class CADAIExecutionResult:
     mass_steel_g: float = 0.0
     bounding_box_dims_mm: Optional[Vector3D] = None
     suggested_prompts: List[str] = field(default_factory=list)
+    is_manifold: bool = True
+    quality_score: float = 100.0
 
 
 class CADAIBridge:
@@ -99,51 +104,61 @@ class CADAIBridge:
         if "arbre" in p_clean and any(w in p_clean for w in ["étagé", "etage", "stepped", "multistep", "étages", "etages"]):
             return self._handle_stepped_shaft_intent(p_clean)
 
-        # 3. Engrenage / Pignon
+        # 3. Palier à semelle (Pillow Block)
+        if any(w in p_clean for w in ["palier", "pillow"]):
+            return self._handle_pillow_block_intent(p_clean)
+
+        # 4. Poulie mécanique
+        if any(w in p_clean for w in ["poulie", "pulley"]):
+            return self._handle_pulley_intent(p_clean)
+
+        # 5. Engrenage / Pignon
         if any(w in p_clean for w in ["engrenage", "pignon", "gear", "dent"]):
             return self._handle_spur_gear_intent(p_clean)
 
-        # 4. Bride de tuyauterie
+        # 6. Bride de tuyauterie
         if any(w in p_clean for w in ["bride", "flange"]):
             return self._handle_flange_intent(p_clean)
 
-        # 5. Dissipateur thermique à ailettes
+        # 7. Dissipateur thermique à ailettes
         if any(w in p_clean for w in ["dissipateur", "ailette", "heatsink", "refroidisseur"]):
             return self._handle_heat_sink_intent(p_clean)
 
-        # 6. Boîtier électronique évidé
+        # 8. Boîtier électronique évidé
         if any(w in p_clean for w in ["boitier", "boîtier", "enclosure", "coffret"]):
             return self._handle_enclosure_intent(p_clean)
 
-        # 7. Équerre de fixation
+        # 9. Équerre de fixation
         if any(w in p_clean for w in ["equerre", "équerre", "bracket", "renfort"]):
             return self._handle_bracket_intent(p_clean)
 
-        # 8. Cylindre / Arbre simple
+        # 10. Cylindre / Arbre simple
         if any(w in p_clean for w in ["cylindre", "cylinder", "shaft"]):
             return self._handle_cylinder_intent(p_clean)
 
-        # 9. Sphère
+        # 11. Sphère
         if any(w in p_clean for w in ["sphere", "sphère", "balle", "boule"]):
             return self._handle_sphere_intent(p_clean)
 
-        # 10. Perçage / Alésage sur la pièce active
+        # 12. Perçage / Alésage sur la pièce active
         if any(w in p_clean for w in ["perce", "perçage", "trou", "alesage", "alésage", "drill", "hole"]):
             return self._handle_drill_hole_intent(p_clean)
 
-        # 11. Pavé / Boîte / Plaque / Cube
+        # 13. Pavé / Boîte / Plaque / Cube
         if any(w in p_clean for w in ["cube", "boite", "boîte", "pave", "pavé", "box", "plaque", "platine"]):
             return self._handle_box_intent(p_clean)
 
-        # 12. Commande non reconnue : suggestions interactives
+        # 14. Commande non reconnue : suggestions interactives
         return CADAIExecutionResult(
             success=False,
-            message="Instruction non reconnue. Vous pouvez demander par exemple : 'Crée un engrenage', 'Bride de tuyauterie', 'Dissipateur thermique', 'Boîtier électronique', 'Équerre renforcée', 'Arbre étagé', 'Cube 50x50x20', 'Cylindre r=15 h=40', 'Perce un trou Ø10'.",
+            message="Instruction non reconnue. Vous pouvez demander par exemple : 'Crée un engrenage', 'Bride de tuyauterie', 'Palier à semelle', 'Poulie', 'Dissipateur thermique', 'Boîtier électronique', 'Équerre renforcée', 'Arbre étagé', 'Cube 50x50x20', 'Cylindre r=15 h=40', 'Perce un trou Ø10'.",
             command_executed="unknown",
             command_type=AICommandType.UNKNOWN,
             suggested_prompts=[
                 "Crée un engrenage de 20 dents module 2.0",
                 "Génère une bride de tuyauterie 4 trous",
+                "Palier à semelle pour arbre Ø25",
+                "Poulie à gorge diamètre 100",
                 "Dissipateur thermique 60x60 avec 8 ailettes",
                 "Boîtier électronique 100x70x35 épaisseur 2.5",
                 "Support équerre renforcé 50x50",
@@ -171,7 +186,7 @@ class CADAIBridge:
         cmd_type: str,
         category: AICommandType = AICommandType.SYNTHESIZE_SHAPE
     ) -> CADAIExecutionResult:
-        """Enregistre le solide dans le document, recalcule les métriques et génère le rapport."""
+        """Enregistre le solide dans le document, recalcule les métriques, valide la topologie et génère le rapport."""
         body_id = f"{base_name}_{len(self.doc.bodies) + 1}"
         self.doc.bodies[body_id] = solid
         self.doc._notify_change()
@@ -183,9 +198,13 @@ class CADAIBridge:
         p_min, p_max = solid.bounding_box()
         dims = Vector3D(abs(p_max.x - p_min.x), abs(p_max.y - p_min.y), abs(p_max.z - p_min.z))
 
+        val_rep = CADValidator.validate_solid(solid)
+        warn_str = f" [Avertissement: {'; '.join(val_rep.warnings)}]" if val_rep.warnings else ""
+
         msg = (
             f"L'IA a généré '{body_id}' avec succès : "
-            f"Volume: {vol:.1f} mm³, Masse Alu: {mass_alu:.1f}g, Encombrement: {dims.x:.1f}x{dims.y:.1f}x{dims.z:.1f} mm."
+            f"Volume: {vol:.1f} mm³, Masse Alu: {mass_alu:.1f}g, Encombrement: {dims.x:.1f}x{dims.y:.1f}x{dims.z:.1f} mm "
+            f"| Topologie: {'Étanche 2-Manifold' if val_rep.is_manifold else 'Non-Manifold'} (χ={val_rep.euler_characteristic}, Qualité: {val_rep.quality_score_percent:.0f}%){warn_str}."
         )
 
         return CADAIExecutionResult(
@@ -197,7 +216,9 @@ class CADAIBridge:
             volume_mm3=vol,
             mass_aluminum_g=mass_alu,
             mass_steel_g=mass_steel,
-            bounding_box_dims_mm=dims
+            bounding_box_dims_mm=dims,
+            is_manifold=val_rep.is_manifold,
+            quality_score=val_rep.quality_score_percent
         )
 
     def _handle_spur_gear_intent(self, text: str) -> CADAIExecutionResult:
@@ -260,6 +281,24 @@ class CADAIBridge:
         lengths = [25.0 + i * 5.0 for i in range(stages)]
         shaft = ShapeSynthesizer.create_stepped_shaft(diameters, lengths)
         return self._register_and_build_result(shaft, "Arbre_Etage", "create_stepped_shaft", AICommandType.SYNTHESIZE_SHAPE)
+
+    def _handle_pillow_block_intent(self, text: str) -> CADAIExecutionResult:
+        """Extrait les paramètres de palier à semelle."""
+        nums = self._extract_numbers(text)
+        w = float(nums[0]) if len(nums) > 0 else 120.0
+        bore = float(nums[1]) if len(nums) > 1 else 25.0
+        h = float(nums[2]) if len(nums) > 2 else 36.5
+        pillow = ShapeSynthesizer.create_pillow_block_bearing(base_width=w, bearing_bore=bore, shaft_center_height=h)
+        return self._register_and_build_result(pillow, "Palier_Semelle", "create_pillow_block", AICommandType.CREATE_PILLOW_BLOCK)
+
+    def _handle_pulley_intent(self, text: str) -> CADAIExecutionResult:
+        """Extrait les paramètres de poulie mécanique."""
+        nums = self._extract_numbers(text)
+        dia = float(nums[0]) if len(nums) > 0 else 100.0
+        w = float(nums[1]) if len(nums) > 1 else 25.0
+        bore = float(nums[2]) if len(nums) > 2 else 15.0
+        pulley = ShapeSynthesizer.create_v_belt_pulley(outer_diameter=dia, pulley_width=w, bore_diameter=bore)
+        return self._register_and_build_result(pulley, "Poulie_Gorge", "create_pulley", AICommandType.CREATE_PULLEY)
 
     def _handle_cylinder_intent(self, text: str) -> CADAIExecutionResult:
         """Génère un cylindre ou portée d'arbre."""

@@ -18,6 +18,12 @@ from src.ai.cad_script_engine import CADScriptEngine
 from src.ai.cad_validator import CADValidator
 from src.ai.ai_vision_feedback import AIVisionFeedback
 from src.ai.cad_ai_full_suite import CADFullSuiteOrchestrator
+from src.ai.cad_ai_stability import (
+    AtomicTransactionScope,
+    CADTransactionManager,
+    CADAIAsyncExecutor,
+    SmartErrorDiagnostics
+)
 
 
 MCPContentItem = Dict[str, str]
@@ -54,6 +60,9 @@ class MCPStdioServer:
         if method == "initialize":
             return self._handle_initialize(req_id)
         if method == "notifications/initialized":
+            return {}
+        if method == "notifications/cancelled":
+            CADAIAsyncExecutor.cancel_all(reason="Annulation demandée par le client MCP")
             return {}
         if method == "tools/list":
             return self._handle_tools_list(req_id)
@@ -255,12 +264,23 @@ class MCPStdioServer:
 
 
     def _handle_tools_call(self, req_id: str, params: Dict[str, str]) -> MCPResponseDict:
-        """Exécute l'outil demandé et formate le résultat MCP."""
+        """Exécute l'outil demandé et formate le résultat MCP avec isolation transactionnelle."""
         name = str(params.get("name", ""))
         args_val = params.get("arguments")
         args: Dict[str, str] = args_val if isinstance(args_val, dict) else {}
 
-        output_text, success = self._dispatch_tool_action(name, args)
+        with AtomicTransactionScope(self.document, f"MCP: {name}") as scope:
+            try:
+                output_text, success = self._dispatch_tool_action(name, args)
+                if not success and scope.initial_snapshot is not None:
+                    CADTransactionManager.restore_snapshot(self.document, scope.initial_snapshot)
+            except Exception as err:
+                diag = SmartErrorDiagnostics.diagnose(err, name)
+                if scope.initial_snapshot is not None:
+                    CADTransactionManager.restore_snapshot(self.document, scope.initial_snapshot)
+                output_text = f"Erreur d'exécution de l'outil MCP '{name}' : {diag.explanation_fr} (Conseil : {diag.remediation_hint})"
+                success = False
+
         content_item: MCPContentItem = {"type": "text", "text": output_text}
         res_data: MCPResultDict = {
             "content": [content_item],

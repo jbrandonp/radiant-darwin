@@ -20,6 +20,21 @@ from src.ai.cad_ai_full_suite import (
     MaterialPropertiesResult,
     DirectModelingResult
 )
+from src.ai.cad_ai_stability import (
+    AICancellationToken,
+    AICancelledException,
+    AITimeoutException,
+    CADTransactionSnapshot,
+    CADTransactionManager,
+    AtomicTransactionScope,
+    BatchNotificationScope,
+    DiagnosticCategory,
+    DiagnosticResult,
+    SmartErrorDiagnostics,
+    TaskState,
+    AITaskFuture,
+    CADAIAsyncExecutor
+)
 
 __all__ = [
     "ShapeSynthesizer",
@@ -46,5 +61,18 @@ __all__ = [
     "SheetMetalResult",
     "MaterialPropertiesResult",
     "DirectModelingResult",
+    "AICancellationToken",
+    "AICancelledException",
+    "AITimeoutException",
+    "CADTransactionSnapshot",
+    "CADTransactionManager",
+    "AtomicTransactionScope",
+    "BatchNotificationScope",
+    "DiagnosticCategory",
+    "DiagnosticResult",
+    "SmartErrorDiagnostics",
+    "TaskState",
+    "AITaskFuture",
+    "CADAIAsyncExecutor",
 ]
 

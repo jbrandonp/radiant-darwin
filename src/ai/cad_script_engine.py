@@ -28,6 +28,12 @@ from src.ai.cad_ai_full_suite import (
     MaterialPropertiesResult,
     DirectModelingResult
 )
+from src.ai.cad_ai_stability import (
+    AICancellationToken,
+    AtomicTransactionScope,
+    CADTransactionManager,
+    SmartErrorDiagnostics
+)
 
 
 @dataclass
@@ -46,17 +52,25 @@ class CADScriptContext:
     Fournit une syntaxe compacte et puissante pour toutes les opérations géométriques.
     """
 
-    def __init__(self, document: CADDocument) -> None:
+    def __init__(self, document: CADDocument, token: Optional[AICancellationToken] = None) -> None:
         self.doc: CADDocument = document
         self.created_bodies: List[str] = []
         self.last_solid: Optional[Solid] = None
+        self._token: Optional[AICancellationToken] = token
+
+    def _check_watchdog(self) -> None:
+        """Interrompt immédiatement le calcul si le jeton d'annulation ou le timeout est déclenché."""
+        if self._token is not None:
+            self._token.check_cancelled()
 
     def box(self, width: float, height: float, depth: float, center: bool = True) -> Solid:
         """Crée un parallélépipède rectangle."""
+        self._check_watchdog()
         return make_box(width, height, depth, center=center)
 
     def cylinder(self, radius: float, height: float, center: bool = True) -> Solid:
         """Crée un cylindre orienté selon l'axe Z."""
+        self._check_watchdog()
         return make_cylinder(radius, height, center=center)
 
     def sphere(self, radius: float) -> Solid:
@@ -143,6 +157,7 @@ class CADScriptContext:
 
     def add(self, solid: Solid, name: str = "Piece") -> str:
         """Ajoute un solide au document CAO et notifie les observateurs."""
+        self._check_watchdog()
         body_id = f"{name}_{len(self.doc.bodies) + 1}"
         self.doc.bodies[body_id] = solid
         self.created_bodies.append(body_id)
@@ -326,9 +341,14 @@ class CADScriptEngine:
         return None
 
     @classmethod
-    def execute_script(cls, document: CADDocument, code_str: str) -> ScriptExecutionResult:
+    def execute_script(
+        cls,
+        document: CADDocument,
+        code_str: str,
+        timeout_seconds: Optional[float] = 10.0
+    ) -> ScriptExecutionResult:
         """
-        Exécute le script Python dans un contexte contrôlé et ajoute les formes au document.
+        Exécute le script Python dans un contexte contrôlé protégé par transaction atomique.
         """
         security_err = cls.validate_ast(code_str)
         if security_err is not None:
@@ -337,7 +357,8 @@ class CADScriptEngine:
                 message=f"Rejet de sécurité : {security_err}"
             )
 
-        context = CADScriptContext(document)
+        token = AICancellationToken(timeout_seconds=timeout_seconds)
+        context = CADScriptContext(document, token=token)
         safe_globals: Dict[str, SafeContextVal] = {
             "cad": context,
             "math": math,
@@ -362,24 +383,28 @@ class CADScriptEngine:
         }
 
         t_start = time.perf_counter()
-        try:
-            compiled = compile(code_str, "<cad_script>", "exec")
-            invoker: Callable = getattr(__builtins__, "exec") if hasattr(__builtins__, "exec") else __builtins__["exec"]
-            invoker(compiled, safe_globals)
-            t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+        with AtomicTransactionScope(document, "Script Code-as-CAD") as scope:
+            try:
+                compiled = compile(code_str, "<cad_script>", "exec")
+                invoker: Callable = getattr(__builtins__, "exec") if hasattr(__builtins__, "exec") else __builtins__["exec"]
+                invoker(compiled, safe_globals)
+                t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
 
-            n_bodies = len(context.created_bodies)
-            msg = f"Script exécuté avec succès en {t_elapsed_ms:.1f} ms. {n_bodies} corps généré(s) : {', '.join(context.created_bodies)}."
-            return ScriptExecutionResult(
-                success=True,
-                message=msg,
-                bodies_created=context.created_bodies,
-                execution_time_ms=t_elapsed_ms
-            )
-        except Exception as e:
-            t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
-            return ScriptExecutionResult(
-                success=False,
-                message=f"Erreur d'exécution du script CAO : {str(e)}",
-                execution_time_ms=t_elapsed_ms
-            )
+                n_bodies = len(context.created_bodies)
+                msg = f"Script exécuté avec succès en {t_elapsed_ms:.1f} ms. {n_bodies} corps généré(s) : {', '.join(context.created_bodies)}."
+                return ScriptExecutionResult(
+                    success=True,
+                    message=msg,
+                    bodies_created=context.created_bodies,
+                    execution_time_ms=t_elapsed_ms
+                )
+            except Exception as e:
+                t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+                diag = SmartErrorDiagnostics.diagnose(e, code_str)
+                if scope.initial_snapshot is not None:
+                    CADTransactionManager.restore_snapshot(document, scope.initial_snapshot)
+                return ScriptExecutionResult(
+                    success=False,
+                    message=f"{diag.explanation_fr} : {str(e)} (Conseil : {diag.remediation_hint})",
+                    execution_time_ms=t_elapsed_ms
+                )

@@ -11,11 +11,17 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel,
     QPushButton, QFrame, QScrollArea, QWidget, QGraphicsDropShadowEffect
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QKeyEvent
 
 from src.core.document import CADDocument
 from src.ai.cad_ai_bridge import CADAIBridge, CADAIExecutionResult
+from src.ai.cad_ai_stability import (
+    CADAIAsyncExecutor,
+    AITaskFuture,
+    TaskState,
+    AICancellationToken
+)
 
 
 class AICommandPalette(QDialog):
@@ -26,6 +32,7 @@ class AICommandPalette(QDialog):
     def __init__(self, bridge: CADAIBridge, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.bridge: CADAIBridge = bridge
+        self._current_future: Optional[AITaskFuture] = None
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Popup)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFixedWidth(640)
@@ -163,27 +170,66 @@ class AICommandPalette(QDialog):
         self._on_submit()
 
     def _on_submit(self) -> None:
-        """Exécute l'instruction IA entrée."""
+        """Exécute l'instruction IA entrée en arrière-plan sans geler l'interface graphique."""
         prompt = self.txt_prompt.text().strip()
         if not prompt:
             return
 
+        self.btn_run.setEnabled(False)
         self.lbl_feedback.setStyleSheet("color: #00a2ff; font-weight: bold; font-size: 11px;")
-        self.lbl_feedback.setText(f"Exécution en cours : '{prompt}'...")
-        self.repaint()
+        self.lbl_feedback.setText(f"Exécution en cours : '{prompt}' (Échap pour annuler)...")
 
-        res = self.bridge.execute_prompt(prompt)
-        if res.success:
-            self.lbl_feedback.setStyleSheet("color: #4ade80; font-weight: bold; font-size: 11px;")
-            self.lbl_feedback.setText(f"✓ {res.message}")
-            self.action_completed.emit(prompt)
-        else:
+        def _task(token: AICancellationToken, update_prog: Callable[[float, str], None]) -> Dict[str, str]:
+            update_prog(30.0, "Calcul géométrique...")
+            token.check_cancelled()
+            res = self.bridge.execute_prompt(prompt)
+            update_prog(100.0, "Finalisé.")
+            return {
+                "success": "true" if res.success else "false",
+                "message": res.message,
+                "remediation": res.remediation_hint
+            }
+
+        future = CADAIAsyncExecutor.submit(f"Prompt_{prompt[:12]}", _task, timeout_seconds=15.0)
+        self._current_future = future
+
+        def _on_done(fut: AITaskFuture) -> None:
+            QTimer.singleShot(0, lambda: self._handle_task_done(fut, prompt))
+
+        future.add_done_callback(_on_done)
+
+    def _handle_task_done(self, fut: AITaskFuture, prompt: str) -> None:
+        """Gère la fin de la tâche asynchrone sur le thread principal de l'UI."""
+        self.btn_run.setEnabled(True)
+        if fut.state == TaskState.CANCELLED:
+            self.lbl_feedback.setStyleSheet("color: #fbbf24; font-weight: bold; font-size: 11px;")
+            self.lbl_feedback.setText("⊘ Opération annulée par l'utilisateur.")
+            return
+
+        try:
+            raw_res = fut.get_result()
+            res_dict: Dict[str, str] = raw_res if isinstance(raw_res, dict) else {}
+            is_success = res_dict.get("success") == "true"
+            msg = res_dict.get("message", "Opération terminée.")
+            remed = res_dict.get("remediation", "")
+
+            if is_success:
+                self.lbl_feedback.setStyleSheet("color: #4ade80; font-weight: bold; font-size: 11px;")
+                self.lbl_feedback.setText(f"✓ {msg}")
+                self.action_completed.emit(prompt)
+            else:
+                self.lbl_feedback.setStyleSheet("color: #f87171; font-weight: bold; font-size: 11px;")
+                full_err = f"{msg} (Conseil : {remed})" if remed else msg
+                self.lbl_feedback.setText(f"✕ Erreur : {full_err}")
+        except Exception as err:
             self.lbl_feedback.setStyleSheet("color: #f87171; font-weight: bold; font-size: 11px;")
-            self.lbl_feedback.setText(f"✕ Erreur : {res.message}")
+            self.lbl_feedback.setText(f"✕ Exception : {str(err)}")
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Ferme la palette lors de l'appui sur Échap."""
+        """Ferme la palette ou annule la tâche active lors de l'appui sur Échap."""
         if event.key() == Qt.Key.Key_Escape:
+            if self._current_future is not None and self._current_future.state == TaskState.RUNNING:
+                self._current_future.cancel("Annulé par l'utilisateur via Échap")
             self.close()
         else:
             super().keyPressEvent(event)

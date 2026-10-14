@@ -22,6 +22,11 @@ from src.ai.shape_synthesizer import ShapeSynthesizer
 from src.ai.cad_validator import CADValidator, ValidationReport
 from src.ai.ai_vision_feedback import AIVisionFeedback
 from src.ai.cad_ai_full_suite import CADFullSuiteOrchestrator
+from src.ai.cad_ai_stability import (
+    AtomicTransactionScope,
+    CADTransactionManager,
+    SmartErrorDiagnostics
+)
 
 
 class AICommandType(Enum):
@@ -56,6 +61,8 @@ class AICommandType(Enum):
     ASSIGN_MATERIAL = "assign_material"
     DIRECT_MODELING = "direct_modeling"
     EXPORT_FILE = "export_file"
+    UNDO = "undo"
+    REDO = "redo"
     UNKNOWN = "unknown"
 
 
@@ -76,6 +83,7 @@ class CADAIExecutionResult:
     is_manifold: bool = True
     quality_score: float = 100.0
     vision_data_uri: Optional[str] = None
+    remediation_hint: str = ""
 
 
 class CADAIBridge:
@@ -94,11 +102,55 @@ class CADAIBridge:
         return self.doc
 
     def execute_prompt(self, prompt: str) -> CADAIExecutionResult:
-        """Exécute une instruction en langage naturel et attache le retour visuel 3D."""
-        res = self.execute_natural_language_prompt(prompt)
-        vis = AIVisionFeedback.capture_document_view(self.doc, width=384, height=384)
-        res.vision_data_uri = vis.data_uri
-        return res
+        """Exécute une instruction en langage naturel dans un scope atomique et attache le retour visuel 3D."""
+        p_clean = prompt.lower().strip()
+
+        # Commande d'annulation (Undo)
+        if any(w in p_clean for w in ["annule", "undo", "reviens en arriere", "reviens en arrière"]):
+            ok, msg = CADTransactionManager.undo(self.doc)
+            vis = AIVisionFeedback.capture_document_view(self.doc, width=384, height=384)
+            return CADAIExecutionResult(
+                success=ok,
+                message=msg,
+                command_executed="undo",
+                command_type=AICommandType.UNDO,
+                vision_data_uri=vis.data_uri
+            )
+
+        # Commande de rétablissement (Redo)
+        if any(w in p_clean for w in ["retablis", "rétablis", "redo", "refais"]):
+            ok, msg = CADTransactionManager.redo(self.doc)
+            vis = AIVisionFeedback.capture_document_view(self.doc, width=384, height=384)
+            return CADAIExecutionResult(
+                success=ok,
+                message=msg,
+                command_executed="redo",
+                command_type=AICommandType.REDO,
+                vision_data_uri=vis.data_uri
+            )
+
+        # Exécution protégée dans un scope transactionnel avec restauration automatique en cas d'erreur
+        with AtomicTransactionScope(self.doc, prompt) as scope:
+            try:
+                res = self.execute_natural_language_prompt(prompt)
+                if not res.success and scope.initial_snapshot is not None:
+                    CADTransactionManager.restore_snapshot(self.doc, scope.initial_snapshot)
+                vis = AIVisionFeedback.capture_document_view(self.doc, width=384, height=384)
+                res.vision_data_uri = vis.data_uri
+                return res
+            except Exception as err:
+                diag = SmartErrorDiagnostics.diagnose(err, prompt)
+                if scope.initial_snapshot is not None:
+                    CADTransactionManager.restore_snapshot(self.doc, scope.initial_snapshot)
+                vis = AIVisionFeedback.capture_document_view(self.doc, width=384, height=384)
+                return CADAIExecutionResult(
+                    success=False,
+                    message=f"{diag.explanation_fr} (Conseil : {diag.remediation_hint})",
+                    command_executed=prompt,
+                    command_type=AICommandType.UNKNOWN,
+                    remediation_hint=diag.remediation_hint,
+                    vision_data_uri=vis.data_uri
+                )
 
     def get_context_summary(self) -> Dict[str, str]:
         """Retourne l'état courant synthétisé de la scène pour injection de contexte dans l'IA."""

@@ -60,6 +60,26 @@ class Vector3D:
         """Multiplie le vecteur par un scalaire."""
         return Vector3D(self.x * factor, self.y * factor, self.z * factor)
 
+    def __add__(self, other: Vector3D) -> Vector3D:
+        """Surcharge de l'opérateur + pour Vector3D."""
+        return self.add(other)
+
+    def __sub__(self, other: Vector3D) -> Vector3D:
+        """Surcharge de l'opérateur - pour Vector3D."""
+        return self.subtract(other)
+
+    def __mul__(self, factor: float) -> Vector3D:
+        """Surcharge de l'opérateur * pour Vector3D et scalaire."""
+        return self.scale(factor)
+
+    def __rmul__(self, factor: float) -> Vector3D:
+        """Surcharge de l'opérateur * à droite."""
+        return self.scale(factor)
+
+    def __neg__(self) -> Vector3D:
+        """Surcharge de l'opérateur unaire -."""
+        return Vector3D(-self.x, -self.y, -self.z)
+
     def length(self) -> float:
         """Calcule la norme euclidienne du vecteur."""
         return float(np.sqrt(self.x ** 2 + self.y ** 2 + self.z ** 2))

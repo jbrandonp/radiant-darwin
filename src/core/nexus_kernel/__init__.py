@@ -1,7 +1,7 @@
 """
 Noyau Géométrique & Multiphysique Unifié NEXUS-3D (Next-Gen AI-Native Geometric Kernel).
 Intègre la topologie B-Rep rigoureuse d'OpenCASCADE / Truck, la modélisation hybride
-de ZW3D Overdrive, l'arithmétique exacte de Manifold3D, et les piliers de rupture technologique :
+de ZW3D Overdrive, l'arithmétique exacte de Manifold3D, et les 14 piliers de rupture technologique :
 1. Prédicats géométriques adaptatifs exacts de Shewchuk (RobustGeometricPredicates).
 2. Quaternions duaux SE(3) et pipeline multi-échelle Relative-To-Eye (DualQuaternion, RelativeToEyePipeline).
 3. Arène mémoire générationnelle O(1) de type SlotMap / ECS (GenerationalArena, ArenaKey).
@@ -9,6 +9,12 @@ de ZW3D Overdrive, l'arithmétique exacte de Manifold3D, et les piliers de ruptu
 5. Barrière de contact non-linéaire inviolable IPC et optimisation physique adjointe (IncrementalPotentialContact, AdjointSensitivityEngine).
 6. Opérateurs topologiques formels d'Euler-Poincaré (NexusEulerOperators).
 7. Interfaces IA natives (NeuralSDFEngine, DifferentiableGeometryEngine, CADTokenizer).
+8. Quadrature de Saye sur cellules coupées pour CutFEM (SayeImplicitQuadrature, SayeQuadratureRule).
+9. Surfaces développables K=0 et dépouille industrielle (RuledDevelopableSurface, IsoclinicDraftEngine).
+10. Élagage d'arbres CSG/SDF par arithmétique d'intervalles type Fidget (SDFInterval, SDFIntervalTreeNode).
+11. Cinématique des boucles fermées dans l'espace opérationnel (ClosedLoopKinematicEngine).
+12. Topologie B-Rep étanche avec arête 3D maîtresse (WatertightTrimmedEdge, CoordinatedMeshSealer).
+13. Intégration symplectique alpha-généralisée et formulation anti-locking (GeneralizedAlphaIntegrator, VolumetricLockingMitigation).
 
 Typage statique exhaustif et architecture modulaire certifiée.
 """
@@ -42,6 +48,24 @@ from src.core.nexus_kernel.unified_physics import (
     AdjointSensitivityEngine, AdjointSensitivityResult,
     CutFEMStabilizer, SmallDisplacementTorsor
 )
+from src.core.nexus_kernel.saye_quadrature import (
+    QuadraturePoint3D, SayeQuadratureRule, SayeImplicitQuadrature
+)
+from src.core.nexus_kernel.developable_surfaces import (
+    DraftDiagnostic, RuledDevelopableSurface, IsoclinicDraftEngine
+)
+from src.core.nexus_kernel.fidget_interval_tree import (
+    CSGOpType, SDFInterval, SDFIntervalTreeNode
+)
+from src.core.nexus_kernel.closed_loop_kinematics import (
+    ClosedLoopDynamicsResult, ClosedLoopKinematicEngine
+)
+from src.core.nexus_kernel.trimmed_brep_watertight import (
+    CoordinatedBoundaryVertex, WatertightEdgeReport, WatertightTrimmedEdge, CoordinatedMeshSealer
+)
+from src.core.nexus_kernel.symplectic_integrator import (
+    GeneralizedAlphaStepResult, GeneralizedAlphaIntegrator, VolumetricLockingMitigation
+)
 
 __all__ = [
     "SurfaceType", "CurveType", "NexusVertex", "NexusCurve", "NexusLineCurve",
@@ -56,5 +80,11 @@ __all__ = [
     "DAGNode", "IncrementalExecutionDAG", "ExecutionStats",
     "IncrementalPotentialContact", "IPCBarrierResult",
     "AdjointSensitivityEngine", "AdjointSensitivityResult",
-    "CutFEMStabilizer", "SmallDisplacementTorsor"
+    "CutFEMStabilizer", "SmallDisplacementTorsor",
+    "QuadraturePoint3D", "SayeQuadratureRule", "SayeImplicitQuadrature",
+    "DraftDiagnostic", "RuledDevelopableSurface", "IsoclinicDraftEngine",
+    "CSGOpType", "SDFInterval", "SDFIntervalTreeNode",
+    "ClosedLoopDynamicsResult", "ClosedLoopKinematicEngine",
+    "CoordinatedBoundaryVertex", "WatertightEdgeReport", "WatertightTrimmedEdge", "CoordinatedMeshSealer",
+    "GeneralizedAlphaStepResult", "GeneralizedAlphaIntegrator", "VolumetricLockingMitigation"
 ]

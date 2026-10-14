@@ -1,9 +1,9 @@
 {
   "total_files": 100.0,
-  "total_lines_of_code": 21966.0,
+  "total_lines_of_code": 21965.0,
   "total_cognitive_complexity": 2603.0,
   "avg_cognitive_complexity_per_file": 26.03,
-  "avg_maintainability_index": 23.570390225237098,
+  "avg_maintainability_index": 23.57116350570782,
   "type_completeness_percent": 100.0,
   "security_violations": 0.0,
   "circular_dependencies": 0.0,

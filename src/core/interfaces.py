@@ -2,17 +2,17 @@
 Contrats et Protocoles Fondamentaux (Lego Interfaces).
 Définit les interfaces formelles (PEP 544 Protocols) assurant une modularité maximale
 style 'briques LEGO' : chaque composant s'emboîte de manière totalement découplée.
-Strictement typé sans utilisation d'Any.
+Protocoles PEP 544 et typage nominal strict.
 """
 
 from __future__ import annotations
 from typing import (
     Protocol, runtime_checkable, Dict, List, Tuple, Optional, Sequence,
-    Callable, TypeVar
+    Callable, TypeVar, Union
 )
 import numpy as np
 
-from src.core.types import Vector3D, Point2D, MeshBuffer, FeatureStatus, BooleanOperation
+from src.core.types import Vector3D, Point2D, MeshBuffer, FeatureStatus, BooleanOperation, PlaneType
 
 
 @runtime_checkable
@@ -46,6 +46,24 @@ class GeometryProvider(Protocol):
 
 
 @runtime_checkable
+class SketchProvider(Protocol):
+    """Contrat pour tout fournisseur d'esquisse 2D fermée (ex: Sketch2D)."""
+
+    @property
+    def sketch_id(self) -> str:
+        """Identifiant unique de l'esquisse."""
+        ...
+
+    @property
+    def name(self) -> str:
+        """Nom lisible de l'esquisse."""
+        ...
+
+
+ExportableTarget = Union[GeometryProvider, Dict[str, GeometryProvider], MeshBuffer]
+
+
+@runtime_checkable
 class FeatureEvaluator(Protocol):
     """Contrat pour toute opération paramétrique de l'arbre d'historique (Feature)."""
 
@@ -72,7 +90,7 @@ class FeatureEvaluator(Protocol):
     def evaluate(
         self,
         existing_bodies: Dict[str, GeometryProvider],
-        sketches: Dict[str, object]
+        sketches: Dict[str, SketchProvider]
     ) -> Dict[str, GeometryProvider]:
         """Évalue l'opération et retourne le dictionnaire mis à jour des corps solides."""
         ...
@@ -92,7 +110,7 @@ class ExporterService(Protocol):
         """Extension de fichier associée avec le point (ex: '.step', '.svg')."""
         ...
 
-    def export(self, target: object, filepath: str) -> str:
+    def export(self, target: ExportableTarget, filepath: str) -> str:
         """Exporte l'objet cible vers le chemin spécifié et retourne le contenu textuel ou un hash."""
         ...
 

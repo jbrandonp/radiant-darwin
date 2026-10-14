@@ -2,13 +2,15 @@
 Registre Central des Composants et Ateliers (Lego Registry).
 Permet d'enregistrer, d'inspecter et d'instancier dynamiquement chaque brique de CAD Studio
 (Features volumiques, Ateliers métiers, Exportateurs) sans couplage fort.
-Strictement typé sans utilisation d'Any.
+Typage nominal strict et fabriques paramétriques.
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, List, Tuple, Optional, Callable, Type
+from typing import Dict, List, Tuple, Optional, Callable, Type, Union
+
+FeatureArg = Union[str, int, float, bool, Tuple[float, ...], List[float], List[str]]
 
 from src.core.interfaces import WorkbenchModule
 from src.core.feature import Feature
@@ -70,7 +72,7 @@ class FeatureRegistry:
         return cls._registry.get(class_name)
 
     @classmethod
-    def create(cls, class_name: str, *args: object, **kwargs: object) -> Optional[Feature]:
+    def create(cls, class_name: str, *args: FeatureArg, **kwargs: FeatureArg) -> Optional[Feature]:
         """Instancie dynamiquement une fonctionnalité via sa fabrique enregistrée."""
         descriptor = cls._registry.get(class_name)
         if descriptor is None:

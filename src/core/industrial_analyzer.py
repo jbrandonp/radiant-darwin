@@ -4,7 +4,7 @@ Fournit les outils de validation de fabricabilité (Design for Manufacturing) in
 - Analyse d'épaisseur de paroi (Wall Thickness / Minimum Gauge pour injection plastique et fonderie)
 - Analyse d'angle de dépouille et contre-dépouilles (Draft Angle & Undercuts pour moules et usinage 5 axes)
 - Validation et auto-réparation d'étanchéité de maillage (Watertight Mesh Healing & Quality Certificate)
-Strictement typé sans utilisation d'Any.
+Typage DFM et analyseurs vectorisés stricts.
 """
 
 from __future__ import annotations

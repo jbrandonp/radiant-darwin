@@ -5,7 +5,7 @@ Prend en charge :
 - Surfaces minimales triplement périodiques (TPMS) : Gyroïde, Schwarz Diamond
 - Treillis structurels spatiaux à haute rigidité spécifique (Octet Truss, Lattices cubiques centrés)
 - Évidement paramétrique avec peau externe étanche et remplissage réticulaire allégé
-Strictement typé sans utilisation d'Any.
+Typage géométrique et topologique rigoureux.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 Exportateur standard ISO 10303-21 STEP (AP203 / AP214 Faceted B-Rep).
 Permet l'interopérabilité et l'échange de fichiers CAO solides 3D avec FreeCAD,
 SolidWorks, CATIA, Autodesk Inventor et Fusion 360.
-Strictement typé sans utilisation d'Any.
+Exportateur STEP AP203/AP214 avec typage B-Rep strict.
 """
 
 from __future__ import annotations

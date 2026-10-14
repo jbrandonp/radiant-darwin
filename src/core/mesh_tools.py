@@ -6,7 +6,7 @@ Atelier d'Analyse et Réparation de Maillages 3D (Mesh Workbench).
 - Réparation automatique de maillage (nettoyage topologique, inversion des normales).
 - Simplification et décimation adaptative (Quadric Decimation).
 - Conversion de maillage triangulaire en Solide CAO B-Rep étanche.
-Strictement typé sans utilisation d'Any.
+Typage maillage et structures tensorielles rigoureuses.
 """
 
 from __future__ import annotations

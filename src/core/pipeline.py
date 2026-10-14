@@ -2,7 +2,7 @@
 Pipeline de Traitement par Assemblage de Briques (Lego Pipeline).
 Permet de chaîner des opérations de transformation géométrique sous forme de modules
 interchangeables, inspectables étape par étape et réversibles.
-Strictement typé sans utilisation d'Any.
+Pipeline générique hautement typé avec étapes composables.
 """
 
 from __future__ import annotations

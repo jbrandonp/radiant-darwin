@@ -2,7 +2,7 @@
 Atelier d'Inspection & Métrologie 3D de précision (Inspection / Measure Workbench).
 Permet de mesurer les distances 3D, angles, surfaces, volumes, centres de gravité (CoG),
 moments d'inertie, jeux/dégagements minimaux (clearance) et détection de collisions/interférences.
-Strictement typé sans utilisation d'Any.
+Typage métrologique strict et protocoles d'inspection géométrique.
 """
 
 from __future__ import annotations

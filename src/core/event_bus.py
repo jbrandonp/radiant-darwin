@@ -2,7 +2,7 @@
 Bus d'Événements Fortement Typé (Event-Driven Lego Architecture).
 Permet le découplage absolu entre les sous-systèmes (UI, Moteur 3D, Ateliers, Inspecteur)
 selon le patron Publish/Subscribe, garantissant une architecture propre et modulaire.
-Strictement typé sans utilisation d'Any.
+Typage nominal strict et événements typés exhaustifs.
 """
 
 from __future__ import annotations

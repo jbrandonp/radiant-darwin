@@ -2,7 +2,7 @@
 Atelier de Plan de Coupe & Analyse de Section 2D (FreeCAD Part_Section Parity).
 Permet de trancher un solide 3D par un plan (XY, XZ, YZ), d'extraire ses contours 2D exacts
 et de convertir automatiquement une coupe 3D en une nouvelle Esquisse 2D modifiable.
-Strictement typé sans utilisation d'Any.
+Calculs de coupes géométriques avec typage vectoriel strict.
 """
 
 from __future__ import annotations

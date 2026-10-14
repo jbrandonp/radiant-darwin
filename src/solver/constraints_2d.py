@@ -193,8 +193,12 @@ class SketchConstraintSolver2D:
         for c in self.constraints:
             c_type = c.constraint_type
             indices = c.point_indices
-
-            if any(idx < 0 or idx >= num_pts for idx in indices):
+            invalid_index = False
+            for idx in indices:
+                if idx < 0 or idx >= num_pts:
+                    invalid_index = True
+                    break
+            if invalid_index:
                 res.append(100.0)
                 continue
 
@@ -335,7 +339,8 @@ class SketchConstraintSolver2D:
         dof = max(0, num_vars - rank)
 
         # Détection des contraintes redondantes ou contradictoires
-        is_overconstrained = bool(num_equations > rank and np.any(np.abs(f0) > 0.05))
+        has_significant_residual = bool(np.max(np.abs(f0)) > 0.05) if len(f0) > 0 else False
+        is_overconstrained = bool(num_equations > rank and has_significant_residual)
 
         if is_overconstrained:
             status = f"Sur-contrainte / Conflit ({num_equations - rank} équation(s) redondante(s) ou contradictoire(s))"

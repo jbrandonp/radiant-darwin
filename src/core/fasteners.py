@@ -5,7 +5,7 @@ Générateur paramétrique de visserie métrique normalisée ISO / DIN :
 - Vis à six pans creux CHC / BTR (ISO 4762 / DIN 912)
 - Écrous hexagonaux (ISO 4032 / DIN 934)
 - Rondelles plates (ISO 7089 / DIN 125)
-Tailles métriques normalisées de M3 à M20. Strictement typé sans utilisation d'Any.
+Tailles métriques normalisées de M3 à M20. Typage géométrique et dimensionnel strict.
 """
 
 from __future__ import annotations

@@ -9,8 +9,16 @@ import json
 import os
 from typing import Dict, List, Optional, Union
 
-# Typage strict pour données JSON sans utilisation d'Any
-JSONValue = Union[str, int, float, bool, None, List[object], Dict[str, object]]
+# Modèle de typage strict pour données JSON arborescentes
+JSONPrimitive = Union[str, int, float, bool, None]
+JSONValue = Union[
+    JSONPrimitive,
+    List[JSONPrimitive],
+    Dict[str, JSONPrimitive],
+    List[Dict[str, Union[JSONPrimitive, List[float], List[List[float]]]]],
+    Dict[str, Union[JSONPrimitive, List[float], Dict[str, JSONPrimitive]]],
+    List[Dict[str, Union[str, float, List[Dict[str, Union[str, bool, int, float, List[List[float]]]]]]]]
+]
 
 from src.core.document import CADDocument
 from src.core.types import PlaneType, BooleanOperation, Point2D
@@ -55,8 +63,8 @@ class ProjectSerializer:
             }
             for ent in sk.entities:
                 pts = [[pt.u, pt.v] for pt in ent.get_points()]
-                cast_entities: List[object] = sk_data["entities"]  # type: ignore[assignment]
-                ent_dict: Dict[str, object] = {
+                cast_entities: List[Dict[str, Union[str, bool, int, float, List[List[float]]]]] = sk_data["entities"]  # type: ignore[assignment]
+                ent_dict: Dict[str, Union[str, bool, int, float, List[List[float]]]] = {
                     "id": ent.entity_id,
                     "type": ent.entity_type.value,
                     "points": pts,
@@ -67,7 +75,7 @@ class ProjectSerializer:
                 if hasattr(ent, "closed"):
                     ent_dict["closed"] = getattr(ent, "closed")
                 cast_entities.append(ent_dict)
-            cast_sketches: List[object] = data["sketches"]  # type: ignore[assignment]
+            cast_sketches: List[Dict[str, Union[str, float, List[Dict[str, Union[str, bool, int, float, List[List[float]]]]]]]] = data["sketches"]  # type: ignore[assignment]
             cast_sketches.append(sk_data)
 
         # 2. Sérialiser les features paramétriques
@@ -125,8 +133,8 @@ class ProjectSerializer:
             if hasattr(feat, "base_plane") and isinstance(feat.base_plane, PlaneType):
                 f_dict["base_plane"] = feat.base_plane.value
             if hasattr(feat, "steps") and isinstance(getattr(feat, "steps"), list):
-                raw_st: List[object] = getattr(feat, "steps")
-                st_list: List[object] = []
+                raw_st: List[MultiTransformStep] = getattr(feat, "steps")
+                st_list: List[Dict[str, Union[str, int, float]]] = []
                 for st in raw_st:
                     st_list.append({
                         "type": getattr(st, "transform_type", "linear"),

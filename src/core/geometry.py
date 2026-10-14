@@ -544,7 +544,7 @@ def _extract_sharp_edges(
     sorted_faces = face_indices[order]
 
     # 3. Détection vectorisée des changements d'arêtes
-    diff = np.any(sorted_edges[1:] != sorted_edges[:-1], axis=1)
+    diff = np.bitwise_or.reduce(sorted_edges[1:] != sorted_edges[:-1], axis=1)
     split_indices = np.concatenate(([0], np.where(diff)[0] + 1, [len(sorted_edges)]))
 
     cos_threshold = float(np.cos(np.radians(angle_threshold_deg)))

@@ -133,8 +133,18 @@ class AssemblySolver:
 
         return True
 
-    @staticmethod
+    _MATE_DOF_REDUCTIONS: Dict[MateType, int] = {
+        MateType.RIGID: 6,
+        MateType.COAXIAL: 4,
+        MateType.COINCIDENT_PLANES: 3,
+        MateType.REVOLUTE: 5,
+        MateType.PRISMATIC: 5,
+        MateType.DISTANCE: 1,
+    }
+
+    @classmethod
     def compute_degrees_of_freedom(
+        cls,
         instances: Dict[str, AssemblyInstance],
         mates: List[AssemblyMate]
     ) -> int:
@@ -144,23 +154,8 @@ class AssemblySolver:
         """
         ungrounded_count = sum(1 for inst in instances.values() if not inst.is_grounded)
         total_dof = ungrounded_count * 6
-
-        # Chaque contrainte retire un certain nombre de DDL
-        for mate in mates:
-            if mate.mate_type == MateType.RIGID:
-                total_dof -= 6
-            elif mate.mate_type == MateType.COAXIAL:
-                total_dof -= 4  # Laisse 1 translation axiale et 1 rotation
-            elif mate.mate_type == MateType.COINCIDENT_PLANES:
-                total_dof -= 3  # Laisse 2 translations planes et 1 rotation
-            elif mate.mate_type == MateType.REVOLUTE:
-                total_dof -= 5  # Laisse 1 seule rotation
-            elif mate.mate_type == MateType.PRISMATIC:
-                total_dof -= 5  # Laisse 1 seule translation
-            elif mate.mate_type == MateType.DISTANCE:
-                total_dof -= 1
-
-        return max(0, total_dof)
+        dof_reduction = sum(cls._MATE_DOF_REDUCTIONS.get(m.mate_type, 0) for m in mates)
+        return max(0, total_dof - dof_reduction)
 
     @staticmethod
     def detect_collisions(

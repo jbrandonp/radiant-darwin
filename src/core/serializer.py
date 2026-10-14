@@ -556,91 +556,52 @@ class ProjectSerializer:
         # 3. Écriture sur disque (support du format compressé .cadz)
         return ProjectSerializer._write_to_disk(data, filepath)
 
+    _DIRECT_SERIALIZE_ATTRS: Tuple[str, ...] = (
+        "target_body_id", "sketch_id", "source_body_id", "tool_body_id",
+        "hole_type", "fastener_type", "standard_size", "path_points",
+        "start_sketch_id", "end_sketch_id", "profile_sketch_id",
+        "trajectory_type", "edges_mode", "pull_axis", "keep_side",
+        "join_bodies", "join_with_source", "symmetric", "taper_angle",
+        "twist_degrees", "is_left_handed", "axis", "is_subtractive",
+        "edge_direction", "profile_sketch_ids", "guide_rail_curves"
+    )
+
     @staticmethod
-    def _serialize_feature(feat: Feature) -> Dict[str, JSONValue]:
+    def _serialize_special_attrs(feat: Feature, f_dict: Dict[str, JSONValue]) -> None:
+        """Sérialise les attributs complexes (énumérations, listes de pas, vecteurs 3D)."""
+        if hasattr(feat, "operation") and isinstance(feat.operation, BooleanOperation):
+            f_dict["operation"] = feat.operation.value
+        for enum_attr in ("mirror_plane", "base_plane"):
+            if hasattr(feat, enum_attr):
+                val = getattr(feat, enum_attr)
+                f_dict[enum_attr] = val.value if hasattr(val, "value") else str(val)
+        if hasattr(feat, "plane") and isinstance(getattr(feat, "plane"), PlaneType):
+            f_dict["plane"] = getattr(feat, "plane").value
+        if hasattr(feat, "steps") and isinstance(getattr(feat, "steps"), list):
+            f_dict["steps"] = [st.to_dict() for st in getattr(feat, "steps") if hasattr(st, "to_dict")]
+        if hasattr(feat, "mode"):
+            mode_val = getattr(feat, "mode")
+            f_dict["mode"] = mode_val.value if hasattr(mode_val, "value") else str(mode_val)
+        for pt_attr in ("point1", "point2", "point3", "tangent_or_normal"):
+            if hasattr(feat, pt_attr):
+                pt_val = getattr(feat, pt_attr)
+                f_dict[pt_attr] = list(pt_val) if pt_val else None
+
+    @classmethod
+    def _serialize_feature(cls, feat: Feature) -> Dict[str, JSONValue]:
         """Convertit une fonctionnalité paramétrique en dictionnaire JSON."""
-        f_type = feat.__class__.__name__
         f_dict: Dict[str, JSONValue] = {
-            "class": f_type,
+            "class": feat.__class__.__name__,
             "id": feat.feature_id,
             "name": feat.name,
             "parameters": feat.parameters,
             "is_suppressed": feat.is_suppressed,
         }
+        for attr in cls._DIRECT_SERIALIZE_ATTRS:
+            if hasattr(feat, attr):
+                f_dict[attr] = getattr(feat, attr)
 
-        if hasattr(feat, "operation") and isinstance(feat.operation, BooleanOperation):
-            f_dict["operation"] = feat.operation.value
-        if hasattr(feat, "target_body_id"):
-            f_dict["target_body_id"] = getattr(feat, "target_body_id")
-        if hasattr(feat, "sketch_id"):
-            f_dict["sketch_id"] = getattr(feat, "sketch_id")
-        if hasattr(feat, "source_body_id"):
-            f_dict["source_body_id"] = getattr(feat, "source_body_id")
-        if hasattr(feat, "tool_body_id"):
-            f_dict["tool_body_id"] = getattr(feat, "tool_body_id")
-        if hasattr(feat, "mirror_plane"):
-            f_dict["mirror_plane"] = getattr(feat, "mirror_plane").value
-        if hasattr(feat, "hole_type"):
-            f_dict["hole_type"] = getattr(feat, "hole_type")
-        if hasattr(feat, "fastener_type"):
-            f_dict["fastener_type"] = getattr(feat, "fastener_type")
-        if hasattr(feat, "standard_size"):
-            f_dict["standard_size"] = getattr(feat, "standard_size")
-        if hasattr(feat, "path_points"):
-            f_dict["path_points"] = getattr(feat, "path_points")
-        if hasattr(feat, "start_sketch_id"):
-            f_dict["start_sketch_id"] = getattr(feat, "start_sketch_id")
-        if hasattr(feat, "end_sketch_id"):
-            f_dict["end_sketch_id"] = getattr(feat, "end_sketch_id")
-        if hasattr(feat, "profile_sketch_id"):
-            f_dict["profile_sketch_id"] = getattr(feat, "profile_sketch_id")
-        if hasattr(feat, "trajectory_type"):
-            f_dict["trajectory_type"] = getattr(feat, "trajectory_type")
-        if hasattr(feat, "edges_mode"):
-            f_dict["edges_mode"] = getattr(feat, "edges_mode")
-        if hasattr(feat, "pull_axis"):
-            f_dict["pull_axis"] = getattr(feat, "pull_axis")
-        if hasattr(feat, "base_plane"):
-            f_dict["base_plane"] = getattr(feat, "base_plane").value
-        if hasattr(feat, "keep_side"):
-            f_dict["keep_side"] = getattr(feat, "keep_side")
-        if hasattr(feat, "plane") and isinstance(getattr(feat, "plane"), PlaneType):
-            f_dict["plane"] = getattr(feat, "plane").value
-        if hasattr(feat, "steps") and isinstance(getattr(feat, "steps"), list):
-            f_dict["steps"] = [st.to_dict() for st in getattr(feat, "steps") if hasattr(st, "to_dict")]
-        if hasattr(feat, "join_bodies"):
-            f_dict["join_bodies"] = getattr(feat, "join_bodies")
-        if hasattr(feat, "join_with_source"):
-            f_dict["join_with_source"] = getattr(feat, "join_with_source")
-        if hasattr(feat, "symmetric"):
-            f_dict["symmetric"] = getattr(feat, "symmetric")
-        if hasattr(feat, "taper_angle"):
-            f_dict["taper_angle"] = getattr(feat, "taper_angle")
-        if hasattr(feat, "twist_degrees"):
-            f_dict["twist_degrees"] = getattr(feat, "twist_degrees")
-        if hasattr(feat, "is_left_handed"):
-            f_dict["is_left_handed"] = getattr(feat, "is_left_handed")
-        if hasattr(feat, "axis"):
-            f_dict["axis"] = getattr(feat, "axis")
-        if hasattr(feat, "is_subtractive"):
-            f_dict["is_subtractive"] = getattr(feat, "is_subtractive")
-        if hasattr(feat, "mode"):
-            f_dict["mode"] = getattr(feat, "mode").value if hasattr(getattr(feat, "mode"), "value") else str(getattr(feat, "mode"))
-        if hasattr(feat, "point1"):
-            f_dict["point1"] = list(getattr(feat, "point1")) if getattr(feat, "point1") else None
-        if hasattr(feat, "point2"):
-            f_dict["point2"] = list(getattr(feat, "point2")) if getattr(feat, "point2") else None
-        if hasattr(feat, "point3"):
-            f_dict["point3"] = list(getattr(feat, "point3")) if getattr(feat, "point3") else None
-        if hasattr(feat, "tangent_or_normal"):
-            f_dict["tangent_or_normal"] = list(getattr(feat, "tangent_or_normal")) if getattr(feat, "tangent_or_normal") else None
-        if hasattr(feat, "edge_direction"):
-            f_dict["edge_direction"] = getattr(feat, "edge_direction")
-        if hasattr(feat, "profile_sketch_ids"):
-            f_dict["profile_sketch_ids"] = getattr(feat, "profile_sketch_ids")
-        if hasattr(feat, "guide_rail_curves"):
-            f_dict["guide_rail_curves"] = getattr(feat, "guide_rail_curves")
-
+        cls._serialize_special_attrs(feat, f_dict)
         return f_dict
 
     @staticmethod

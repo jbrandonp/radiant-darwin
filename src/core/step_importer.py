@@ -205,6 +205,28 @@ class STEPImporter:
 
         return vertex_point_map, cartesian_vertex_map
 
+    @staticmethod
+    def _parse_edge_curve(
+        r: STEPRecord,
+        curve_rec: Optional[STEPRecord],
+        records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray],
+        v_start: NexusVertex,
+        v_end: NexusVertex
+    ) -> NexusCurve:
+        if curve_rec and curve_rec.entity_type == "CIRCLE":
+            center = v_start.point
+            axis_ref = [int(x) for x in re.findall(r"#(\d+)", curve_rec.raw_args)]
+            if axis_ref and axis_ref[0] in records:
+                ax_rec = records[axis_ref[0]]
+                ax_pt_ids = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
+                if ax_pt_ids and ax_pt_ids[0] in cartesian_points:
+                    center = cartesian_points[ax_pt_ids[0]]
+            radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", curve_rec.raw_args)]
+            rad = radius_floats[-1] if radius_floats else 5.0
+            return NexusCircleCurve(f"Circle_{r.entity_id}", center, np.array([0.0, 0.0, 1.0]), rad)
+        return NexusLineCurve(f"Line_{r.entity_id}", v_start.point, v_end.point)
+
     def _reconstruct_edges(
         self,
         brep: NexusBRep,
@@ -216,46 +238,24 @@ class STEPImporter:
         """Reconstruit les arêtes B-Rep et associe les courbes analytiques."""
         edge_curve_map: Dict[int, NexusEdge] = {}
 
-        def resolve_vert(ref_id: int) -> Optional[NexusVertex]:
-            if ref_id in vertex_point_map:
-                return vertex_point_map[ref_id]
-            if ref_id in cartesian_vertex_map:
-                return cartesian_vertex_map[ref_id]
-            if ref_id in cartesian_points:
-                pt = cartesian_points[ref_id]
-                vert = NexusVertex(f"V_pt_{ref_id}", float(pt[0]), float(pt[1]), float(pt[2]))
-                brep.add_vertex(vert)
-                cartesian_vertex_map[ref_id] = vert
-                return vert
-            return None
-
         for r in records.values():
-            if r.entity_type == "EDGE_CURVE":
-                ref_ids = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
-                if len(ref_ids) >= 2:
-                    v_start = resolve_vert(ref_ids[0])
-                    v_end = resolve_vert(ref_ids[1])
-                    if v_start and v_end:
-                        curve_id = ref_ids[2] if len(ref_ids) >= 3 else 0
-                        curve_rec = records.get(curve_id)
-                        c_geom: NexusCurve
-                        if curve_rec and curve_rec.entity_type == "CIRCLE":
-                            center = v_start.point
-                            axis_ref = [int(x) for x in re.findall(r"#(\d+)", curve_rec.raw_args)]
-                            if axis_ref and axis_ref[0] in records:
-                                ax_rec = records[axis_ref[0]]
-                                ax_pt_ids = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
-                                if ax_pt_ids and ax_pt_ids[0] in cartesian_points:
-                                    center = cartesian_points[ax_pt_ids[0]]
-                            radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", curve_rec.raw_args)]
-                            rad = radius_floats[-1] if radius_floats else 5.0
-                            c_geom = NexusCircleCurve(f"Circle_{r.entity_id}", center, np.array([0.0, 0.0, 1.0]), rad)
-                        else:
-                            c_geom = NexusLineCurve(f"Line_{r.entity_id}", v_start.point, v_end.point)
+            if r.entity_type != "EDGE_CURVE":
+                continue
+            ref_ids = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
+            if len(ref_ids) < 2:
+                continue
+            v_start = self._resolve_or_create_vertex(ref_ids[0], brep, vertex_point_map, cartesian_vertex_map, cartesian_points)
+            v_end = self._resolve_or_create_vertex(ref_ids[1], brep, vertex_point_map, cartesian_vertex_map, cartesian_points)
+            if not v_start or not v_end:
+                continue
 
-                        edge = NexusEdge(f"E_{r.entity_id}", c_geom, v_start, v_end)
-                        brep.add_edge(edge)
-                        edge_curve_map[r.entity_id] = edge
+            curve_id = ref_ids[2] if len(ref_ids) >= 3 else 0
+            curve_rec = records.get(curve_id)
+            c_geom = self._parse_edge_curve(r, curve_rec, records, cartesian_points, v_start, v_end)
+
+            edge = NexusEdge(f"E_{r.entity_id}", c_geom, v_start, v_end)
+            brep.add_edge(edge)
+            edge_curve_map[r.entity_id] = edge
 
         return edge_curve_map
 
@@ -427,7 +427,16 @@ class STEPImporter:
         return surface_map
 
     @staticmethod
+    def _collect_bound_wires(
+        ref_rec: STEPRecord,
+        loop_wire_map: Dict[int, NexusWire]
+    ) -> List[NexusWire]:
+        bound_refs = [int(x) for x in re.findall(r"#(\d+)", ref_rec.raw_args)]
+        return [loop_wire_map[b_id] for b_id in bound_refs if b_id in loop_wire_map]
+
+    @classmethod
     def _resolve_face_boundaries_and_surface(
+        cls,
         r: STEPRecord,
         records: Dict[int, STEPRecord],
         surface_map: Dict[int, NexusSurface],
@@ -440,19 +449,18 @@ class STEPImporter:
 
         for ref_id in ref_ids:
             ref_rec = records.get(ref_id)
-            if ref_rec:
-                if "BOUND" in ref_rec.entity_type:
-                    bound_refs = [int(x) for x in re.findall(r"#(\d+)", ref_rec.raw_args)]
-                    for b_id in bound_refs:
-                        if b_id in loop_wire_map:
-                            if outer_wire is None:
-                                outer_wire = loop_wire_map[b_id]
-                            else:
-                                inner_wires.append(loop_wire_map[b_id])
-                elif ref_id in surface_map:
-                    face_surf = surface_map[ref_id]
+            if not ref_rec:
+                continue
+            if "BOUND" in ref_rec.entity_type:
+                for w in cls._collect_bound_wires(ref_rec, loop_wire_map):
+                    if outer_wire is None:
+                        outer_wire = w
+                    else:
+                        inner_wires.append(w)
+            elif ref_id in surface_map:
+                face_surf = surface_map[ref_id]
 
-        if outer_wire is None and ref_ids:
+        if outer_wire is None:
             for ref_id in ref_ids:
                 if ref_id in loop_wire_map:
                     outer_wire = loop_wire_map[ref_id]

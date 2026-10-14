@@ -305,64 +305,72 @@ class SketchBSpline(SketchEntity):
         self.degree: int = max(1, min(degree, len(control_points) - 1)) if len(control_points) > 1 else 1
         self.segments: int = max(10, segments)
 
+    @staticmethod
+    def _de_boor_eval(
+        ctrl_u: List[float],
+        ctrl_v: List[float],
+        knots: np.ndarray,
+        t: float,
+        p: int,
+        k: int
+    ) -> Point2D:
+        """Exécute l'algorithme triangulaire de De Boor pour un paramètre t."""
+        d_u = list(ctrl_u)
+        d_v = list(ctrl_v)
+        for r in range(1, p + 1):
+            for j in range(k, k - p + r - 1, -1):
+                denom = float(knots[j + p + 1 - r] - knots[j])
+                alpha = (t - knots[j]) / denom if abs(denom) > 1e-9 else 0.0
+                d_u[j] = (1.0 - alpha) * d_u[j - 1] + alpha * d_u[j]
+                d_v[j] = (1.0 - alpha) * d_v[j - 1] + alpha * d_v[j]
+        return Point2D(float(d_u[k]), float(d_v[k]))
+
+    def _eval_closed_bspline(self, pts: List[Point2D], p: int) -> List[Point2D]:
+        ctrl_pts_ext = list(pts) + list(pts[:p])
+        n_ext = len(ctrl_pts_ext)
+        m = n_ext + p + 1
+        knots = np.linspace(0.0, 1.0, m)
+        t_eval = np.linspace(knots[p], knots[n_ext], self.segments, endpoint=False)
+        ctrl_u = [pt.u for pt in ctrl_pts_ext]
+        ctrl_v = [pt.v for pt in ctrl_pts_ext]
+        evaluated: List[Point2D] = []
+        for t in t_eval:
+            k = int(np.searchsorted(knots, t, side="right") - 1)
+            k = max(p, min(k, n_ext - 1))
+            evaluated.append(self._de_boor_eval(ctrl_u, ctrl_v, knots, float(t), p, k))
+        if evaluated:
+            evaluated.append(evaluated[0])
+        return evaluated
+
+    def _eval_open_bspline(self, pts: List[Point2D], p: int) -> List[Point2D]:
+        n = len(pts)
+        m = n + p + 1
+        knots = np.zeros(m, dtype=np.float64)
+        knots[p:m - p] = np.linspace(0.0, 1.0, m - 2 * p)
+        knots[m - p:] = 1.0
+        t_eval = np.linspace(0.0, 1.0, self.segments, endpoint=True)
+        ctrl_u = [pt.u for pt in pts]
+        ctrl_v = [pt.v for pt in pts]
+        evaluated: List[Point2D] = []
+        for t in t_eval:
+            if t >= 1.0:
+                evaluated.append(pts[-1])
+                continue
+            k = int(np.searchsorted(knots, t, side="right") - 1)
+            k = max(p, min(k, n - 1))
+            evaluated.append(self._de_boor_eval(ctrl_u, ctrl_v, knots, float(t), p, k))
+        return evaluated
+
     def get_points(self) -> List[Point2D]:
         """Évalue la B-spline sur self.segments échantillons via l'algorithme De Boor."""
         pts = self.control_points
         n = len(pts)
-        if n == 0:
-            return []
-        if n == 1:
-            return [pts[0]]
-        if n == 2:
-            return [pts[0], pts[1]]
+        if n <= 2:
+            return list(pts)
 
-        p = self.degree
         if self.closed:
-            ctrl_pts_ext = list(pts) + list(pts[:p])
-            n_ext = len(ctrl_pts_ext)
-            m = n_ext + p + 1
-            knots = np.linspace(0.0, 1.0, m)
-            t_eval = np.linspace(knots[p], knots[n_ext], self.segments, endpoint=False)
-            evaluated: List[Point2D] = []
-            for t in t_eval:
-                k = int(np.searchsorted(knots, t, side="right") - 1)
-                k = max(p, min(k, n_ext - 1))
-                d_u = [pt.u for pt in ctrl_pts_ext]
-                d_v = [pt.v for pt in ctrl_pts_ext]
-                for r in range(1, p + 1):
-                    for j in range(k, k - p + r - 1, -1):
-                        denom = knots[j + p + 1 - r] - knots[j]
-                        alpha = (t - knots[j]) / denom if abs(denom) > 1e-9 else 0.0
-                        d_u[j] = (1.0 - alpha) * d_u[j - 1] + alpha * d_u[j]
-                        d_v[j] = (1.0 - alpha) * d_v[j - 1] + alpha * d_v[j]
-                evaluated.append(Point2D(float(d_u[k]), float(d_v[k])))
-            if evaluated:
-                evaluated.append(evaluated[0])
-            return evaluated
-        else:
-            m = n + p + 1
-            knots = np.zeros(m, dtype=np.float64)
-            knots[p:m - p] = np.linspace(0.0, 1.0, m - 2 * p)
-            knots[m - p:] = 1.0
-            t_eval = np.linspace(0.0, 1.0, self.segments, endpoint=True)
-
-            evaluated: List[Point2D] = []
-            for t in t_eval:
-                if t >= 1.0:
-                    evaluated.append(pts[-1])
-                    continue
-                k = int(np.searchsorted(knots, t, side="right") - 1)
-                k = max(p, min(k, n - 1))
-                d_u = [pt.u for pt in pts]
-                d_v = [pt.v for pt in pts]
-                for r in range(1, p + 1):
-                    for j in range(k, k - p + r - 1, -1):
-                        denom = knots[j + p + 1 - r] - knots[j]
-                        alpha = (t - knots[j]) / denom if abs(denom) > 1e-9 else 0.0
-                        d_u[j] = (1.0 - alpha) * d_u[j - 1] + alpha * d_u[j]
-                        d_v[j] = (1.0 - alpha) * d_v[j - 1] + alpha * d_v[j]
-                evaluated.append(Point2D(float(d_u[k]), float(d_v[k])))
-            return evaluated
+            return self._eval_closed_bspline(pts, self.degree)
+        return self._eval_open_bspline(pts, self.degree)
 
     def to_profile_points(self, num_segments: Optional[int] = None) -> List[Point2D]:
         """Génère les points ordonnés du profil pour extrusion ou révolution."""

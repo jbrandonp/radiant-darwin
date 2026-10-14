@@ -81,30 +81,28 @@ class CADCamera:
         )
         return self.target.add(eye_offset)
 
+    _PRESET_VIEWS: Dict[str, Tuple[float, float]] = {
+        "TOP": (0.0, 89.9),
+        "HAUT": (0.0, 89.9),
+        "BOTTOM": (0.0, -89.9),
+        "BAS": (0.0, -89.9),
+        "FRONT": (0.0, 0.0),
+        "FACE": (0.0, 0.0),
+        "BACK": (180.0, 0.0),
+        "ARRIERE": (180.0, 0.0),
+        "RIGHT": (90.0, 0.0),
+        "DROITE": (90.0, 0.0),
+        "LEFT": (270.0, 0.0),
+        "GAUCHE": (270.0, 0.0),
+        "ISOMETRIC": (45.0, 30.0),
+        "HOME": (45.0, 30.0),
+    }
+
     def set_preset_view(self, preset_name: str) -> None:
         """Positionne la caméra selon un angle prédéfini du ViewCube."""
-        name = preset_name.upper()
-        if name in ("TOP", "HAUT"):
-            self.yaw_deg = 0.0
-            self.pitch_deg = 89.9
-        elif name in ("BOTTOM", "BAS"):
-            self.yaw_deg = 0.0
-            self.pitch_deg = -89.9
-        elif name in ("FRONT", "FACE"):
-            self.yaw_deg = 0.0
-            self.pitch_deg = 0.0
-        elif name in ("BACK", "ARRIERE"):
-            self.yaw_deg = 180.0
-            self.pitch_deg = 0.0
-        elif name in ("RIGHT", "DROITE"):
-            self.yaw_deg = 90.0
-            self.pitch_deg = 0.0
-        elif name in ("LEFT", "GAUCHE"):
-            self.yaw_deg = 270.0
-            self.pitch_deg = 0.0
-        elif name in ("ISOMETRIC", "HOME"):
-            self.yaw_deg = 45.0
-            self.pitch_deg = 30.0
+        angles = self._PRESET_VIEWS.get(preset_name.upper())
+        if angles is not None:
+            self.yaw_deg, self.pitch_deg = angles
 
     def fit_all(self, bounding_min: Vector3D, bounding_max: Vector3D) -> None:
         """Recentre et ajuste la distance pour englober toute la géométrie."""

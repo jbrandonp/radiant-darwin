@@ -7,7 +7,7 @@ et l'intégration du ViewCube.
 from __future__ import annotations
 from typing import Optional, List, Callable
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QPointF
 from PySide6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent, QSurfaceFormat
 
 from src.core.document import CADDocument
@@ -164,41 +164,49 @@ class CADViewportWidget(QOpenGLWidget):
             self.camera.set_preset_view(view_name)
             self.update()
 
+    def _handle_navigation_press(self, btn: Qt.MouseButton, mods: Qt.KeyboardModifier) -> bool:
+        """Détecte et active le mode panoramique (Pan) ou rotation d'orbite."""
+        is_shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        is_alt = bool(mods & Qt.KeyboardModifier.AltModifier)
+
+        if is_shift and btn in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
+            self._is_panning = True
+            return True
+        if btn in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
+            self._is_orbiting = True
+            return True
+        if btn == Qt.MouseButton.LeftButton and is_alt:
+            self._is_orbiting = True
+            return True
+        return False
+
+    def _handle_interactive_pick(self, pos: QPointF) -> None:
+        """Exécute le ray picking interactif 3D lors d'un clic gauche."""
+        hit = RayPicker.pick_from_screen(
+            screen_x=float(pos.x()),
+            screen_y=float(pos.y()),
+            viewport_width=self.width(),
+            viewport_height=self.height(),
+            camera=self.camera,
+            bodies=self.document.bodies,
+            edge_tolerance=3.0
+        )
+        self.selected_pick = hit if hit.has_hit else None
+        if self.selected_pick is not None:
+            for cb in self._pick_listeners:
+                try:
+                    cb(self.selected_pick)
+                except Exception as err:
+                    print(f"Erreur callback sélection 3D : {err}")
+        self.update()
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Gère l'appui sur les boutons de la souris."""
         self._last_mouse_pos = event.position().toPoint()
-        mods = event.modifiers()
-
-        # Shift + Clic Milieu ou Shift + Clic Droit = PAN
-        if (event.button() == Qt.MouseButton.MiddleButton and (mods & Qt.KeyboardModifier.ShiftModifier)) or \
-           (event.button() == Qt.MouseButton.RightButton and (mods & Qt.KeyboardModifier.ShiftModifier)):
-            self._is_panning = True
-        # Clic Milieu ou Clic Droit = ORBIT
-        elif event.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
-            self._is_orbiting = True
-        # Alt + Clic Gauche = ORBIT
-        elif event.button() == Qt.MouseButton.LeftButton and (mods & Qt.KeyboardModifier.AltModifier):
-            self._is_orbiting = True
-        # Clic Gauche Simple = SÉLECTION INTERACTIVE 3D (RAY PICKING)
-        elif event.button() == Qt.MouseButton.LeftButton:
-            m_pos = event.position()
-            hit = RayPicker.pick_from_screen(
-                screen_x=float(m_pos.x()),
-                screen_y=float(m_pos.y()),
-                viewport_width=self.width(),
-                viewport_height=self.height(),
-                camera=self.camera,
-                bodies=self.document.bodies,
-                edge_tolerance=3.0
-            )
-            self.selected_pick = hit if hit.has_hit else None
-            if self.selected_pick is not None:
-                for cb in self._pick_listeners:
-                    try:
-                        cb(self.selected_pick)
-                    except Exception as err:
-                        print(f"Erreur callback sélection 3D : {err}")
-            self.update()
+        if self._handle_navigation_press(event.button(), event.modifiers()):
+            return
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._handle_interactive_pick(event.position())
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Gère le déplacement de la souris lors des opérations d'orbite et de pan."""

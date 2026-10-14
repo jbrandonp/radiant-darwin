@@ -127,47 +127,62 @@ class SafeExpressionEvaluator:
             raise ValueError(f"Expression invalide '{expression_str}' : {e}")
 
     @classmethod
+    def _eval_constant_node(cls, node: ast.Constant) -> float:
+        if isinstance(node.value, (int, float)):
+            return float(node.value)
+        raise ValueError(f"Type littéral non autorisé : {node.value}")
+
+    @classmethod
+    def _eval_name_node(cls, node: ast.Name, context: Dict[str, float]) -> float:
+        var_name = node.id
+        if var_name in context:
+            return float(context[var_name])
+        low_name = var_name.lower()
+        if low_name in cls.BUILTIN_CONSTANTS_AND_UNITS:
+            return cls.BUILTIN_CONSTANTS_AND_UNITS[low_name]
+        raise ValueError(f"Variable inconnue '{var_name}'")
+
+    @classmethod
+    def _eval_unary_node(cls, node: ast.UnaryOp, context: Dict[str, float], depth: int) -> float:
+        op_func = cls.ALLOWED_OPERATORS.get(type(node.op))
+        if op_func:
+            operand = cls._eval_node(node.operand, context, depth + 1)
+            return float(op_func(operand))
+        raise ValueError(f"Opérateur unaire non supporté : {type(node.op)}")
+
+    @classmethod
+    def _eval_binop_node(cls, node: ast.BinOp, context: Dict[str, float], depth: int) -> float:
+        op_func = cls.ALLOWED_OPERATORS.get(type(node.op))
+        if op_func:
+            left = cls._eval_node(node.left, context, depth + 1)
+            right = cls._eval_node(node.right, context, depth + 1)
+            return float(op_func(left, right))
+        raise ValueError(f"Opérateur binaire non supporté : {type(node.op)}")
+
+    @classmethod
+    def _eval_call_node(cls, node: ast.Call, context: Dict[str, float], depth: int) -> float:
+        func_name = getattr(node.func, 'id', '')
+        if func_name in cls.ALLOWED_FUNCTIONS:
+            args = [cls._eval_node(arg, context, depth + 1) for arg in node.args]
+            return float(cls.ALLOWED_FUNCTIONS[func_name](*args))
+        raise ValueError(f"Fonction non autorisée '{func_name}'")
+
+    @classmethod
     def _eval_node(cls, node: ast.AST, context: Dict[str, float], depth: int = 0) -> float:
         """Parcourt récursivement l'arbre syntaxique pour évaluer l'expression."""
         if depth > 30:
             raise ValueError("Profondeur de récursion maximale dépassée (protection DoS)")
 
-        if isinstance(node, ast.Constant):  # Nombre ou constante (Python 3.8+)
-            if isinstance(node.value, (int, float)):
-                return float(node.value)
-            raise ValueError(f"Type littéral non autorisé : {node.value}")
-
-        elif isinstance(node, ast.Name):  # Variable du contexte ou constante/unité intégrée
-            var_name = node.id
-            if var_name in context:
-                return float(context[var_name])
-            low_name = var_name.lower()
-            if low_name in cls.BUILTIN_CONSTANTS_AND_UNITS:
-                return cls.BUILTIN_CONSTANTS_AND_UNITS[low_name]
-            raise ValueError(f"Variable inconnue '{var_name}'")
-
-        elif isinstance(node, ast.UnaryOp):  # Opération unaire (-x, +x)
-            op_func = cls.ALLOWED_OPERATORS.get(type(node.op))
-            if op_func:
-                operand = cls._eval_node(node.operand, context, depth + 1)
-                return float(op_func(operand))
-            raise ValueError(f"Opérateur unaire non supporté : {type(node.op)}")
-
-        elif isinstance(node, ast.BinOp):  # Opération binaire (a + b, a * b)
-            op_func = cls.ALLOWED_OPERATORS.get(type(node.op))
-            if op_func:
-                left = cls._eval_node(node.left, context, depth + 1)
-                right = cls._eval_node(node.right, context, depth + 1)
-                return float(op_func(left, right))
-            raise ValueError(f"Opérateur binaire non supporté : {type(node.op)}")
-
-        elif isinstance(node, ast.Call):  # Appel de fonction mathématique (sqrt(x))
-            func_name = getattr(node.func, 'id', '')
-            if func_name in cls.ALLOWED_FUNCTIONS:
-                args = [cls._eval_node(arg, context, depth + 1) for arg in node.args]
-                return float(cls.ALLOWED_FUNCTIONS[func_name](*args))
-            raise ValueError(f"Fonction non autorisée '{func_name}'")
-
+        if isinstance(node, ast.Constant):
+            return cls._eval_constant_node(node)
+        if isinstance(node, ast.Name):
+            return cls._eval_name_node(node, context)
+        if isinstance(node, ast.UnaryOp):
+            return cls._eval_unary_node(node, context, depth)
+        if isinstance(node, ast.BinOp):
+            return cls._eval_binop_node(node, context, depth)
+        if isinstance(node, ast.Call):
+            return cls._eval_call_node(node, context, depth)
         raise ValueError(f"Nœud syntaxique non pris en charge : {type(node)}")
 
 

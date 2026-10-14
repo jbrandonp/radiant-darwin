@@ -1,12 +1,12 @@
 {
   "total_files": 94.0,
-  "total_lines_of_code": 21062.0,
-  "total_cognitive_complexity": 2713.0,
-  "avg_cognitive_complexity_per_file": 28.861702127659573,
-  "avg_maintainability_index": 23.46525245912968,
+  "total_lines_of_code": 21073.0,
+  "total_cognitive_complexity": 2506.0,
+  "avg_cognitive_complexity_per_file": 26.659574468085108,
+  "avg_maintainability_index": 23.604906529637123,
   "type_completeness_percent": 100.0,
   "security_violations": 0.0,
   "circular_dependencies": 0.0,
   "mutation_score_percent": 100.0,
-  "critical_functions_over_25": 11.0
+  "critical_functions_over_25": 0.0
 }

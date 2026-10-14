@@ -302,63 +302,72 @@ class ParametricSpreadsheet:
 
         return self._eval_ast_node(tree.body)
 
+    def _eval_ast_constant(self, node: ast.Constant) -> float:
+        if isinstance(node.value, (int, float)):
+            return float(node.value)
+        raise ValueError(f"Constante non numérique : {node.value}")
+
+    def _eval_ast_name(self, node: ast.Name) -> float:
+        name = node.id
+        if name.lower() in self.ALLOWED_MATH_NAMES:
+            val = self.ALLOWED_MATH_NAMES[name.lower()]
+            if isinstance(val, (int, float)):
+                return float(val)
+        if name in self.alias_to_cell:
+            target_ref = self.alias_to_cell[name]
+            return self.get_cell_value(target_ref)
+        upper_name = name.upper()
+        if upper_name in self.cells:
+            return self.get_cell_value(upper_name)
+        raise NameError(f"Identifiant ou cellule inconnue : '{name}'")
+
+    def _eval_ast_unary(self, node: ast.UnaryOp) -> float:
+        operand_val = self._eval_ast_node(node.operand)
+        if isinstance(node.op, ast.UAdd):
+            return +operand_val
+        if isinstance(node.op, ast.USub):
+            return -operand_val
+        raise ValueError("Opérateur unaire non supporté")
+
+    def _eval_ast_binop(self, node: ast.BinOp) -> float:
+        left_val = self._eval_ast_node(node.left)
+        right_val = self._eval_ast_node(node.right)
+        if isinstance(node.op, ast.Add):
+            return left_val + right_val
+        if isinstance(node.op, ast.Sub):
+            return left_val - right_val
+        if isinstance(node.op, ast.Mult):
+            return left_val * right_val
+        if isinstance(node.op, ast.Div):
+            if abs(right_val) < 1e-15:
+                raise ZeroDivisionError("Division par zéro (#DIV/0)")
+            return left_val / right_val
+        if isinstance(node.op, ast.Pow):
+            return left_val ** right_val
+        raise ValueError("Opérateur binaire non supporté")
+
+    def _eval_ast_call(self, node: ast.Call) -> float:
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id.lower()
+            if func_name in self.ALLOWED_MATH_NAMES:
+                func = self.ALLOWED_MATH_NAMES[func_name]
+                if callable(func):
+                    args = [self._eval_ast_node(arg) for arg in node.args]
+                    return float(func(*args))
+        raise ValueError(f"Fonction non autorisée ou inconnue : {ast.dump(node.func)}")
+
     def _eval_ast_node(self, node: ast.AST) -> float:
         """Évalue récursivement les nœuds de l'AST autorisés."""
         if isinstance(node, ast.Constant):
-            if isinstance(node.value, (int, float)):
-                return float(node.value)
-            raise ValueError(f"Constante non numérique : {node.value}")
-
+            return self._eval_ast_constant(node)
         if isinstance(node, ast.Name):
-            name = node.id
-            if name.lower() in self.ALLOWED_MATH_NAMES:
-                val = self.ALLOWED_MATH_NAMES[name.lower()]
-                if isinstance(val, (int, float)):
-                    return float(val)
-            if name in self.alias_to_cell:
-                target_ref = self.alias_to_cell[name]
-                return self.get_cell_value(target_ref)
-            upper_name = name.upper()
-            if upper_name in self.cells:
-                return self.get_cell_value(upper_name)
-            raise NameError(f"Identifiant ou cellule inconnue : '{name}'")
-
+            return self._eval_ast_name(node)
         if isinstance(node, ast.UnaryOp):
-            operand_val = self._eval_ast_node(node.operand)
-            if isinstance(node.op, ast.UAdd):
-                return +operand_val
-            if isinstance(node.op, ast.USub):
-                return -operand_val
-            raise ValueError("Opérateur unaire non supporté")
-
+            return self._eval_ast_unary(node)
         if isinstance(node, ast.BinOp):
-            left_val = self._eval_ast_node(node.left)
-            right_val = self._eval_ast_node(node.right)
-
-            if isinstance(node.op, ast.Add):
-                return left_val + right_val
-            if isinstance(node.op, ast.Sub):
-                return left_val - right_val
-            if isinstance(node.op, ast.Mult):
-                return left_val * right_val
-            if isinstance(node.op, ast.Div):
-                if abs(right_val) < 1e-15:
-                    raise ZeroDivisionError("Division par zéro (#DIV/0)")
-                return left_val / right_val
-            if isinstance(node.op, ast.Pow):
-                return left_val ** right_val
-            raise ValueError("Opérateur binaire non supporté")
-
+            return self._eval_ast_binop(node)
         if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                func_name = node.func.id.lower()
-                if func_name in self.ALLOWED_MATH_NAMES:
-                    func = self.ALLOWED_MATH_NAMES[func_name]
-                    if callable(func):
-                        args = [self._eval_ast_node(arg) for arg in node.args]
-                        return float(func(*args))
-            raise ValueError(f"Fonction non autorisée ou inconnue : {ast.dump(node.func)}")
-
+            return self._eval_ast_call(node)
         raise ValueError(f"Nœud d'expression non supporté : {type(node).__name__}")
 
     def to_csv(self) -> str:

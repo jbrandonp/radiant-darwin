@@ -142,21 +142,46 @@ class STEPImporter:
         cartesian_points = self._parse_cartesian_points(records)
         directions = self._parse_directions(records)
 
-        # Déterminer le nom du solide
-        chosen_name = solid_name
-        if not chosen_name:
-            for r in records.values():
-                if "SOLID" in r.entity_type:
-                    name_match = re.search(r"'([^']+)'", r.raw_args)
-                    if name_match:
-                        chosen_name = name_match.group(1)
-                        break
-        if not chosen_name:
-            chosen_name = "ImportedSTEPSolid"
-
+        chosen_name = self._extract_chosen_name(records, solid_name)
         brep = NexusBRep(f"{chosen_name}_brep")
 
-        # 1. Reconstruction des sommets (VERTEX_POINT ou points cartésiens directs)
+        # 1. Sommets
+        v_map, c_map = self._reconstruct_vertices(brep, records, cartesian_points)
+
+        # 2. Arêtes
+        e_map = self._reconstruct_edges(brep, records, cartesian_points, v_map, c_map)
+
+        # 3. Boucles (Wires)
+        w_map = self._reconstruct_wires(brep, records, e_map, c_map, v_map, cartesian_points)
+
+        # 4. Surfaces
+        s_map = self._reconstruct_surfaces(records, cartesian_points, directions)
+
+        # 5. Faces et Coque (Shell)
+        self._reconstruct_faces(brep, records, s_map, w_map, chosen_name)
+
+        # 6. Maillage Manifold3D
+        internal_manifold = self._construct_manifold_from_brep(brep, cartesian_points, records)
+        return NexusSolid(name=chosen_name, brep=brep, internal_manifold=internal_manifold)
+
+    def _extract_chosen_name(self, records: Dict[int, STEPRecord], solid_name: Optional[str]) -> str:
+        """Détermine le nom du solide à partir des métadonnées ou d'une valeur par défaut."""
+        if solid_name:
+            return solid_name
+        for r in records.values():
+            if "SOLID" in r.entity_type:
+                name_match = re.search(r"'([^']+)'", r.raw_args)
+                if name_match:
+                    return name_match.group(1)
+        return "ImportedSTEPSolid"
+
+    def _reconstruct_vertices(
+        self,
+        brep: NexusBRep,
+        records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray]
+    ) -> Tuple[Dict[int, NexusVertex], Dict[int, NexusVertex]]:
+        """Reconstruit les sommets du modèle B-Rep."""
         vertex_point_map: Dict[int, NexusVertex] = {}
         cartesian_vertex_map: Dict[int, NexusVertex] = {}
 
@@ -178,7 +203,20 @@ class STEPImporter:
                 brep.add_vertex(v)
                 cartesian_vertex_map[pt_id] = v
 
-        def resolve_vertex(ref_id: int) -> Optional[NexusVertex]:
+        return vertex_point_map, cartesian_vertex_map
+
+    def _reconstruct_edges(
+        self,
+        brep: NexusBRep,
+        records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray],
+        vertex_point_map: Dict[int, NexusVertex],
+        cartesian_vertex_map: Dict[int, NexusVertex]
+    ) -> Dict[int, NexusEdge]:
+        """Reconstruit les arêtes B-Rep et associe les courbes analytiques."""
+        edge_curve_map: Dict[int, NexusEdge] = {}
+
+        def resolve_vert(ref_id: int) -> Optional[NexusVertex]:
             if ref_id in vertex_point_map:
                 return vertex_point_map[ref_id]
             if ref_id in cartesian_vertex_map:
@@ -191,40 +229,61 @@ class STEPImporter:
                 return vert
             return None
 
-        # 2. Reconstruction des arêtes (EDGE_CURVE)
-        edge_curve_map: Dict[int, NexusEdge] = {}
         for r in records.values():
             if r.entity_type == "EDGE_CURVE":
                 ref_ids = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
                 if len(ref_ids) >= 2:
-                    v_start_id, v_end_id = ref_ids[0], ref_ids[1]
-                    v_start = resolve_vertex(v_start_id)
-                    v_end = resolve_vertex(v_end_id)
+                    v_start = resolve_vert(ref_ids[0])
+                    v_end = resolve_vert(ref_ids[1])
                     if v_start and v_end:
                         curve_id = ref_ids[2] if len(ref_ids) >= 3 else 0
                         curve_rec = records.get(curve_id)
                         c_geom: NexusCurve
                         if curve_rec and curve_rec.entity_type == "CIRCLE":
-                            # Trouver le centre
-                            axis_ref = [int(x) for x in re.findall(r"#(\d+)", curve_rec.raw_args)]
                             center = v_start.point
-                            if axis_ref:
-                                ax_rec = records.get(axis_ref[0])
-                                if ax_rec:
-                                    ax_pt_ids = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
-                                    if ax_pt_ids and ax_pt_ids[0] in cartesian_points:
-                                        center = cartesian_points[ax_pt_ids[0]]
+                            axis_ref = [int(x) for x in re.findall(r"#(\d+)", curve_rec.raw_args)]
+                            if axis_ref and axis_ref[0] in records:
+                                ax_rec = records[axis_ref[0]]
+                                ax_pt_ids = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
+                                if ax_pt_ids and ax_pt_ids[0] in cartesian_points:
+                                    center = cartesian_points[ax_pt_ids[0]]
                             radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", curve_rec.raw_args)]
                             rad = radius_floats[-1] if radius_floats else 5.0
                             c_geom = NexusCircleCurve(f"Circle_{r.entity_id}", center, np.array([0.0, 0.0, 1.0]), rad)
                         else:
                             c_geom = NexusLineCurve(f"Line_{r.entity_id}", v_start.point, v_end.point)
+
                         edge = NexusEdge(f"E_{r.entity_id}", c_geom, v_start, v_end)
                         brep.add_edge(edge)
                         edge_curve_map[r.entity_id] = edge
 
-        # 3. Reconstruction des boucles (POLY_LOOP ou EDGE_LOOP)
+        return edge_curve_map
+
+    def _reconstruct_wires(
+        self,
+        brep: NexusBRep,
+        records: Dict[int, STEPRecord],
+        edge_curve_map: Dict[int, NexusEdge],
+        cartesian_vertex_map: Dict[int, NexusVertex],
+        vertex_point_map: Dict[int, NexusVertex],
+        cartesian_points: Dict[int, np.ndarray]
+    ) -> Dict[int, NexusWire]:
+        """Reconstruit les boucles fermées orientées."""
         loop_wire_map: Dict[int, NexusWire] = {}
+
+        def resolve_vert(ref_id: int) -> Optional[NexusVertex]:
+            if ref_id in vertex_point_map:
+                return vertex_point_map[ref_id]
+            if ref_id in cartesian_vertex_map:
+                return cartesian_vertex_map[ref_id]
+            if ref_id in cartesian_points:
+                pt = cartesian_points[ref_id]
+                vert = NexusVertex(f"V_pt_{ref_id}", float(pt[0]), float(pt[1]), float(pt[2]))
+                brep.add_vertex(vert)
+                cartesian_vertex_map[ref_id] = vert
+                return vert
+            return None
+
         for r in records.values():
             if r.entity_type == "POLY_LOOP":
                 ref_pt_ids = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
@@ -232,8 +291,8 @@ class STEPImporter:
                 for i in range(len(ref_pt_ids)):
                     p_a_id = ref_pt_ids[i]
                     p_b_id = ref_pt_ids[(i + 1) % len(ref_pt_ids)]
-                    v_a = resolve_vertex(p_a_id)
-                    v_b = resolve_vertex(p_b_id)
+                    v_a = resolve_vert(p_a_id)
+                    v_b = resolve_vert(p_b_id)
                     if v_a and v_b:
                         edge_key = f"E_poly_{p_a_id}_{p_b_id}"
                         if edge_key not in brep.edges:
@@ -249,7 +308,7 @@ class STEPImporter:
 
             elif r.entity_type == "EDGE_LOOP":
                 oriented_refs = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
-                loop_edges: List[NexusEdge] = []
+                loop_edges = []
                 for ore_id in oriented_refs:
                     oe_rec = records.get(ore_id)
                     if oe_rec and oe_rec.entity_type == "ORIENTED_EDGE":
@@ -264,7 +323,15 @@ class STEPImporter:
                 brep.add_wire(wire)
                 loop_wire_map[r.entity_id] = wire
 
-        # 4. Reconstruction des surfaces de support
+        return loop_wire_map
+
+    def _reconstruct_surfaces(
+        self,
+        records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray],
+        directions: Dict[int, np.ndarray]
+    ) -> Dict[int, NexusSurface]:
+        """Reconstruit les surfaces géométriques sous-jacentes."""
         surface_map: Dict[int, NexusSurface] = {}
         for r in records.values():
             if r.entity_type == "PLANE":
@@ -278,8 +345,7 @@ class STEPImporter:
                         origin = cartesian_points[inner_refs[0]]
                     if len(inner_refs) >= 2 and inner_refs[1] in directions:
                         normal = directions[inner_refs[1]]
-                surf = NexusPlaneSurface(f"Plane_{r.entity_id}", origin, normal)
-                surface_map[r.entity_id] = surf
+                surface_map[r.entity_id] = NexusPlaneSurface(f"Plane_{r.entity_id}", origin, normal)
 
             elif r.entity_type == "CYLINDRICAL_SURFACE":
                 origin = np.array([0.0, 0.0, 0.0])
@@ -294,8 +360,7 @@ class STEPImporter:
                         axis = directions[inner_refs[1]]
                 radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", r.raw_args)]
                 rad = radius_floats[-1] if radius_floats else 10.0
-                surf = NexusCylinderSurface(f"Cyl_{r.entity_id}", origin, axis, rad)
-                surface_map[r.entity_id] = surf
+                surface_map[r.entity_id] = NexusCylinderSurface(f"Cyl_{r.entity_id}", origin, axis, rad)
 
             elif r.entity_type == "SPHERICAL_SURFACE":
                 center = np.array([0.0, 0.0, 0.0])
@@ -307,10 +372,19 @@ class STEPImporter:
                         center = cartesian_points[inner_refs[0]]
                 radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", r.raw_args)]
                 rad = radius_floats[-1] if radius_floats else 10.0
-                surf = NexusSphereSurface(f"Sphere_{r.entity_id}", center, rad)
-                surface_map[r.entity_id] = surf
+                surface_map[r.entity_id] = NexusSphereSurface(f"Sphere_{r.entity_id}", center, rad)
 
-        # 5. Reconstruction des faces (ADVANCED_FACE)
+        return surface_map
+
+    def _reconstruct_faces(
+        self,
+        brep: NexusBRep,
+        records: Dict[int, STEPRecord],
+        surface_map: Dict[int, NexusSurface],
+        loop_wire_map: Dict[int, NexusWire],
+        chosen_name: str
+    ) -> None:
+        """Reconstruit les faces analytiques et la coque globale."""
         face_list: List[NexusFace] = []
         for r in records.values():
             if "ADVANCED_FACE" in r.entity_type or r.entity_type == "FACE":
@@ -334,21 +408,18 @@ class STEPImporter:
                             face_surf = surface_map[ref_id]
 
                 if outer_wire is None and ref_ids:
-                    # Trouver le premier wire disponible
                     for ref_id in ref_ids:
                         if ref_id in loop_wire_map:
                             outer_wire = loop_wire_map[ref_id]
                             break
 
                 if outer_wire is None:
-                    # Créer un wire vide par défaut
                     outer_wire = NexusWire(f"EmptyWire_{r.entity_id}", [])
                     brep.add_wire(outer_wire)
 
                 if face_surf is None:
                     face_surf = NexusPlaneSurface(f"DefaultPlane_{r.entity_id}", np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
 
-                # Calcul approché de l'aire
                 wire_pts = outer_wire.sample_points(16)
                 area = 0.0
                 if len(wire_pts) >= 3:
@@ -364,11 +435,6 @@ class STEPImporter:
         if face_list:
             shell = NexusShell(f"Shell_{chosen_name}", face_list, is_closed=True)
             brep.add_shell(shell)
-
-        # 6. Construction du maillage Manifold3D étanche
-        internal_manifold = self._construct_manifold_from_brep(brep, cartesian_points, records)
-
-        return NexusSolid(name=chosen_name, brep=brep, internal_manifold=internal_manifold)
 
     def _construct_manifold_from_brep(
         self,

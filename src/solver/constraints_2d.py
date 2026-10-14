@@ -226,149 +226,120 @@ class SketchConstraintSolver2D:
         """Calcule le vecteur des résidus de contraintes pour un état x = [u0, v0, ...]."""
         num_pts = len(self.points)
         res: List[float] = []
-
         for c in self.constraints:
-            c_type = c.constraint_type
-            indices = c.point_indices
-            invalid_index = False
-            for idx in indices:
-                if idx < 0 or idx >= num_pts:
-                    invalid_index = True
-                    break
-            if invalid_index:
-                res.append(100.0)
-                continue
-
-            if c_type == ConstraintType.COINCIDENT:
-                i_a, i_b = indices[0], indices[1]
-                ua, va = x[2 * i_a], x[2 * i_a + 1]
-                ub, vb = x[2 * i_b], x[2 * i_b + 1]
-                res.append(ua - ub)
-                res.append(va - vb)
-
-            elif c_type == ConstraintType.HORIZONTAL:
-                i_a, i_b = indices[0], indices[1]
-                va = x[2 * i_a + 1]
-                vb = x[2 * i_b + 1]
-                res.append(va - vb)
-
-            elif c_type == ConstraintType.VERTICAL:
-                i_a, i_b = indices[0], indices[1]
-                ua = x[2 * i_a]
-                ub = x[2 * i_b]
-                res.append(ua - ub)
-
-            elif c_type == ConstraintType.DISTANCE:
-                i_a, i_b = indices[0], indices[1]
-                ua, va = x[2 * i_a], x[2 * i_a + 1]
-                ub, vb = x[2 * i_b], x[2 * i_b + 1]
-                current_dist = np.hypot(ua - ub, va - vb)
-                res.append(current_dist - c.target_value)
-
-            elif c_type == ConstraintType.FIXED:
-                i_a = indices[0]
-                ua, va = x[2 * i_a], x[2 * i_a + 1]
-                res.append(ua - c.target_value)
-                res.append(va - c.target_value_v)
-
-            elif c_type == ConstraintType.PARALLEL:
-                i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
-                dx_a = x[2 * i_a2] - x[2 * i_a1]
-                dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
-                dx_b = x[2 * i_b2] - x[2 * i_b1]
-                dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
-                res.append(dx_a * dy_b - dy_a * dx_b)
-
-            elif c_type == ConstraintType.PERPENDICULAR:
-                i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
-                dx_a = x[2 * i_a2] - x[2 * i_a1]
-                dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
-                dx_b = x[2 * i_b2] - x[2 * i_b1]
-                dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
-                res.append(dx_a * dx_b + dy_a * dy_b)
-
-            elif c_type == ConstraintType.EQUAL:
-                i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
-                dist_a = np.hypot(x[2 * i_a2] - x[2 * i_a1], x[2 * i_a2 + 1] - x[2 * i_a1 + 1])
-                dist_b = np.hypot(x[2 * i_b2] - x[2 * i_b1], x[2 * i_b2 + 1] - x[2 * i_b1 + 1])
-                res.append(dist_a - dist_b)
-
-            elif c_type == ConstraintType.ANGLE:
-                i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
-                dx_a = x[2 * i_a2] - x[2 * i_a1]
-                dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
-                dx_b = x[2 * i_b2] - x[2 * i_b1]
-                dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
-                len_a = float(np.hypot(dx_a, dy_a))
-                len_b = float(np.hypot(dx_b, dy_b))
-                if len_a > 1e-9 and len_b > 1e-9:
-                    cos_target = float(np.cos(np.radians(c.target_value)))
-                    dot_prod = (dx_a * dx_b + dy_a * dy_b) / (len_a * len_b)
-                    res.append(dot_prod - cos_target)
-                else:
-                    res.append(0.0)
-
-            elif c_type == ConstraintType.POINT_ON_LINE:
-                i_l1, i_l2, i_p = indices[0], indices[1], indices[2]
-                dx_l = x[2 * i_l2] - x[2 * i_l1]
-                dy_l = x[2 * i_l2 + 1] - x[2 * i_l1 + 1]
-                dx_p = x[2 * i_p] - x[2 * i_l1]
-                dy_p = x[2 * i_p + 1] - x[2 * i_l1 + 1]
-                len_l = float(np.hypot(dx_l, dy_l))
-                if len_l > 1e-9:
-                    res.append((dx_l * dy_p - dy_l * dx_p) / len_l)
-                else:
-                    res.append(0.0)
-
-            elif c_type == ConstraintType.TANGENT:
-                i_l1, i_l2, i_c = indices[0], indices[1], indices[2]
-                x1, y1 = x[2 * i_l1], x[2 * i_l1 + 1]
-                x2, y2 = x[2 * i_l2], x[2 * i_l2 + 1]
-                xc, yc = x[2 * i_c], x[2 * i_c + 1]
-                dx = x2 - x1
-                dy = y2 - y1
-                line_len = float(np.hypot(dx, dy))
-                if line_len > 1e-9:
-                    dist_center = abs(dx * (y1 - yc) - dy * (x1 - xc)) / line_len
-                    res.append(dist_center - c.target_value)
-                else:
-                    res.append(0.0)
-
-            elif c_type == ConstraintType.EXTERNAL_REFERENCE:
-                i_a = indices[0]
-                ua, va = x[2 * i_a], x[2 * i_a + 1]
-                res.append(ua - c.target_value)
-                res.append(va - c.target_value_v)
-
-            elif c_type == ConstraintType.G2_CURVATURE:
-                i_a0, i_a1, i_joint, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3], indices[4]
-                # Tangente côté A (arrivée vers le joint)
-                v_ax = x[2 * i_joint] - x[2 * i_a1]
-                v_ay = x[2 * i_joint + 1] - x[2 * i_a1 + 1]
-                # Tangente côté B (départ depuis le joint)
-                v_bx = x[2 * i_b1] - x[2 * i_joint]
-                v_by = x[2 * i_b1 + 1] - x[2 * i_joint + 1]
-
-                # Continuité G1 : Colinéarité des tangentes (produit vectoriel 2D nul)
-                res.append(v_ax * v_by - v_ay * v_bx)
-
-                # Continuité G2 : Égalité des courbures kappa = (vx * ay - vy * ax) / (vx^2 + vy^2)^(3/2)
-                a_ax = x[2 * i_joint] - 2.0 * x[2 * i_a1] + x[2 * i_a0]
-                a_ay = x[2 * i_joint + 1] - 2.0 * x[2 * i_a1 + 1] + x[2 * i_a0 + 1]
-                v_a_norm_sq = v_ax * v_ax + v_ay * v_ay
-
-                a_bx = x[2 * i_b2] - 2.0 * x[2 * i_b1] + x[2 * i_joint]
-                a_by = x[2 * i_b2 + 1] - 2.0 * x[2 * i_b1 + 1] + x[2 * i_joint + 1]
-                v_b_norm_sq = v_bx * v_bx + v_by * v_by
-
-                if v_a_norm_sq > 1e-12 and v_b_norm_sq > 1e-12:
-                    kappa_a = (v_ax * a_ay - v_ay * a_ax) / (v_a_norm_sq ** 1.5)
-                    kappa_b = (v_bx * a_by - v_by * a_bx) / (v_b_norm_sq ** 1.5)
-                    res.append(kappa_a - kappa_b)
-                else:
-                    res.append(0.0)
-
+            res.extend(self._eval_single_constraint_residual(c, x, num_pts))
         return np.array(res, dtype=np.float64)
+
+    def _eval_single_constraint_residual(self, c: GeometricConstraint2D, x: np.ndarray, num_pts: int) -> List[float]:
+        """Calcule les résidus pour une seule contrainte géométrique."""
+        c_type = c.constraint_type
+        indices = c.point_indices
+        for idx in indices:
+            if idx < 0 or idx >= num_pts:
+                return [100.0]
+
+        if c_type == ConstraintType.COINCIDENT:
+            i_a, i_b = indices[0], indices[1]
+            return [float(x[2 * i_a] - x[2 * i_b]), float(x[2 * i_a + 1] - x[2 * i_b + 1])]
+
+        if c_type == ConstraintType.HORIZONTAL:
+            i_a, i_b = indices[0], indices[1]
+            return [float(x[2 * i_a + 1] - x[2 * i_b + 1])]
+
+        if c_type == ConstraintType.VERTICAL:
+            i_a, i_b = indices[0], indices[1]
+            return [float(x[2 * i_a] - x[2 * i_b])]
+
+        if c_type == ConstraintType.DISTANCE:
+            i_a, i_b = indices[0], indices[1]
+            cur_dist = float(np.hypot(x[2 * i_a] - x[2 * i_b], x[2 * i_a + 1] - x[2 * i_b + 1]))
+            return [cur_dist - c.target_value]
+
+        if c_type in (ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE):
+            i_a = indices[0]
+            return [float(x[2 * i_a] - c.target_value), float(x[2 * i_a + 1] - c.target_value_v)]
+
+        if c_type == ConstraintType.PARALLEL:
+            i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+            dx_a = x[2 * i_a2] - x[2 * i_a1]
+            dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
+            dx_b = x[2 * i_b2] - x[2 * i_b1]
+            dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
+            return [float(dx_a * dy_b - dy_a * dx_b)]
+
+        if c_type == ConstraintType.PERPENDICULAR:
+            i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+            dx_a = x[2 * i_a2] - x[2 * i_a1]
+            dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
+            dx_b = x[2 * i_b2] - x[2 * i_b1]
+            dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
+            return [float(dx_a * dx_b + dy_a * dy_b)]
+
+        if c_type == ConstraintType.EQUAL:
+            i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+            dist_a = float(np.hypot(x[2 * i_a2] - x[2 * i_a1], x[2 * i_a2 + 1] - x[2 * i_a1 + 1]))
+            dist_b = float(np.hypot(x[2 * i_b2] - x[2 * i_b1], x[2 * i_b2 + 1] - x[2 * i_b1 + 1]))
+            return [dist_a - dist_b]
+
+        if c_type == ConstraintType.ANGLE:
+            i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
+            dx_a = x[2 * i_a2] - x[2 * i_a1]
+            dy_a = x[2 * i_a2 + 1] - x[2 * i_a1 + 1]
+            dx_b = x[2 * i_b2] - x[2 * i_b1]
+            dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
+            len_a = float(np.hypot(dx_a, dy_a))
+            len_b = float(np.hypot(dx_b, dy_b))
+            if len_a > 1e-9 and len_b > 1e-9:
+                cos_target = float(np.cos(np.radians(c.target_value)))
+                dot_prod = float((dx_a * dx_b + dy_a * dy_b) / (len_a * len_b))
+                return [dot_prod - cos_target]
+            return [0.0]
+
+        if c_type == ConstraintType.POINT_ON_LINE:
+            i_l1, i_l2, i_p = indices[0], indices[1], indices[2]
+            dx_l = x[2 * i_l2] - x[2 * i_l1]
+            dy_l = x[2 * i_l2 + 1] - x[2 * i_l1 + 1]
+            dx_p = x[2 * i_p] - x[2 * i_l1]
+            dy_p = x[2 * i_p + 1] - x[2 * i_l1 + 1]
+            len_l = float(np.hypot(dx_l, dy_l))
+            return [float((dx_l * dy_p - dy_l * dx_p) / len_l)] if len_l > 1e-9 else [0.0]
+
+        if c_type == ConstraintType.TANGENT:
+            i_l1, i_l2, i_c = indices[0], indices[1], indices[2]
+            x1, y1 = x[2 * i_l1], x[2 * i_l1 + 1]
+            x2, y2 = x[2 * i_l2], x[2 * i_l2 + 1]
+            xc, yc = x[2 * i_c], x[2 * i_c + 1]
+            dx = x2 - x1
+            dy = y2 - y1
+            line_len = float(np.hypot(dx, dy))
+            if line_len > 1e-9:
+                dist_center = float(abs(dx * (y1 - yc) - dy * (x1 - xc)) / line_len)
+                return [dist_center - c.target_value]
+            return [0.0]
+
+        if c_type == ConstraintType.G2_CURVATURE:
+            i_a0, i_a1, i_joint, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3], indices[4]
+            v_ax = x[2 * i_joint] - x[2 * i_a1]
+            v_ay = x[2 * i_joint + 1] - x[2 * i_a1 + 1]
+            v_bx = x[2 * i_b1] - x[2 * i_joint]
+            v_by = x[2 * i_b1 + 1] - x[2 * i_joint + 1]
+            g1_res = float(v_ax * v_by - v_ay * v_bx)
+
+            a_ax = x[2 * i_joint] - 2.0 * x[2 * i_a1] + x[2 * i_a0]
+            a_ay = x[2 * i_joint + 1] - 2.0 * x[2 * i_a1 + 1] + x[2 * i_a0 + 1]
+            v_a_norm_sq = float(v_ax * v_ax + v_ay * v_ay)
+            a_bx = x[2 * i_b2] - 2.0 * x[2 * i_b1] + x[2 * i_joint]
+            a_by = x[2 * i_b2 + 1] - 2.0 * x[2 * i_b1 + 1] + x[2 * i_joint + 1]
+            v_b_norm_sq = float(v_bx * v_bx + v_by * v_by)
+
+            g2_res = 0.0
+            if v_a_norm_sq > 1e-12 and v_b_norm_sq > 1e-12:
+                kappa_a = (v_ax * a_ay - v_ay * a_ax) / (v_a_norm_sq ** 1.5)
+                kappa_b = (v_bx * a_by - v_by * a_bx) / (v_b_norm_sq ** 1.5)
+                g2_res = float(kappa_a - kappa_b)
+            return [g1_res, g2_res]
+
+        return [0.0]
 
     def _evaluate_jacobian(self, x: np.ndarray) -> np.ndarray:
         """
@@ -383,123 +354,132 @@ class SketchConstraintSolver2D:
 
         row = 0
         for c in self.constraints:
-            c_type = c.constraint_type
-            indices = c.point_indices
-
-            invalid_index = False
-            for idx in indices:
-                if idx < 0 or idx >= num_pts:
-                    invalid_index = True
-                    break
-            if invalid_index:
-                num_sub_eqs = 2 if c_type in (ConstraintType.COINCIDENT, ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE, ConstraintType.G2_CURVATURE) else 1
-                row += num_sub_eqs
-                continue
-
-            if c_type == ConstraintType.COINCIDENT:
-                ia, ib = indices[0], indices[1]
-
-                j_mat[row, 2 * ia] = 1.0
-                j_mat[row, 2 * ib] = -1.0
-                j_mat[row + 1, 2 * ia + 1] = 1.0
-                j_mat[row + 1, 2 * ib + 1] = -1.0
-                row += 2
-
-            elif c_type == ConstraintType.HORIZONTAL:
-                ia, ib = indices[0], indices[1]
-                j_mat[row, 2 * ia + 1] = 1.0
-                j_mat[row, 2 * ib + 1] = -1.0
-                row += 1
-
-            elif c_type == ConstraintType.VERTICAL:
-                ia, ib = indices[0], indices[1]
-                j_mat[row, 2 * ia] = 1.0
-                j_mat[row, 2 * ib] = -1.0
-                row += 1
-
-            elif c_type == ConstraintType.DISTANCE:
-                ia, ib = indices[0], indices[1]
-                dx = x[2 * ib] - x[2 * ia]
-                dy = x[2 * ib + 1] - x[2 * ia + 1]
-                dist = float(np.hypot(dx, dy))
-                if dist > 1e-12:
-                    j_mat[row, 2 * ia] = -dx / dist
-                    j_mat[row, 2 * ia + 1] = -dy / dist
-                    j_mat[row, 2 * ib] = dx / dist
-                    j_mat[row, 2 * ib + 1] = dy / dist
-                row += 1
-
-            elif c_type in (ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE):
-                ia = indices[0]
-                j_mat[row, 2 * ia] = 1.0
-                j_mat[row + 1, 2 * ia + 1] = 1.0
-                row += 2
-
-            elif c_type == ConstraintType.PARALLEL:
-                ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
-                dx_a = x[2 * ia2] - x[2 * ia1]
-                dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
-                dx_b = x[2 * ib2] - x[2 * ib1]
-                dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
-                j_mat[row, 2 * ia1] = -dy_b
-                j_mat[row, 2 * ia2] = dy_b
-                j_mat[row, 2 * ia1 + 1] = dx_b
-                j_mat[row, 2 * ia2 + 1] = -dx_b
-                j_mat[row, 2 * ib1] = dy_a
-                j_mat[row, 2 * ib2] = -dy_a
-                j_mat[row, 2 * ib1 + 1] = -dx_a
-                j_mat[row, 2 * ib2 + 1] = dx_a
-                row += 1
-
-            elif c_type == ConstraintType.PERPENDICULAR:
-                ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
-                dx_a = x[2 * ia2] - x[2 * ia1]
-                dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
-                dx_b = x[2 * ib2] - x[2 * ib1]
-                dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
-                j_mat[row, 2 * ia1] = -dx_b
-                j_mat[row, 2 * ia2] = dx_b
-                j_mat[row, 2 * ia1 + 1] = -dy_b
-                j_mat[row, 2 * ia2 + 1] = dy_b
-                j_mat[row, 2 * ib1] = -dx_a
-                j_mat[row, 2 * ib2] = dx_a
-                j_mat[row, 2 * ib1 + 1] = -dy_a
-                j_mat[row, 2 * ib2 + 1] = dy_a
-                row += 1
-
-            elif c_type == ConstraintType.EQUAL:
-                ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
-                dx_a = x[2 * ia2] - x[2 * ia1]
-                dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
-                dx_b = x[2 * ib2] - x[2 * ib1]
-                dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
-                len_a = float(np.hypot(dx_a, dy_a))
-                len_b = float(np.hypot(dx_b, dy_b))
-                if len_a > 1e-12:
-                    j_mat[row, 2 * ia1] = -dx_a / len_a
-                    j_mat[row, 2 * ia1 + 1] = -dy_a / len_a
-                    j_mat[row, 2 * ia2] = dx_a / len_a
-                    j_mat[row, 2 * ia2 + 1] = dy_a / len_a
-                if len_b > 1e-12:
-                    j_mat[row, 2 * ib1] = dx_b / len_b
-                    j_mat[row, 2 * ib1 + 1] = dy_b / len_b
-                    j_mat[row, 2 * ib2] = -dx_b / len_b
-                    j_mat[row, 2 * ib2 + 1] = -dy_b / len_b
-                row += 1
-
-            else:
-                eps = 1e-7
-                for col in range(num_vars):
-                    x_step = x.copy()
-                    x_step[col] += eps
-                    f_step = self._evaluate_residuals(x_step)
-                    num_sub_eqs = 2 if c_type == ConstraintType.G2_CURVATURE else 1
-                    for sub_k in range(num_sub_eqs):
-                        if row + sub_k < num_eqs:
-                            j_mat[row + sub_k, col] = (f_step[row + sub_k] - f0[row + sub_k]) / eps
-                row += (2 if c_type == ConstraintType.G2_CURVATURE else 1)
+            row += self._fill_single_constraint_jacobian(c, x, j_mat, row, num_pts, f0, num_vars, num_eqs)
 
         return j_mat
+
+    def _fill_single_constraint_jacobian(
+        self,
+        c: GeometricConstraint2D,
+        x: np.ndarray,
+        j_mat: np.ndarray,
+        row: int,
+        num_pts: int,
+        f0: np.ndarray,
+        num_vars: int,
+        num_eqs: int
+    ) -> int:
+        """Remplit les dérivées partielles analytiques pour une contrainte et retourne le nombre de lignes écrites."""
+        c_type = c.constraint_type
+        indices = c.point_indices
+
+        for idx in indices:
+            if idx < 0 or idx >= num_pts:
+                num_sub_eqs = 2 if c_type in (ConstraintType.COINCIDENT, ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE, ConstraintType.G2_CURVATURE) else 1
+                return num_sub_eqs
+
+        if c_type == ConstraintType.COINCIDENT:
+            ia, ib = indices[0], indices[1]
+            j_mat[row, 2 * ia] = 1.0
+            j_mat[row, 2 * ib] = -1.0
+            j_mat[row + 1, 2 * ia + 1] = 1.0
+            j_mat[row + 1, 2 * ib + 1] = -1.0
+            return 2
+
+        if c_type == ConstraintType.HORIZONTAL:
+            ia, ib = indices[0], indices[1]
+            j_mat[row, 2 * ia + 1] = 1.0
+            j_mat[row, 2 * ib + 1] = -1.0
+            return 1
+
+        if c_type == ConstraintType.VERTICAL:
+            ia, ib = indices[0], indices[1]
+            j_mat[row, 2 * ia] = 1.0
+            j_mat[row, 2 * ib] = -1.0
+            return 1
+
+        if c_type == ConstraintType.DISTANCE:
+            ia, ib = indices[0], indices[1]
+            dx = x[2 * ib] - x[2 * ia]
+            dy = x[2 * ib + 1] - x[2 * ia + 1]
+            dist = float(np.hypot(dx, dy))
+            if dist > 1e-12:
+                j_mat[row, 2 * ia] = -dx / dist
+                j_mat[row, 2 * ia + 1] = -dy / dist
+                j_mat[row, 2 * ib] = dx / dist
+                j_mat[row, 2 * ib + 1] = dy / dist
+            return 1
+
+        if c_type in (ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE):
+            ia = indices[0]
+            j_mat[row, 2 * ia] = 1.0
+            j_mat[row + 1, 2 * ia + 1] = 1.0
+            return 2
+
+        if c_type == ConstraintType.PARALLEL:
+            ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
+            dx_a = x[2 * ia2] - x[2 * ia1]
+            dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
+            dx_b = x[2 * ib2] - x[2 * ib1]
+            dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
+            j_mat[row, 2 * ia1] = -dy_b
+            j_mat[row, 2 * ia2] = dy_b
+            j_mat[row, 2 * ia1 + 1] = dx_b
+            j_mat[row, 2 * ia2 + 1] = -dx_b
+            j_mat[row, 2 * ib1] = dy_a
+            j_mat[row, 2 * ib2] = -dy_a
+            j_mat[row, 2 * ib1 + 1] = -dx_a
+            j_mat[row, 2 * ib2 + 1] = dx_a
+            return 1
+
+        if c_type == ConstraintType.PERPENDICULAR:
+            ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
+            dx_a = x[2 * ia2] - x[2 * ia1]
+            dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
+            dx_b = x[2 * ib2] - x[2 * ib1]
+            dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
+            j_mat[row, 2 * ia1] = -dx_b
+            j_mat[row, 2 * ia2] = dx_b
+            j_mat[row, 2 * ia1 + 1] = -dy_b
+            j_mat[row, 2 * ia2 + 1] = dy_b
+            j_mat[row, 2 * ib1] = -dx_a
+            j_mat[row, 2 * ib2] = dx_a
+            j_mat[row, 2 * ib1 + 1] = -dy_a
+            j_mat[row, 2 * ib2 + 1] = dy_a
+            return 1
+
+        if c_type == ConstraintType.EQUAL:
+            ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
+            dx_a = x[2 * ia2] - x[2 * ia1]
+            dy_a = x[2 * ia2 + 1] - x[2 * ia1 + 1]
+            dx_b = x[2 * ib2] - x[2 * ib1]
+            dy_b = x[2 * ib2 + 1] - x[2 * ib1 + 1]
+            len_a = float(np.hypot(dx_a, dy_a))
+            len_b = float(np.hypot(dx_b, dy_b))
+            if len_a > 1e-12:
+                j_mat[row, 2 * ia1] = -dx_a / len_a
+                j_mat[row, 2 * ia1 + 1] = -dy_a / len_a
+                j_mat[row, 2 * ia2] = dx_a / len_a
+                j_mat[row, 2 * ia2 + 1] = dy_a / len_a
+            if len_b > 1e-12:
+                j_mat[row, 2 * ib1] = dx_b / len_b
+                j_mat[row, 2 * ib1 + 1] = dy_b / len_b
+                j_mat[row, 2 * ib2] = -dx_b / len_b
+                j_mat[row, 2 * ib2 + 1] = -dy_b / len_b
+            return 1
+
+        # Approximation par différences finies centrales pour contraintes non-linéaires complexes
+        eps = 1e-7
+        num_sub_eqs = 2 if c_type == ConstraintType.G2_CURVATURE else 1
+        for col in range(num_vars):
+            x_step = x.copy()
+            x_step[col] += eps
+            f_step = self._evaluate_residuals(x_step)
+            for sub_k in range(num_sub_eqs):
+                if row + sub_k < num_eqs:
+                    j_mat[row + sub_k, col] = (f_step[row + sub_k] - f0[row + sub_k]) / eps
+
+        return num_sub_eqs
 
     def calculate_degrees_of_freedom(self) -> Tuple[int, str]:
         """

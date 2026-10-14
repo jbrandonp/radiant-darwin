@@ -257,6 +257,36 @@ def test_adjoint_state_sensitivity() -> None:
     np.testing.assert_allclose(res.parameter_gradients["theta"], -12.0, atol=1e-5)
 
 
+def test_adjoint_state_sensitivity_vs_finite_differences() -> None:
+    """Valide la convergence exacte de la méthode adjointe O(1) contre des différences finies centrées."""
+    def eval_compliance(theta_val: float) -> float:
+        k_sys = np.array([[theta_val, 50.0], [50.0, 2.0 * theta_val]], dtype=np.float64)
+        f_sys = np.array([200.0, 150.0], dtype=np.float64)
+        u_sys = np.linalg.solve(k_sys, f_sys)
+        return float(0.5 * np.dot(u_sys, f_sys))
+
+    theta_0 = 300.0
+    h_step = 1e-5
+    fd_gradient = (eval_compliance(theta_0 + h_step) - eval_compliance(theta_0 - h_step)) / (2.0 * h_step)
+
+    k0 = np.array([[theta_0, 50.0], [50.0, 2.0 * theta_0]], dtype=np.float64)
+    f0 = np.array([200.0, 150.0], dtype=np.float64)
+    u0 = np.linalg.solve(k0, f0)
+    dk_dtheta = {"theta": np.array([[1.0, 0.0], [0.0, 2.0]], dtype=np.float64)}
+    df_dtheta = {"theta": np.zeros(2, dtype=np.float64)}
+
+    adj_res = AdjointSensitivityEngine.compute_adjoint_gradient(
+        stiffness_matrix=k0,
+        displacement_vector=u0,
+        d_objective_d_displacement=0.5 * f0,
+        d_stiffness_d_params=dk_dtheta,
+        d_force_d_params=df_dtheta
+    )
+    analytic_grad = adj_res.parameter_gradients["theta"]
+    rel_error = abs(analytic_grad - fd_gradient) / abs(fd_gradient)
+    assert rel_error < 1e-6, f"Erreur relative trop élevée: {rel_error}"
+
+
 def test_cutfem_ghost_penalty_and_sdt() -> None:
     """Vérifie la pénalité fantôme CutFEM et le torseur des petits déplacements SDT."""
     # Fraction volumique saine >= 0.2 : pas de pénalité

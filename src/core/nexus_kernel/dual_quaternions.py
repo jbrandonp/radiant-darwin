@@ -129,6 +129,10 @@ class DualQuaternion:
         )
         return DualQuaternion(r, d)
 
+    def multiply(self, other: DualQuaternion) -> DualQuaternion:
+        """Compose deux quaternions duaux : self * other."""
+        return self * other
+
     def transform_point(self, pt: Sequence[float]) -> np.ndarray:
         """
         Transforme un point spatial 3D sans dérive matricielle.

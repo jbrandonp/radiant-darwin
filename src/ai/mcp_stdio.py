@@ -2,7 +2,7 @@
 Serveur Model Context Protocol (MCP) sur flux standardisé stdin/stdout (Transport STDIO).
 Permet l'interfaçage direct avec Claude Desktop, Cursor IDE et tout client MCP
 en lançant simplement 'python -m src.ai.mcp_stdio'.
-Architecture 100% fortement typée sans Any ni object.
+Architecture 100% fortement typée sans Any ni object, compatible multiplateforme et multi-agents.
 """
 
 from __future__ import annotations
@@ -11,9 +11,10 @@ import sys
 from typing import Dict, List, Optional, Tuple, Union
 
 from src.core.document import CADDocument
-from src.core.geometry import Solid, make_box
+from src.core.geometry import Solid, make_box, make_cylinder, make_sphere, make_cone, make_torus
 from src.ai.cad_ai_bridge import CADAIBridge, CADAIExecutionResult
 from src.ai.mcp_schema import get_mcp_tool_definitions, JSONSchemaDict
+from src.ai.shape_synthesizer import ShapeSynthesizer
 from src.ai.cad_script_engine import CADScriptEngine
 from src.ai.cad_validator import CADValidator
 from src.ai.ai_vision_feedback import AIVisionFeedback
@@ -23,6 +24,13 @@ from src.ai.cad_ai_stability import (
     CADTransactionManager,
     CADAIAsyncExecutor,
     SmartErrorDiagnostics
+)
+from src.ai.cad_ai_compatibility import (
+    AIArgumentAdapter,
+    AICompactSerializer,
+    AIPlatformCompat,
+    CompatDict,
+    CompatVal
 )
 
 
@@ -48,14 +56,14 @@ class MCPStdioServer:
         self.document: CADDocument = bridge.document if bridge is not None else CADDocument("Session IA MCP")
         self.bridge: CADAIBridge = bridge if bridge is not None else CADAIBridge(self.document)
 
-    def process_request(self, req: Dict[str, Union[str, int, Dict[str, str]]]) -> MCPResponseDict:
+    def process_request(self, req: Dict[str, Union[str, int, float, bool, CompatDict, List[CompatVal]]]) -> MCPResponseDict:
         """Traite une requête JSON-RPC 2.0 et retourne le dictionnaire de réponse."""
         req_id_raw = req.get("id", "1")
         req_id: str = str(req_id_raw)
         method_raw = req.get("method", "")
         method: str = str(method_raw)
         params_val = req.get("params")
-        params: Dict[str, str] = params_val if isinstance(params_val, dict) else {}
+        params: CompatDict = AIArgumentAdapter.parse_raw_arguments(params_val) if isinstance(params_val, (dict, str)) else {}
 
         if method == "initialize":
             return self._handle_initialize(req_id)
@@ -116,27 +124,165 @@ class MCPStdioServer:
         self.document._notify_change()
         return default_box
 
-    def _dispatch_advanced_tool(self, name: str, args: Dict[str, str]) -> Optional[Tuple[str, bool]]:
+    def _dispatch_primitive(self, name: str, args: CompatDict) -> Optional[Tuple[str, bool]]:
+        """Génère une primitive géométrique 3D de base avec tolérance aux alias et unités."""
+        if name != "create_primitive":
+            return None
+
+        prim_type = AIArgumentAdapter.get_str(args, "primitive_type", "box").lower()
+        dims = AIArgumentAdapter.get_sub_dict(args, "dimensions")
+
+        if prim_type == "cylinder":
+            r = AIArgumentAdapter.get_float(dims, "radius_mm", 0.0) or AIArgumentAdapter.get_float(args, "radius_mm", 15.0)
+            h = AIArgumentAdapter.get_float(dims, "height_mm", 0.0) or AIArgumentAdapter.get_float(args, "height_mm", 40.0)
+            solid = make_cylinder(r, h, center=True)
+        elif prim_type == "sphere":
+            r = AIArgumentAdapter.get_float(dims, "radius_mm", 0.0) or AIArgumentAdapter.get_float(args, "radius_mm", 20.0)
+            solid = make_sphere(r)
+        elif prim_type == "cone":
+            r = AIArgumentAdapter.get_float(dims, "radius_mm", 0.0) or AIArgumentAdapter.get_float(args, "radius_mm", 20.0)
+            h = AIArgumentAdapter.get_float(dims, "height_mm", 0.0) or AIArgumentAdapter.get_float(args, "height_mm", 40.0)
+            solid = make_cone(r, 0.0, h, center=True)
+        elif prim_type == "torus":
+            r_maj = AIArgumentAdapter.get_float(dims, "major_radius_mm", 0.0) or AIArgumentAdapter.get_float(args, "radius_mm", 30.0)
+            r_min = AIArgumentAdapter.get_float(dims, "minor_radius_mm", 0.0) or 8.0
+            solid = make_torus(r_maj, r_min)
+        else:
+            w = AIArgumentAdapter.get_float(dims, "width_mm", 0.0) or AIArgumentAdapter.get_float(args, "width_mm", 50.0)
+            h = AIArgumentAdapter.get_float(dims, "height_mm", 0.0) or AIArgumentAdapter.get_float(args, "height_mm", 50.0)
+            d = AIArgumentAdapter.get_float(dims, "depth_mm", 0.0) or AIArgumentAdapter.get_float(args, "depth_mm", 30.0)
+            solid = make_box(w, h, d, center=True)
+
+        b_id = f"{prim_type.capitalize()}_{len(self.document.bodies) + 1}"
+        self.document.bodies[b_id] = solid
+        self.document._notify_change()
+        return (f"Primitive '{prim_type}' créée avec succès sous l'identifiant '{b_id}' (Volume: {solid.volume():.1f} mm³).", True)
+
+    @staticmethod
+    def _extract_shape_param(p: CompatSubDict, args: CompatDict, key: str, default: float) -> float:
+        """Extrait un paramètre prioritaire de sous-dictionnaire ou d'arguments globaux."""
+        v = AIArgumentAdapter.get_float(p, key, 0.0)
+        if v != 0.0:
+            return v
+        return AIArgumentAdapter.get_float(args, key, default)
+
+    @classmethod
+    def _synthesize_transmission(cls, st: str, p: CompatSubDict, args: CompatDict) -> Optional[Solid]:
+        """Synthétise les composants de transmission mécanique (engrenages, poulies, paliers)."""
+        if st in ("spur_gear", "gear", "engrenage"):
+            teeth = int(cls._extract_shape_param(p, args, "num_teeth", 20.0))
+            mod = cls._extract_shape_param(p, args, "module", 2.0)
+            width = cls._extract_shape_param(p, args, "face_width", 12.0)
+            bore = cls._extract_shape_param(p, args, "bore_diameter", 12.0)
+            return ShapeSynthesizer.create_spur_gear(num_teeth=teeth, module=mod, face_width=width, bore_diameter=bore)
+        if st in ("pillow_block", "palier"):
+            return ShapeSynthesizer.create_pillow_block_bearing()
+        if st in ("pulley", "poulie"):
+            return ShapeSynthesizer.create_v_belt_pulley()
+        return None
+
+    @classmethod
+    def _synthesize_structural(cls, st: str, p: CompatSubDict, args: CompatDict) -> Optional[Solid]:
+        """Synthétise les pièces structurales (brides, dissipateurs, boîtiers, équerres)."""
+        if st in ("pipe_flange", "flange", "bride"):
+            dia = cls._extract_shape_param(p, args, "outer_diameter", 115.0)
+            bore = cls._extract_shape_param(p, args, "bore_diameter", 45.0)
+            th = cls._extract_shape_param(p, args, "flange_thickness", 14.0)
+            return ShapeSynthesizer.create_pipe_flange(outer_diameter=dia, bore_diameter=bore, flange_thickness=th)
+        if st in ("heat_sink", "dissipateur"):
+            w = cls._extract_shape_param(p, args, "width_mm", 80.0)
+            l = cls._extract_shape_param(p, args, "length_mm", 80.0)
+            fins = int(cls._extract_shape_param(p, args, "num_fins", 8.0))
+            return ShapeSynthesizer.create_heat_sink(base_width=w, base_length=l, num_fins=fins)
+        if st in ("enclosure", "boitier", "boîtier"):
+            w = cls._extract_shape_param(p, args, "width_mm", 100.0)
+            l = cls._extract_shape_param(p, args, "length_mm", 70.0)
+            h = cls._extract_shape_param(p, args, "height_mm", 35.0)
+            return ShapeSynthesizer.create_electronics_enclosure(width=w, length=l, height=h)
+        if st in ("bracket", "equerre", "équerre"):
+            w = cls._extract_shape_param(p, args, "width_mm", 50.0)
+            l = cls._extract_shape_param(p, args, "length_mm", 60.0)
+            h = cls._extract_shape_param(p, args, "height_mm", 60.0)
+            return ShapeSynthesizer.create_reinforced_bracket(width=w, leg_length_1=l, leg_length_2=h)
+        return None
+
+    def _dispatch_synthesize_shape(self, name: str, args: CompatDict) -> Optional[Tuple[str, bool]]:
+        """Génère un composant industriel expert via le synthétiseur de formes."""
+        if name != "synthesize_shape":
+            return None
+
+        st = AIArgumentAdapter.get_str(args, "shape_type", "spur_gear").lower()
+        p = AIArgumentAdapter.get_sub_dict(args, "parameters")
+
+        solid = self._synthesize_transmission(st, p, args)
+        if solid is None:
+            solid = self._synthesize_structural(st, p, args)
+        if solid is None:
+            solid = ShapeSynthesizer.create_stepped_shaft([30.0, 20.0, 15.0], [40.0, 50.0, 30.0])
+
+        b_id = f"Synthese_{st}_{len(self.document.bodies) + 1}"
+        self.document.bodies[b_id] = solid
+        self.document._notify_change()
+        return (f"Composant '{st}' synthétisé avec succès sous l'identifiant '{b_id}' (Volume: {solid.volume():.1f} mm³).", True)
+
+    def _dispatch_machining_and_features(self, name: str, args: CompatDict) -> Optional[Tuple[str, bool]]:
+        """Gère les usinages, perçages et opérations booléennes volumiques."""
+        if name == "drill_hole":
+            target_id = AIArgumentAdapter.get_str(args, "target_body_id")
+            solid = self._get_target_solid(target_id)
+            dia = AIArgumentAdapter.get_float(args, "diameter_mm", 10.0)
+            depth = AIArgumentAdapter.get_float(args, "depth_mm", 20.0)
+            cx = AIArgumentAdapter.get_float(args, "center_x", 0.0)
+            cy = AIArgumentAdapter.get_float(args, "center_y", 0.0)
+            hole_tool = make_cylinder(dia / 2.0, depth * 1.5, center=True).translate(cx, cy, 0.0)
+            drilled = solid.difference(hole_tool)
+            key = target_id if target_id in self.document.bodies else next(iter(self.document.bodies.keys()))
+            self.document.bodies[key] = drilled
+            self.document._notify_change()
+            return (f"Alésage Ø{dia}mm percé dans '{key}' à la position ({cx}, {cy}).", True)
+
+        if name == "boolean_operation":
+            op = AIArgumentAdapter.get_str(args, "operation", "difference").lower()
+            t_id = AIArgumentAdapter.get_str(args, "target_body_id") or AIArgumentAdapter.get_str(args, "body_id")
+            tool_id = AIArgumentAdapter.get_str(args, "tool_body_id")
+            if t_id not in self.document.bodies or tool_id not in self.document.bodies:
+                return (f"Erreur : corps '{t_id}' ou '{tool_id}' introuvable.", False)
+            target_solid = self.document.bodies[t_id]
+            tool_solid = self.document.bodies[tool_id]
+            if op in ("union", "+"):
+                res_solid = target_solid.union(tool_solid)
+            elif op in ("intersection", "&"):
+                res_solid = target_solid.intersection(tool_solid)
+            else:
+                res_solid = target_solid.difference(tool_solid)
+            self.document.bodies[t_id] = res_solid
+            self.document._notify_change()
+            return (f"Opération booléenne '{op}' appliquée avec succès sur '{t_id}'.", True)
+
+        return None
+
+    def _dispatch_advanced_tool(self, name: str, args: CompatDict) -> Optional[Tuple[str, bool]]:
         """Achemine les outils avancés CAO/FAO/FEA/Tôlerie/Mise en plan."""
         if name == "cad_cam_toolpath_and_gcode":
-            solid = self._get_target_solid(str(args.get("body_id", "")))
-            op_type = str(args.get("operation_type", "contour"))
-            tool_dia = float(args.get("tool_diameter_mm", 6.0))
-            depth = float(args.get("depth_mm", 10.0))
+            solid = self._get_target_solid(AIArgumentAdapter.get_str(args, "body_id"))
+            op_type = AIArgumentAdapter.get_str(args, "operation_type", "contour")
+            tool_dia = AIArgumentAdapter.get_float(args, "tool_diameter_mm", 6.0)
+            depth = AIArgumentAdapter.get_float(args, "depth_mm", 10.0)
             cam_res = CADFullSuiteOrchestrator.run_cam(solid, operation_type=op_type, tool_diameter_mm=tool_dia, depth_mm=depth)
+            compact_gcode = AICompactSerializer.compact_gcode(cam_res.gcode_preview)
             res_dict = {
                 "operation": cam_res.operation_name,
                 "tool": cam_res.tool_name,
                 "cut_length_mm": cam_res.total_cut_length_mm,
                 "estimated_time_s": cam_res.estimated_time_seconds,
-                "gcode_preview": cam_res.gcode_preview
+                "gcode_preview": compact_gcode
             }
             return (json.dumps(res_dict, indent=2), True)
 
         if name == "cad_fea_stress_simulation":
-            solid = self._get_target_solid(str(args.get("body_id", "")))
-            force = float(args.get("applied_force_n", 2000.0))
-            mat = str(args.get("material_name", "Aluminium 6061-T6"))
+            solid = self._get_target_solid(AIArgumentAdapter.get_str(args, "body_id"))
+            force = AIArgumentAdapter.get_float(args, "applied_force_n", 2000.0)
+            mat = AIArgumentAdapter.get_str(args, "material_name", "Aluminium 6061-T6")
             fea_res = CADFullSuiteOrchestrator.run_fea(solid, applied_force_n=force, material_name=mat)
             res_dict = {
                 "material": fea_res.material_name,
@@ -149,10 +295,10 @@ class MCPStdioServer:
             return (json.dumps(res_dict, indent=2), True)
 
         if name == "cad_generate_2d_techdraw":
-            b_id = str(args.get("body_id", ""))
+            b_id = AIArgumentAdapter.get_str(args, "body_id")
             solid = self._get_target_solid(b_id)
-            p_name = str(args.get("part_name", b_id or "Pièce"))
-            mat = str(args.get("material_name", "Aluminium 6061-T6"))
+            p_name = AIArgumentAdapter.get_str(args, "part_name", b_id or "Pièce")
+            mat = AIArgumentAdapter.get_str(args, "material_name", "Aluminium 6061-T6")
             td_res = CADFullSuiteOrchestrator.generate_techdraw(solid, part_name=p_name, material_name=mat)
             res_dict = {
                 "format": td_res.sheet_format,
@@ -164,10 +310,10 @@ class MCPStdioServer:
             return (json.dumps(res_dict, indent=2), True)
 
         if name == "cad_design_sheetmetal":
-            w = float(args.get("width_mm", 120.0))
-            l = float(args.get("length_mm", 80.0))
-            t = float(args.get("thickness_mm", 2.0))
-            fh = float(args.get("flange_height_mm", 20.0))
+            w = AIArgumentAdapter.get_float(args, "width_mm", 120.0)
+            l = AIArgumentAdapter.get_float(args, "length_mm", 80.0)
+            t = AIArgumentAdapter.get_float(args, "thickness_mm", 2.0)
+            fh = AIArgumentAdapter.get_float(args, "flange_height_mm", 20.0)
             sm_res = CADFullSuiteOrchestrator.design_sheet_metal(w, l, t, fh)
             b_id = f"Tole_{len(self.document.bodies) + 1}"
             self.document.bodies[b_id] = sm_res.solid
@@ -182,8 +328,8 @@ class MCPStdioServer:
             return (json.dumps(res_dict, indent=2), True)
 
         if name == "cad_get_physical_material_props":
-            solid = self._get_target_solid(str(args.get("body_id", "")))
-            mat = str(args.get("material_name", "Aluminium 6061-T6"))
+            solid = self._get_target_solid(AIArgumentAdapter.get_str(args, "body_id"))
+            mat = AIArgumentAdapter.get_str(args, "material_name", "Aluminium 6061-T6")
             props = CADFullSuiteOrchestrator.get_material_properties(solid, mat)
             res_dict = {
                 "material": props.material_name,
@@ -196,17 +342,17 @@ class MCPStdioServer:
             return (json.dumps(res_dict, indent=2), True)
 
         if name in ("cad_direct_modeling_push_pull", "cad_direct_modeling_fillet", "cad_direct_modeling_shell"):
-            b_id = str(args.get("body_id", ""))
+            b_id = AIArgumentAdapter.get_str(args, "body_id")
             solid = self._get_target_solid(b_id)
             if name == "cad_direct_modeling_push_pull":
-                offset = float(args.get("offset_mm", 10.0))
-                axis = str(args.get("axis", "z"))
+                offset = AIArgumentAdapter.get_float(args, "offset_mm", 10.0)
+                axis = AIArgumentAdapter.get_str(args, "axis", "z")
                 dm_res = CADFullSuiteOrchestrator.direct_modeling_push_pull(solid, offset_mm=offset, axis=axis)
             elif name == "cad_direct_modeling_fillet":
-                r = float(args.get("radius_mm", 2.0))
+                r = AIArgumentAdapter.get_float(args, "radius_mm", 2.0)
                 dm_res = CADFullSuiteOrchestrator.direct_modeling_fillet(solid, radius_mm=r)
             else:
-                wall_t = float(args.get("wall_thickness_mm", 2.0))
+                wall_t = AIArgumentAdapter.get_float(args, "wall_thickness_mm", 2.0)
                 dm_res = CADFullSuiteOrchestrator.direct_modeling_shell(solid, wall_thickness_mm=wall_t)
 
             target_id = b_id if b_id in self.document.bodies else next(iter(self.document.bodies.keys()))
@@ -215,24 +361,32 @@ class MCPStdioServer:
             return (dm_res.message, True)
 
         if name == "cad_export_model":
-            fmt = str(args.get("format_type", "step"))
+            fmt = AIArgumentAdapter.get_str(args, "format_type", "step")
             msg = f"Export du modèle au format {fmt.upper()} validé."
             return (msg, True)
 
         return None
 
-    def _dispatch_tool_action(self, name: str, args: Dict[str, str]) -> Tuple[str, bool]:
-        """Achemine l'appel d'outil vers le sous-système approprié."""
-        adv_res = self._dispatch_advanced_tool(name, args)
-        if adv_res is not None:
-            return adv_res
-
+    def _dispatch_query_and_script(self, name: str, args: CompatDict) -> Optional[Tuple[str, bool]]:
+        """Achemine les requêtes de consultation, scripts et diagnostics."""
         if name in ("cad_run_script", "execute_cad_script"):
-            script = str(args.get("script", "") or args.get("code", ""))
+            script = AIArgumentAdapter.get_str(args, "script") or AIArgumentAdapter.get_str(args, "code")
             script_res = CADScriptEngine.execute_script(self.document, script)
             return (script_res.message, script_res.success)
 
         if name in ("cad_validate_model", "validate_geometry"):
+            b_id = AIArgumentAdapter.get_str(args, "body_id")
+            if b_id and b_id in self.document.bodies:
+                report = CADValidator.validate_solid(self.document.bodies[b_id])
+                res_v = {
+                    "body_id": b_id,
+                    "is_watertight": report.is_watertight,
+                    "is_manifold": report.is_manifold,
+                    "euler_poincare_valid": report.is_valid,
+                    "quality_score": report.quality_score_percent,
+                    "summary": f"Solide '{b_id}' validé: Volume={report.volume_mm3:.1f} mm³, Score={report.quality_score_percent:.1f}%"
+                }
+                return (json.dumps(res_v, indent=2), report.is_manifold)
             diagnostics = CADValidator.get_scene_diagnostics(self.document.bodies)
             return (json.dumps(diagnostics, indent=2), True)
 
@@ -258,16 +412,44 @@ class MCPStdioServer:
             ]
             return (json.dumps(clash_list, indent=2), True)
 
-        prompt = str(args.get("prompt", "") or args.get("code", "") or name)
+        return None
+
+    def _dispatch_tool_action(self, name: str, args: CompatDict) -> Tuple[str, bool]:
+        """Achemine l'appel d'outil vers le sous-système approprié."""
+        prim_res = self._dispatch_primitive(name, args)
+        if prim_res is not None:
+            return prim_res
+
+        synth_res = self._dispatch_synthesize_shape(name, args)
+        if synth_res is not None:
+            return synth_res
+
+        mach_res = self._dispatch_machining_and_features(name, args)
+        if mach_res is not None:
+            return mach_res
+
+        adv_res = self._dispatch_advanced_tool(name, args)
+        if adv_res is not None:
+            return adv_res
+
+        query_res = self._dispatch_query_and_script(name, args)
+        if query_res is not None:
+            return query_res
+
+        prompt = AIArgumentAdapter.get_str(args, "prompt") or AIArgumentAdapter.get_str(args, "code") or name
         res = self.bridge.execute_prompt(prompt)
         return (res.message, res.success)
 
-
-    def _handle_tools_call(self, req_id: str, params: Dict[str, str]) -> MCPResponseDict:
+    def _handle_tools_call(self, req_id: str, params: CompatDict) -> MCPResponseDict:
         """Exécute l'outil demandé et formate le résultat MCP avec isolation transactionnelle."""
-        name = str(params.get("name", ""))
-        args_val = params.get("arguments")
-        args: Dict[str, str] = args_val if isinstance(args_val, dict) else {}
+        name = AIArgumentAdapter.get_str(params, "name")
+        args_raw = params.get("arguments")
+        args: CompatDict = {}
+        if isinstance(args_raw, (dict, str)):
+            args = AIArgumentAdapter.parse_raw_arguments(args_raw)
+        if not args:
+            # Tolérance pour les appels directs où les paramètres sont à la racine de 'params'
+            args = {k: v for k, v in params.items() if k not in ("name", "_meta")}
 
         with AtomicTransactionScope(self.document, f"MCP: {name}") as scope:
             try:
@@ -281,7 +463,8 @@ class MCPStdioServer:
                 output_text = f"Erreur d'exécution de l'outil MCP '{name}' : {diag.explanation_fr} (Conseil : {diag.remediation_hint})"
                 success = False
 
-        content_item: MCPContentItem = {"type": "text", "text": output_text}
+        compact_output = AICompactSerializer.compact_text(output_text, max_chars=4000)
+        content_item: MCPContentItem = {"type": "text", "text": compact_output}
         res_data: MCPResultDict = {
             "content": [content_item],
             "isError": not success
@@ -291,8 +474,6 @@ class MCPStdioServer:
             "id": req_id,
             "result": res_data
         }
-
-
 
     def handle_line(self, line: str) -> Optional[str]:
         """Traite une ligne brute de flux JSON-RPC et retourne la réponse sérialisée."""
@@ -306,17 +487,14 @@ class MCPStdioServer:
             res = self.process_request(req)
             if not res:
                 return None
-            return json.dumps(res)
+            return AICompactSerializer.safe_json_rpc_dumps(res, ensure_ascii=True)
         except Exception as err:
-            err_res = {
-                "jsonrpc": "2.0",
-                "id": "null",
-                "error": {"code": -32700, "message": f"Parse error: {err}"}
-            }
-            return json.dumps(err_res)
+            err_res = AIPlatformCompat.format_json_rpc_error(-32700, f"Parse error: {err}", "null")
+            return json.dumps(err_res, ensure_ascii=True)
 
     def run_stdio_loop(self) -> None:
         """Boucle principale de traitement des entrées/sorties standard (STDIO)."""
+        AIPlatformCompat.configure_stdio_utf8()
         for line in sys.stdin:
             resp_line = self.handle_line(line)
             if resp_line:

@@ -36,6 +36,13 @@ from src.ai.cad_ai_stability import (
     CADAIAsyncExecutor
 )
 
+from src.ai.cad_ai_compatibility import (
+    AIArgumentAdapter,
+    AIParameterAliases,
+    AICompactSerializer,
+    AIPlatformCompat
+)
+
 __all__ = [
     "ShapeSynthesizer",
     "CADAIBridge",
@@ -74,5 +81,9 @@ __all__ = [
     "TaskState",
     "AITaskFuture",
     "CADAIAsyncExecutor",
+    "AIArgumentAdapter",
+    "AIParameterAliases",
+    "AICompactSerializer",
+    "AIPlatformCompat",
 ]
 

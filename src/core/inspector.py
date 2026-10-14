@@ -141,6 +141,12 @@ def compute_inertia_tensor(solid: Solid, density_g_cm3: float = 1.0) -> InertiaT
     if abs(total_vol) < 1e-9:
         return InertiaTensor(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
 
+    if total_vol < 0.0:
+        # Normalisation automatique si le maillage d'entrée présente un enroulement inversé
+        dets = -dets
+        v_tets = -v_tets
+        total_vol = -total_vol
+
     # Intégrales polynomiales de second ordre par rapport à l'origine
     coeff_sq = dets / 60.0
     x2 = np.sum(coeff_sq * (v0[:, 0]**2 + v1[:, 0]**2 + v2[:, 0]**2 + v0[:, 0]*v1[:, 0] + v0[:, 0]*v2[:, 0] + v1[:, 0]*v2[:, 0]))

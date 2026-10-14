@@ -120,12 +120,8 @@ class FEASimulator:
         mean_ratio = float(np.mean(normalized))
         r, g, b = _colormap_jet(mean_ratio)
 
-        # Couleurs par sommet réparties sur toute la géométrie
-        v_colors = np.zeros((len(vertices), 4), dtype=np.float32)
-        for i in range(len(vertices)):
-            norm_val = float(normalized[i]) if i < len(normalized) else mean_ratio
-            cr, cg, cb = _colormap_jet(norm_val)
-            v_colors[i] = [cr, cg, cb, 1.0]
+        # Couleurs par sommet vectorisées avec NumPy (accélération massive sans boucle Python)
+        v_colors = _vectorized_colormap_jet(normalized)
 
         colored_buf = MeshBuffer(
             vertices=vertices.astype(np.float32),
@@ -136,6 +132,38 @@ class FEASimulator:
             vertex_colors=v_colors
         )
         return colored_buf
+
+
+def _vectorized_colormap_jet(vals: np.ndarray) -> np.ndarray:
+    """Convertit un tableau NumPy (N,) de valeurs scalaires [0..1] en couleurs RGBA (N, 4)."""
+    v = np.clip(vals, 0.0, 1.0).astype(np.float32)
+    rgba = np.ones((len(v), 4), dtype=np.float32)
+
+    # Segment 0: [0.0, 0.25) -> r=0, g=4*v, b=1
+    m0 = v < 0.25
+    rgba[m0, 0] = 0.0
+    rgba[m0, 1] = v[m0] * 4.0
+    rgba[m0, 2] = 1.0
+
+    # Segment 1: [0.25, 0.5) -> r=0, g=1, b=1 - 4*(v - 0.25)
+    m1 = (v >= 0.25) & (v < 0.5)
+    rgba[m1, 0] = 0.0
+    rgba[m1, 1] = 1.0
+    rgba[m1, 2] = 1.0 - (v[m1] - 0.25) * 4.0
+
+    # Segment 2: [0.5, 0.75) -> r=4*(v - 0.5), g=1, b=0
+    m2 = (v >= 0.5) & (v < 0.75)
+    rgba[m2, 0] = (v[m2] - 0.5) * 4.0
+    rgba[m2, 1] = 1.0
+    rgba[m2, 2] = 0.0
+
+    # Segment 3: [0.75, 1.0] -> r=1, g=1 - 4*(v - 0.75), b=0
+    m3 = v >= 0.75
+    rgba[m3, 0] = 1.0
+    rgba[m3, 1] = 1.0 - (v[m3] - 0.75) * 4.0
+    rgba[m3, 2] = 0.0
+
+    return rgba
 
 
 def _colormap_jet(val: float) -> Tuple[float, float, float]:

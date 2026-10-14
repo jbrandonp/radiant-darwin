@@ -72,6 +72,22 @@ class CADDocument:
         self.rollback_index = len(self.features) - 1
         self.rebuild()
 
+    def invalidate_from_index(self, index: int) -> None:
+        """Invalide les instantanés d'historique à partir de l'index donné."""
+        for snap_idx in list(self._timeline_snapshots.keys()):
+            if snap_idx >= index:
+                del self._timeline_snapshots[snap_idx]
+
+    def set_feature_suppressed(self, feature_id: str, suppressed: bool) -> None:
+        """Active ou désactive (supprime/rétablit) une opération dans l'arbre d'historique."""
+        for idx, feat in enumerate(self.features):
+            if feat.feature_id == feature_id:
+                if feat.is_suppressed != suppressed:
+                    feat.is_suppressed = suppressed
+                    self.invalidate_from_index(idx)
+                    self.rebuild()
+                break
+
     def remove_feature(self, feature_id: str) -> None:
         """Supprime une fonctionnalité de l'historique et recalcule le modèle."""
         self.features = [f for f in self.features if f.feature_id != feature_id]

@@ -7,8 +7,11 @@ Utilise un parseur AST sécurisé sans aucun appel à eval().
 from __future__ import annotations
 import ast
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Callable
+
+_UNIT_RE = re.compile(r'(\b\d+(?:\.\d+)?)\s*(mm|cm|m|inch|deg|rad)\b', re.IGNORECASE)
 
 
 @dataclass
@@ -103,6 +106,9 @@ class SafeExpressionEvaluator:
         if len(clean_expr) > 500:
             raise ValueError("Expression trop longue (> 500 caractères)")
 
+        # Prétraitement transparent des unités industrielles CAO (ex: '25mm' -> '(25 * mm)')
+        clean_expr = _UNIT_RE.sub(r'(\1 * \2)', clean_expr)
+
         try:
             node = ast.parse(clean_expr, mode='eval')
             return float(cls._eval_node(node.body, context, depth=0))
@@ -120,12 +126,27 @@ class SafeExpressionEvaluator:
                 return float(node.value)
             raise ValueError(f"Type littéral non autorisé : {node.value}")
 
-        elif isinstance(node, ast.Name):  # Variable du contexte
+        elif isinstance(node, ast.Name):  # Variable du contexte ou constante/unité intégrée
             var_name = node.id
             if var_name in context:
                 return float(context[var_name])
-            elif var_name.lower() == "pi":
+            low_name = var_name.lower()
+            if low_name == "pi":
                 return math.pi
+            elif low_name == "e":
+                return math.e
+            elif low_name == "mm":
+                return 1.0
+            elif low_name == "cm":
+                return 10.0
+            elif low_name == "m":
+                return 1000.0
+            elif low_name == "inch":
+                return 25.4
+            elif low_name == "deg":
+                return 1.0
+            elif low_name == "rad":
+                return 180.0 / math.pi
             raise ValueError(f"Variable inconnue '{var_name}'")
 
         elif isinstance(node, ast.UnaryOp):  # Opération unaire (-x, +x)

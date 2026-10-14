@@ -334,7 +334,12 @@ class SketchConstraintSolver2D:
         rank = int(np.linalg.matrix_rank(j_mat, tol=1e-5))
         dof = max(0, num_vars - rank)
 
-        if dof == 0:
+        # Détection des contraintes redondantes ou contradictoires
+        is_overconstrained = bool(num_equations > rank and np.any(np.abs(f0) > 0.05))
+
+        if is_overconstrained:
+            status = f"Sur-contrainte / Conflit ({num_equations - rank} équation(s) redondante(s) ou contradictoire(s))"
+        elif dof == 0:
             status = "Entièrement contrainte (0 DoF)"
         else:
             status = f"Sous-contrainte ({dof} degré{'s' if dof > 1 else ''} de liberté)"

@@ -94,17 +94,25 @@ class AssemblyManager:
 
         updated = dict(bodies)
         child_solid = updated[child_id]
-        delta = new_value - joint.current_value
-        joint.current_value = new_value
+        val = new_value
+        if joint.min_limit is not None:
+            val = max(joint.min_limit, val)
+        if joint.max_limit is not None:
+            val = min(joint.max_limit, val)
+        delta = val - joint.current_value
+        joint.current_value = val
 
-        if joint.joint_type == JointType.REVOLUTE:
-            # Rotation autour de l'axe spécifié
-            if joint.axis.z > 0.5:
-                transformed = child_solid.rotate(0.0, 0.0, delta)
-            elif joint.axis.x > 0.5:
-                transformed = child_solid.rotate(delta, 0.0, 0.0)
+        if joint.joint_type in (JointType.REVOLUTE, JointType.CYLINDRICAL):
+            # Rotation autour de l'axe spécifié (avec prise en compte du signe de l'axe)
+            if abs(joint.axis.z) > 0.5:
+                sign = 1.0 if joint.axis.z > 0 else -1.0
+                transformed = child_solid.rotate(0.0, 0.0, delta * sign)
+            elif abs(joint.axis.x) > 0.5:
+                sign = 1.0 if joint.axis.x > 0 else -1.0
+                transformed = child_solid.rotate(delta * sign, 0.0, 0.0)
             else:
-                transformed = child_solid.rotate(0.0, delta, 0.0)
+                sign = 1.0 if joint.axis.y > 0 else -1.0
+                transformed = child_solid.rotate(0.0, delta * sign, 0.0)
             updated[child_id] = transformed
 
         elif joint.joint_type == JointType.SLIDER:

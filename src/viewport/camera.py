@@ -51,7 +51,11 @@ class CADCamera:
             float(np.cos(pitch_rad) * np.cos(yaw_rad)),
             float(np.sin(pitch_rad))
         )
-        world_up = Vector3D(0.0, 0.0, 1.0)
+        # Éviter la singularité du produit vectoriel au zénith/nadir (vues TOP et BOTTOM)
+        if abs(self.pitch_deg) > 85.0:
+            world_up = Vector3D(0.0, 1.0, 0.0) if self.pitch_deg > 0 else Vector3D(0.0, -1.0, 0.0)
+        else:
+            world_up = Vector3D(0.0, 0.0, 1.0)
         right = forward.cross(world_up).normalized()
         up = right.cross(forward).normalized()
 

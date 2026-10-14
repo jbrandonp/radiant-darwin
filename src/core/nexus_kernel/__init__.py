@@ -11,6 +11,9 @@ from src.core.nexus_kernel.brep_topology import (
     NexusCircleCurve, NexusEdge, NexusWire, NexusSurface, NexusPlaneSurface,
     NexusCylinderSurface, NexusSphereSurface, NexusFace, NexusShell, NexusBRep
 )
+from src.core.nexus_kernel.euler_operators import (
+    NexusEulerOperators, EulerPoincareDiagnostic
+)
 from src.core.nexus_kernel.hybrid_solid import NexusSolid
 from src.core.nexus_kernel.ai_interfaces import (
     NeuralSDFEngine, DifferentiableGeometryEngine, CADTokenizer, LatentShapeEmbedding
@@ -20,6 +23,7 @@ __all__ = [
     "SurfaceType", "CurveType", "NexusVertex", "NexusCurve", "NexusLineCurve",
     "NexusCircleCurve", "NexusEdge", "NexusWire", "NexusSurface", "NexusPlaneSurface",
     "NexusCylinderSurface", "NexusSphereSurface", "NexusFace", "NexusShell", "NexusBRep",
+    "NexusEulerOperators", "EulerPoincareDiagnostic",
     "NexusSolid", "NeuralSDFEngine", "DifferentiableGeometryEngine", "CADTokenizer",
     "LatentShapeEmbedding"
 ]

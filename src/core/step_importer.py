@@ -259,6 +259,78 @@ class STEPImporter:
 
         return edge_curve_map
 
+    @staticmethod
+    def _resolve_or_create_vertex(
+        ref_id: int,
+        brep: NexusBRep,
+        vertex_point_map: Dict[int, NexusVertex],
+        cartesian_vertex_map: Dict[int, NexusVertex],
+        cartesian_points: Dict[int, np.ndarray]
+    ) -> Optional[NexusVertex]:
+        if ref_id in vertex_point_map:
+            return vertex_point_map[ref_id]
+        if ref_id in cartesian_vertex_map:
+            return cartesian_vertex_map[ref_id]
+        if ref_id in cartesian_points:
+            pt = cartesian_points[ref_id]
+            vert = NexusVertex(f"V_pt_{ref_id}", float(pt[0]), float(pt[1]), float(pt[2]))
+            brep.add_vertex(vert)
+            cartesian_vertex_map[ref_id] = vert
+            return vert
+        return None
+
+    @classmethod
+    def _build_poly_loop_wire(
+        cls,
+        r: STEPRecord,
+        brep: NexusBRep,
+        vertex_point_map: Dict[int, NexusVertex],
+        cartesian_vertex_map: Dict[int, NexusVertex],
+        cartesian_points: Dict[int, np.ndarray]
+    ) -> NexusWire:
+        ref_pt_ids = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
+        loop_edges: List[NexusEdge] = []
+        for i in range(len(ref_pt_ids)):
+            p_a_id = ref_pt_ids[i]
+            p_b_id = ref_pt_ids[(i + 1) % len(ref_pt_ids)]
+            v_a = cls._resolve_or_create_vertex(p_a_id, brep, vertex_point_map, cartesian_vertex_map, cartesian_points)
+            v_b = cls._resolve_or_create_vertex(p_b_id, brep, vertex_point_map, cartesian_vertex_map, cartesian_points)
+            if v_a and v_b:
+                edge_key = f"E_poly_{p_a_id}_{p_b_id}"
+                if edge_key not in brep.edges:
+                    c_line = NexusLineCurve(f"Line_{edge_key}", v_a.point, v_b.point)
+                    poly_edge = NexusEdge(edge_key, c_line, v_a, v_b)
+                    brep.add_edge(poly_edge)
+                else:
+                    poly_edge = brep.edges[edge_key]
+                loop_edges.append(poly_edge)
+        wire = NexusWire(f"Wire_{r.entity_id}", loop_edges, is_closed=True)
+        brep.add_wire(wire)
+        return wire
+
+    @staticmethod
+    def _build_edge_loop_wire(
+        r: STEPRecord,
+        records: Dict[int, STEPRecord],
+        edge_curve_map: Dict[int, NexusEdge],
+        brep: NexusBRep
+    ) -> NexusWire:
+        oriented_refs = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
+        loop_edges: List[NexusEdge] = []
+        for ore_id in oriented_refs:
+            oe_rec = records.get(ore_id)
+            if oe_rec and oe_rec.entity_type == "ORIENTED_EDGE":
+                edge_refs = [int(m_id) for m_id in re.findall(r"#(\d+)", oe_rec.raw_args)]
+                for e_ref in edge_refs:
+                    if e_ref in edge_curve_map:
+                        loop_edges.append(edge_curve_map[e_ref])
+                        break
+            elif ore_id in edge_curve_map:
+                loop_edges.append(edge_curve_map[ore_id])
+        wire = NexusWire(f"Wire_{r.entity_id}", loop_edges, is_closed=True)
+        brep.add_wire(wire)
+        return wire
+
     def _reconstruct_wires(
         self,
         brep: NexusBRep,
@@ -270,60 +342,72 @@ class STEPImporter:
     ) -> Dict[int, NexusWire]:
         """Reconstruit les boucles fermées orientées."""
         loop_wire_map: Dict[int, NexusWire] = {}
-
-        def resolve_vert(ref_id: int) -> Optional[NexusVertex]:
-            if ref_id in vertex_point_map:
-                return vertex_point_map[ref_id]
-            if ref_id in cartesian_vertex_map:
-                return cartesian_vertex_map[ref_id]
-            if ref_id in cartesian_points:
-                pt = cartesian_points[ref_id]
-                vert = NexusVertex(f"V_pt_{ref_id}", float(pt[0]), float(pt[1]), float(pt[2]))
-                brep.add_vertex(vert)
-                cartesian_vertex_map[ref_id] = vert
-                return vert
-            return None
-
         for r in records.values():
             if r.entity_type == "POLY_LOOP":
-                ref_pt_ids = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
-                loop_edges: List[NexusEdge] = []
-                for i in range(len(ref_pt_ids)):
-                    p_a_id = ref_pt_ids[i]
-                    p_b_id = ref_pt_ids[(i + 1) % len(ref_pt_ids)]
-                    v_a = resolve_vert(p_a_id)
-                    v_b = resolve_vert(p_b_id)
-                    if v_a and v_b:
-                        edge_key = f"E_poly_{p_a_id}_{p_b_id}"
-                        if edge_key not in brep.edges:
-                            c_line = NexusLineCurve(f"Line_{edge_key}", v_a.point, v_b.point)
-                            poly_edge = NexusEdge(edge_key, c_line, v_a, v_b)
-                            brep.add_edge(poly_edge)
-                        else:
-                            poly_edge = brep.edges[edge_key]
-                        loop_edges.append(poly_edge)
-                wire = NexusWire(f"Wire_{r.entity_id}", loop_edges, is_closed=True)
-                brep.add_wire(wire)
+                wire = self._build_poly_loop_wire(r, brep, vertex_point_map, cartesian_vertex_map, cartesian_points)
                 loop_wire_map[r.entity_id] = wire
-
             elif r.entity_type == "EDGE_LOOP":
-                oriented_refs = [int(m_id) for m_id in re.findall(r"#(\d+)", r.raw_args)]
-                loop_edges = []
-                for ore_id in oriented_refs:
-                    oe_rec = records.get(ore_id)
-                    if oe_rec and oe_rec.entity_type == "ORIENTED_EDGE":
-                        edge_refs = [int(m_id) for m_id in re.findall(r"#(\d+)", oe_rec.raw_args)]
-                        for e_ref in edge_refs:
-                            if e_ref in edge_curve_map:
-                                loop_edges.append(edge_curve_map[e_ref])
-                                break
-                    elif ore_id in edge_curve_map:
-                        loop_edges.append(edge_curve_map[ore_id])
-                wire = NexusWire(f"Wire_{r.entity_id}", loop_edges, is_closed=True)
-                brep.add_wire(wire)
+                wire = self._build_edge_loop_wire(r, records, edge_curve_map, brep)
                 loop_wire_map[r.entity_id] = wire
-
         return loop_wire_map
+
+    @staticmethod
+    def _parse_axis_placement(
+        record: STEPRecord,
+        records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray],
+        directions: Dict[int, np.ndarray],
+        default_dir: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        origin = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+        direction = np.array(default_dir, dtype=np.float64)
+        ax_refs = [int(x) for x in re.findall(r"#(\d+)", record.raw_args)]
+        if ax_refs and ax_refs[0] in records:
+            ax_rec = records[ax_refs[0]]
+            inner_refs = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
+            if len(inner_refs) >= 1 and inner_refs[0] in cartesian_points:
+                origin = cartesian_points[inner_refs[0]]
+            if len(inner_refs) >= 2 and inner_refs[1] in directions:
+                direction = directions[inner_refs[1]]
+        return origin, direction
+
+    @classmethod
+    def _parse_plane_surface(
+        cls, r: STEPRecord, records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray], directions: Dict[int, np.ndarray]
+    ) -> NexusPlaneSurface:
+        origin, normal = cls._parse_axis_placement(
+            r, records, cartesian_points, directions, np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        )
+        return NexusPlaneSurface(f"Plane_{r.entity_id}", origin, normal)
+
+    @classmethod
+    def _parse_cylinder_surface(
+        cls, r: STEPRecord, records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray], directions: Dict[int, np.ndarray]
+    ) -> NexusCylinderSurface:
+        origin, axis = cls._parse_axis_placement(
+            r, records, cartesian_points, directions, np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        )
+        radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", r.raw_args)]
+        rad = radius_floats[-1] if radius_floats else 10.0
+        return NexusCylinderSurface(f"Cyl_{r.entity_id}", origin, axis, rad)
+
+    @classmethod
+    def _parse_sphere_surface(
+        cls, r: STEPRecord, records: Dict[int, STEPRecord],
+        cartesian_points: Dict[int, np.ndarray]
+    ) -> NexusSphereSurface:
+        center = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+        ax_refs = [int(x) for x in re.findall(r"#(\d+)", r.raw_args)]
+        if ax_refs and ax_refs[0] in records:
+            ax_rec = records[ax_refs[0]]
+            inner_refs = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
+            if len(inner_refs) >= 1 and inner_refs[0] in cartesian_points:
+                center = cartesian_points[inner_refs[0]]
+        radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", r.raw_args)]
+        rad = radius_floats[-1] if radius_floats else 10.0
+        return NexusSphereSurface(f"Sphere_{r.entity_id}", center, rad)
 
     def _reconstruct_surfaces(
         self,
@@ -335,46 +419,57 @@ class STEPImporter:
         surface_map: Dict[int, NexusSurface] = {}
         for r in records.values():
             if r.entity_type == "PLANE":
-                origin = np.array([0.0, 0.0, 0.0])
-                normal = np.array([0.0, 0.0, 1.0])
-                ax_refs = [int(x) for x in re.findall(r"#(\d+)", r.raw_args)]
-                if ax_refs and ax_refs[0] in records:
-                    ax_rec = records[ax_refs[0]]
-                    inner_refs = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
-                    if len(inner_refs) >= 1 and inner_refs[0] in cartesian_points:
-                        origin = cartesian_points[inner_refs[0]]
-                    if len(inner_refs) >= 2 and inner_refs[1] in directions:
-                        normal = directions[inner_refs[1]]
-                surface_map[r.entity_id] = NexusPlaneSurface(f"Plane_{r.entity_id}", origin, normal)
-
+                surface_map[r.entity_id] = self._parse_plane_surface(r, records, cartesian_points, directions)
             elif r.entity_type == "CYLINDRICAL_SURFACE":
-                origin = np.array([0.0, 0.0, 0.0])
-                axis = np.array([0.0, 0.0, 1.0])
-                ax_refs = [int(x) for x in re.findall(r"#(\d+)", r.raw_args)]
-                if ax_refs and ax_refs[0] in records:
-                    ax_rec = records[ax_refs[0]]
-                    inner_refs = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
-                    if len(inner_refs) >= 1 and inner_refs[0] in cartesian_points:
-                        origin = cartesian_points[inner_refs[0]]
-                    if len(inner_refs) >= 2 and inner_refs[1] in directions:
-                        axis = directions[inner_refs[1]]
-                radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", r.raw_args)]
-                rad = radius_floats[-1] if radius_floats else 10.0
-                surface_map[r.entity_id] = NexusCylinderSurface(f"Cyl_{r.entity_id}", origin, axis, rad)
-
+                surface_map[r.entity_id] = self._parse_cylinder_surface(r, records, cartesian_points, directions)
             elif r.entity_type == "SPHERICAL_SURFACE":
-                center = np.array([0.0, 0.0, 0.0])
-                ax_refs = [int(x) for x in re.findall(r"#(\d+)", r.raw_args)]
-                if ax_refs and ax_refs[0] in records:
-                    ax_rec = records[ax_refs[0]]
-                    inner_refs = [int(x) for x in re.findall(r"#(\d+)", ax_rec.raw_args)]
-                    if len(inner_refs) >= 1 and inner_refs[0] in cartesian_points:
-                        center = cartesian_points[inner_refs[0]]
-                radius_floats = [float(f) for f in re.findall(r"[-+]?\d*\.\d+|\d+", r.raw_args)]
-                rad = radius_floats[-1] if radius_floats else 10.0
-                surface_map[r.entity_id] = NexusSphereSurface(f"Sphere_{r.entity_id}", center, rad)
-
+                surface_map[r.entity_id] = self._parse_sphere_surface(r, records, cartesian_points)
         return surface_map
+
+    @staticmethod
+    def _resolve_face_boundaries_and_surface(
+        r: STEPRecord,
+        records: Dict[int, STEPRecord],
+        surface_map: Dict[int, NexusSurface],
+        loop_wire_map: Dict[int, NexusWire]
+    ) -> Tuple[Optional[NexusWire], List[NexusWire], Optional[NexusSurface]]:
+        ref_ids = [int(x) for x in re.findall(r"#(\d+)", r.raw_args)]
+        outer_wire: Optional[NexusWire] = None
+        inner_wires: List[NexusWire] = []
+        face_surf: Optional[NexusSurface] = None
+
+        for ref_id in ref_ids:
+            ref_rec = records.get(ref_id)
+            if ref_rec:
+                if "BOUND" in ref_rec.entity_type:
+                    bound_refs = [int(x) for x in re.findall(r"#(\d+)", ref_rec.raw_args)]
+                    for b_id in bound_refs:
+                        if b_id in loop_wire_map:
+                            if outer_wire is None:
+                                outer_wire = loop_wire_map[b_id]
+                            else:
+                                inner_wires.append(loop_wire_map[b_id])
+                elif ref_id in surface_map:
+                    face_surf = surface_map[ref_id]
+
+        if outer_wire is None and ref_ids:
+            for ref_id in ref_ids:
+                if ref_id in loop_wire_map:
+                    outer_wire = loop_wire_map[ref_id]
+                    break
+
+        return outer_wire, inner_wires, face_surf
+
+    @staticmethod
+    def _compute_wire_area(wire: NexusWire) -> float:
+        wire_pts = wire.sample_points(16)
+        area = 0.0
+        if len(wire_pts) >= 3:
+            for i in range(len(wire_pts)):
+                p0 = wire_pts[i]
+                p1 = wire_pts[(i + 1) % len(wire_pts)]
+                area += float(np.linalg.norm(np.cross(p0, p1))) * 0.5
+        return area
 
     def _reconstruct_faces(
         self,
@@ -388,46 +483,21 @@ class STEPImporter:
         face_list: List[NexusFace] = []
         for r in records.values():
             if "ADVANCED_FACE" in r.entity_type or r.entity_type == "FACE":
-                ref_ids = [int(x) for x in re.findall(r"#(\d+)", r.raw_args)]
-                outer_wire: Optional[NexusWire] = None
-                inner_wires: List[NexusWire] = []
-                face_surf: Optional[NexusSurface] = None
-
-                for ref_id in ref_ids:
-                    ref_rec = records.get(ref_id)
-                    if ref_rec:
-                        if "BOUND" in ref_rec.entity_type:
-                            bound_refs = [int(x) for x in re.findall(r"#(\d+)", ref_rec.raw_args)]
-                            for b_id in bound_refs:
-                                if b_id in loop_wire_map:
-                                    if outer_wire is None:
-                                        outer_wire = loop_wire_map[b_id]
-                                    else:
-                                        inner_wires.append(loop_wire_map[b_id])
-                        elif ref_id in surface_map:
-                            face_surf = surface_map[ref_id]
-
-                if outer_wire is None and ref_ids:
-                    for ref_id in ref_ids:
-                        if ref_id in loop_wire_map:
-                            outer_wire = loop_wire_map[ref_id]
-                            break
-
+                outer_wire, inner_wires, face_surf = self._resolve_face_boundaries_and_surface(
+                    r, records, surface_map, loop_wire_map
+                )
                 if outer_wire is None:
                     outer_wire = NexusWire(f"EmptyWire_{r.entity_id}", [])
                     brep.add_wire(outer_wire)
 
                 if face_surf is None:
-                    face_surf = NexusPlaneSurface(f"DefaultPlane_{r.entity_id}", np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+                    face_surf = NexusPlaneSurface(
+                        f"DefaultPlane_{r.entity_id}",
+                        np.array([0.0, 0.0, 0.0], dtype=np.float64),
+                        np.array([0.0, 0.0, 1.0], dtype=np.float64)
+                    )
 
-                wire_pts = outer_wire.sample_points(16)
-                area = 0.0
-                if len(wire_pts) >= 3:
-                    for i in range(len(wire_pts)):
-                        p0 = wire_pts[i]
-                        p1 = wire_pts[(i + 1) % len(wire_pts)]
-                        area += float(np.linalg.norm(np.cross(p0, p1))) * 0.5
-
+                area = self._compute_wire_area(outer_wire)
                 face = NexusFace(f"F_{r.entity_id}", face_surf, outer_wire, inner_wires, area=area)
                 brep.add_face(face)
                 face_list.append(face)

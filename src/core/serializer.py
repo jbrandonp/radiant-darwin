@@ -357,96 +357,113 @@ class FeatureDeserializerRegistry:
         return None
 
     @staticmethod
+    def _build_loft_shape(
+        f_cls: str, f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
+        op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
+    ) -> Feature:
+        s_start = str(f_data.get("start_sketch_id", ""))
+        s_end = str(f_data.get("end_sketch_id", ""))
+        h_off = float(params.get("height_offset", 30.0))
+        s_top = float(params.get("scale_top", 1.0))
+        segs = int(params.get("num_segments", 36))
+        if f_cls == "LoftFeature":
+            return LoftFeature(f_id, f_name, s_start, s_end, h_off, s_top, segs, op, target_id)
+        return SubtractiveLoftFeature(f_id, f_name, s_start, s_end, h_off, s_top, segs, target_id)
+
+    @staticmethod
+    def _build_multirail_loft_shape(
+        f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
+        op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
+    ) -> Feature:
+        sk_ids = [str(x) for x in f_data.get("profile_sketch_ids", []) if isinstance(x, str)]
+        raw_rails = f_data.get("guide_rail_curves", [])
+        rails_list: List[List[Tuple[float, float, float]]] = []
+        if isinstance(raw_rails, list):
+            for r in raw_rails:
+                if isinstance(r, list):
+                    rail_pts: List[Tuple[float, float, float]] = []
+                    for pt in r:
+                        if isinstance(pt, list) and len(pt) == 3:
+                            rail_pts.append((float(pt[0]), float(pt[1]), float(pt[2])))
+                    rails_list.append(rail_pts)
+        n_sec = int(params.get("num_sections", 16))
+        n_seg = int(params.get("num_segments", 36))
+        return MultiRailLoftFeature(
+            f_id, f_name, profile_sketch_ids=sk_ids,
+            guide_rail_curves=rails_list, num_intermediate_sections=n_sec,
+            num_segments=n_seg, operation=op, target_body_id=target_id
+        )
+
+    @staticmethod
+    def _build_sweep_shape(
+        f_cls: str, f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
+        op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
+    ) -> Feature:
+        prof_id = str(f_data.get("profile_sketch_id", ""))
+        traj_type = str(f_data.get("trajectory_type", "arc"))
+        rad = float(params.get("radius", 30.0))
+        h = float(params.get("height", 40.0))
+        turns = float(params.get("turns", 1.0))
+        k_steps = int(params.get("num_steps", 24))
+        n_segs = int(params.get("segments", 24))
+        if f_cls == "SweepFeature":
+            return SweepFeature(f_id, f_name, prof_id, traj_type, rad, h, turns, k_steps, n_segs, op, target_id)
+        return SubtractiveSweepFeature(f_id, f_name, prof_id, traj_type, rad, h, turns, k_steps, n_segs, target_id)
+
+    @staticmethod
+    def _build_helix_shape(
+        f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
+        op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
+    ) -> Feature:
+        pitch = float(params.get("pitch", 10.0))
+        h = float(params.get("height", 40.0))
+        turns = float(params.get("turns", 4.0))
+        rad = float(params.get("radius", 15.0))
+        w_rad = float(params.get("wire_radius", 2.0))
+        c_ang = float(params.get("cone_angle", 0.0))
+        is_left = bool(params.get("is_left_handed", 0.0) > 0.5 or f_data.get("is_left_handed", False))
+        axis = str(f_data.get("axis", "Z"))
+        is_sub = bool(params.get("is_subtractive", 0.0) > 0.5 or f_data.get("is_subtractive", False))
+        return HelixFeature(
+            f_id, f_name, pitch=pitch, height=h, turns=turns, radius=rad,
+            wire_radius=w_rad, cone_angle=c_ang, is_left_handed=is_left,
+            axis=axis, is_subtractive=is_sub, operation=op, target_body_id=target_id
+        )
+
+    @staticmethod
+    def _build_pipe_shape(
+        f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
+        op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
+    ) -> Feature:
+        raw_pts = f_data.get("path_points")
+        pts_list: List[Tuple[float, float, float]] = []
+        if isinstance(raw_pts, list):
+            for p in raw_pts:
+                if isinstance(p, (list, tuple)) and len(p) >= 3:
+                    pts_list.append((float(p[0]), float(p[1]), float(p[2])))
+        if not pts_list:
+            pts_list = [(0.0, 0.0, 0.0), (50.0, 0.0, 0.0), (50.0, 50.0, 0.0)]
+        r_out = float(params.get("outer_radius", 6.0))
+        r_in = float(params.get("inner_radius", 0.0))
+        return PipeFeature(f_id, f_name, pts_list, r_out, r_in, op, target_id)
+
+    @classmethod
     def _build_complex_shapes(
+        cls,
         f_cls: str, f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
         op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
     ) -> Optional[Feature]:
         """Reconstruit les formes complexes (Loft, Sweep, Pipe, Helix)."""
-        if f_cls == "LoftFeature":
-            s_start = str(f_data.get("start_sketch_id", ""))
-            s_end = str(f_data.get("end_sketch_id", ""))
-            h_off = float(params.get("height_offset", 30.0))
-            s_top = float(params.get("scale_top", 1.0))
-            segs = int(params.get("num_segments", 36))
-            return LoftFeature(f_id, f_name, s_start, s_end, h_off, s_top, segs, op, target_id)
-
-        if f_cls == "SubtractiveLoftFeature":
-            s_start = str(f_data.get("start_sketch_id", ""))
-            s_end = str(f_data.get("end_sketch_id", ""))
-            h_off = float(params.get("height_offset", 30.0))
-            s_top = float(params.get("scale_top", 1.0))
-            segs = int(params.get("num_segments", 36))
-            return SubtractiveLoftFeature(f_id, f_name, s_start, s_end, h_off, s_top, segs, target_id)
-
+        if f_cls in ("LoftFeature", "SubtractiveLoftFeature"):
+            return cls._build_loft_shape(f_cls, f_id, f_name, params, op, target_id, f_data)
         if f_cls == "MultiRailLoftFeature":
-            sk_ids = [str(x) for x in f_data.get("profile_sketch_ids", []) if isinstance(x, str)]
-            raw_rails = f_data.get("guide_rail_curves", [])
-            rails_list: List[List[Tuple[float, float, float]]] = []
-            if isinstance(raw_rails, list):
-                for r in raw_rails:
-                    if isinstance(r, list):
-                        rail_pts: List[Tuple[float, float, float]] = []
-                        for pt in r:
-                            if isinstance(pt, list) and len(pt) == 3:
-                                rail_pts.append((float(pt[0]), float(pt[1]), float(pt[2])))
-                        rails_list.append(rail_pts)
-            n_sec = int(params.get("num_sections", 16))
-            n_seg = int(params.get("num_segments", 36))
-            return MultiRailLoftFeature(
-                f_id, f_name, profile_sketch_ids=sk_ids,
-                guide_rail_curves=rails_list, num_intermediate_sections=n_sec,
-                num_segments=n_seg, operation=op, target_body_id=target_id
-            )
-
-        if f_cls == "SweepFeature":
-            prof_id = str(f_data.get("profile_sketch_id", ""))
-            traj_type = str(f_data.get("trajectory_type", "arc"))
-            rad = float(params.get("radius", 30.0))
-            h = float(params.get("height", 40.0))
-            turns = float(params.get("turns", 1.0))
-            k_steps = int(params.get("num_steps", 24))
-            n_segs = int(params.get("segments", 24))
-            return SweepFeature(f_id, f_name, prof_id, traj_type, rad, h, turns, k_steps, n_segs, op, target_id)
-
-        if f_cls == "SubtractiveSweepFeature":
-            prof_id = str(f_data.get("profile_sketch_id", ""))
-            traj_type = str(f_data.get("trajectory_type", "arc"))
-            rad = float(params.get("radius", 30.0))
-            h = float(params.get("height", 40.0))
-            turns = float(params.get("turns", 1.0))
-            k_steps = int(params.get("num_steps", 24))
-            n_segs = int(params.get("segments", 24))
-            return SubtractiveSweepFeature(f_id, f_name, prof_id, traj_type, rad, h, turns, k_steps, n_segs, target_id)
-
+            return cls._build_multirail_loft_shape(f_id, f_name, params, op, target_id, f_data)
+        if f_cls in ("SweepFeature", "SubtractiveSweepFeature"):
+            return cls._build_sweep_shape(f_cls, f_id, f_name, params, op, target_id, f_data)
         if f_cls == "HelixFeature":
-            pitch = float(params.get("pitch", 10.0))
-            h = float(params.get("height", 40.0))
-            turns = float(params.get("turns", 4.0))
-            rad = float(params.get("radius", 15.0))
-            w_rad = float(params.get("wire_radius", 2.0))
-            c_ang = float(params.get("cone_angle", 0.0))
-            is_left = bool(params.get("is_left_handed", 0.0) > 0.5 or f_data.get("is_left_handed", False))
-            axis = str(f_data.get("axis", "Z"))
-            is_sub = bool(params.get("is_subtractive", 0.0) > 0.5 or f_data.get("is_subtractive", False))
-            return HelixFeature(
-                f_id, f_name, pitch=pitch, height=h, turns=turns, radius=rad,
-                wire_radius=w_rad, cone_angle=c_ang, is_left_handed=is_left,
-                axis=axis, is_subtractive=is_sub, operation=op, target_body_id=target_id
-            )
-
+            return cls._build_helix_shape(f_id, f_name, params, op, target_id, f_data)
         if f_cls == "PipeFeature":
-            raw_pts = f_data.get("path_points")
-            pts_list: List[Tuple[float, float, float]] = []
-            if isinstance(raw_pts, list):
-                for p in raw_pts:
-                    if isinstance(p, (list, tuple)) and len(p) >= 3:
-                        pts_list.append((float(p[0]), float(p[1]), float(p[2])))
-            if not pts_list:
-                pts_list = [(0.0, 0.0, 0.0), (50.0, 0.0, 0.0), (50.0, 50.0, 0.0)]
-            r_out = float(params.get("outer_radius", 6.0))
-            r_in = float(params.get("inner_radius", 0.0))
-            return PipeFeature(f_id, f_name, pts_list, r_out, r_in, op, target_id)
-
+            return cls._build_pipe_shape(f_id, f_name, params, op, target_id, f_data)
         return None
 
     @staticmethod

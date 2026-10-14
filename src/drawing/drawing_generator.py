@@ -127,6 +127,24 @@ class TechnicalSheet:
         self.dimensions.append(DimensionLabel(mid_x + offset_x, mid_y + offset_y, text, is_vertical=is_vertical))
 
 
+@dataclass(frozen=True)
+class _ProjectedTriangle:
+    """Triangle projeté en 2D pour le test d'occlusion analytique HLR."""
+    a: np.ndarray
+    b: np.ndarray
+    c: np.ndarray
+    au: float
+    av: float
+    bu: float
+    bv: float
+    cu: float
+    cv: float
+    min_u: float
+    max_u: float
+    min_v: float
+    max_v: float
+
+
 class TechnicalDrawingGenerator:
     """
     Moteur de génération de plans techniques 2D conformes à la norme ISO 128.
@@ -251,6 +269,47 @@ class TechnicalDrawingGenerator:
         """Ajoute une ligne de cote interactive sur la feuille technique."""
         sheet.add_interactive_dimension(x1, y1, x2, y2, text, is_vertical=is_vertical)
 
+    @staticmethod
+    def _is_triangle_occluding_point(
+        m_pt: np.ndarray,
+        u_m: float,
+        v_m: float,
+        view_dir: np.ndarray,
+        tri: _ProjectedTriangle
+    ) -> bool:
+        """Vérifie si le triangle tri masque le point (u_m, v_m) dans la vue."""
+        if u_m < tri.min_u - 1e-3 or u_m > tri.max_u + 1e-3 or v_m < tri.min_v - 1e-3 or v_m > tri.max_v + 1e-3:
+            return False
+
+        delta = (tri.bu - tri.au) * (tri.cv - tri.av) - (tri.bv - tri.av) * (tri.cu - tri.au)
+        if abs(delta) < 1e-7:
+            return False
+
+        wa = ((tri.bu - u_m) * (tri.cv - v_m) - (tri.bv - v_m) * (tri.cu - u_m)) / delta
+        wb = ((tri.cu - u_m) * (tri.av - v_m) - (tri.cv - v_m) * (tri.au - u_m)) / delta
+        wc = 1.0 - wa - wb
+
+        if wa > 0.02 and wb > 0.02 and wc > 0.02:
+            d_m = float(np.dot(m_pt, view_dir))
+            d_tri = wa * float(np.dot(tri.a, view_dir)) + wb * float(np.dot(tri.b, view_dir)) + wc * float(np.dot(tri.c, view_dir))
+            return d_tri < d_m - 0.1
+        return False
+
+    @classmethod
+    def _is_point_occluded(
+        cls,
+        m_pt: np.ndarray,
+        u_m: float,
+        v_m: float,
+        view_dir: np.ndarray,
+        front_faces: List[_ProjectedTriangle]
+    ) -> bool:
+        """Détermine si le point est occlus par au moins un triangle frontal visible."""
+        for tri in front_faces:
+            if cls._is_triangle_occluding_point(m_pt, u_m, v_m, view_dir, tri):
+                return True
+        return False
+
     def _project_view(
         self,
         vertices: np.ndarray,
@@ -278,7 +337,6 @@ class TechnicalDrawingGenerator:
         num_edges = len(edges)
         has_edge_verts = edge_vertices is not None and len(edge_vertices) >= 2 * num_edges
 
-        # Direction de visée : normale au plan de projection dirigée vers la profondeur
         u_dir = np.zeros(3, dtype=np.float64)
         u_dir[axis_h] = 1.0
         v_dir = np.zeros(3, dtype=np.float64)
@@ -287,7 +345,7 @@ class TechnicalDrawingGenerator:
         norm_val = float(np.linalg.norm(norm_cross))
         view_dir = -norm_cross / norm_val if norm_val > 1e-9 else np.array([0.0, 1.0, 0.0])
 
-        front_faces: List[Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float]] = []
+        front_faces: List[_ProjectedTriangle] = []
         if enable_hlr and faces is not None and normals is not None and len(faces) > 0:
             for j in range(len(faces)):
                 f0, f1, f2 = int(faces[j, 0]), int(faces[j, 1]), int(faces[j, 2])
@@ -300,11 +358,10 @@ class TechnicalDrawingGenerator:
                     bv = center_y + (float(b[axis_v]) - mean_v) * scale
                     cu = center_x + (float(c[axis_h]) - mean_h) * scale
                     cv = center_y + (float(c[axis_v]) - mean_v) * scale
-                    min_u = min(au, bu, cu)
-                    max_u = max(au, bu, cu)
-                    min_v = min(av, bv, cv)
-                    max_v = max(av, bv, cv)
-                    front_faces.append((a, b, c, min_u, max_u, min_v, max_v))
+                    front_faces.append(_ProjectedTriangle(
+                        a, b, c, au, av, bu, bv, cu, cv,
+                        min(au, bu, cu), max(au, bu, cu), min(av, bv, cv), max(av, bv, cv)
+                    ))
 
         for k in range(num_edges):
             if has_edge_verts:
@@ -322,32 +379,9 @@ class TechnicalDrawingGenerator:
 
             is_hidden = False
             if enable_hlr and front_faces:
-                m_pt = (p0 + p1) * 0.5
-                u_m = (x1 + x2) * 0.5
-                v_m = (y1 + y2) * 0.5
-                d_m = float(np.dot(m_pt, view_dir))
-
-                for a, b, c, min_u, max_u, min_v, max_v in front_faces:
-                    if u_m < min_u - 1e-3 or u_m > max_u + 1e-3 or v_m < min_v - 1e-3 or v_m > max_v + 1e-3:
-                        continue
-                    au = center_x + (float(a[axis_h]) - mean_h) * scale
-                    av = center_y + (float(a[axis_v]) - mean_v) * scale
-                    bu = center_x + (float(b[axis_h]) - mean_h) * scale
-                    bv = center_y + (float(b[axis_v]) - mean_v) * scale
-                    cu = center_x + (float(c[axis_h]) - mean_h) * scale
-                    cv = center_y + (float(c[axis_v]) - mean_v) * scale
-
-                    delta = (bu - au) * (cv - av) - (bv - av) * (cu - au)
-                    if abs(delta) < 1e-7:
-                        continue
-                    wa = ((bu - u_m) * (cv - v_m) - (bv - v_m) * (cu - u_m)) / delta
-                    wb = ((cu - u_m) * (av - v_m) - (cv - v_m) * (au - u_m)) / delta
-                    wc = 1.0 - wa - wb
-                    if wa > 0.02 and wb > 0.02 and wc > 0.02:
-                        d_tri = wa * float(np.dot(a, view_dir)) + wb * float(np.dot(b, view_dir)) + wc * float(np.dot(c, view_dir))
-                        if d_tri < d_m - 0.1:
-                            is_hidden = True
-                            break
+                is_hidden = self._is_point_occluded(
+                    (p0 + p1) * 0.5, (x1 + x2) * 0.5, (y1 + y2) * 0.5, view_dir, front_faces
+                )
 
             sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=is_hidden))
 
@@ -386,7 +420,7 @@ class TechnicalDrawingGenerator:
         norm_val = float(np.linalg.norm(norm_cross))
         view_dir = -norm_cross / norm_val if norm_val > 1e-9 else np.array([0.577, 0.577, -0.577])
 
-        front_faces: List[Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float]] = []
+        front_faces: List[_ProjectedTriangle] = []
         if enable_hlr and faces is not None and normals is not None and len(faces) > 0:
             for j in range(len(faces)):
                 f0, f1, f2 = int(faces[j, 0]), int(faces[j, 1]), int(faces[j, 2])
@@ -399,11 +433,10 @@ class TechnicalDrawingGenerator:
                     bv = center_y + (((float(b[0]) + float(b[1])) * sin30 + float(b[2])) - mean_y) * scale
                     cu = center_x + (((float(c[0]) - float(c[1])) * cos30) - mean_x) * scale
                     cv = center_y + (((float(c[0]) + float(c[1])) * sin30 + float(c[2])) - mean_y) * scale
-                    min_u = min(au, bu, cu)
-                    max_u = max(au, bu, cu)
-                    min_v = min(av, bv, cv)
-                    max_v = max(av, bv, cv)
-                    front_faces.append((a, b, c, min_u, max_u, min_v, max_v))
+                    front_faces.append(_ProjectedTriangle(
+                        a, b, c, au, av, bu, bv, cu, cv,
+                        min(au, bu, cu), max(au, bu, cu), min(av, bv, cv), max(av, bv, cv)
+                    ))
 
         for k in range(num_edges):
             if has_edge_verts:
@@ -426,32 +459,9 @@ class TechnicalDrawingGenerator:
 
             is_hidden = False
             if enable_hlr and front_faces:
-                m_pt = (p0 + p1) * 0.5
-                u_m = (x1 + x2) * 0.5
-                v_m = (y1 + y2) * 0.5
-                d_m = float(np.dot(m_pt, view_dir))
-
-                for a, b, c, min_u, max_u, min_v, max_v in front_faces:
-                    if u_m < min_u - 1e-3 or u_m > max_u + 1e-3 or v_m < min_v - 1e-3 or v_m > max_v + 1e-3:
-                        continue
-                    au = center_x + (((float(a[0]) - float(a[1])) * cos30) - mean_x) * scale
-                    av = center_y + (((float(a[0]) + float(a[1])) * sin30 + float(a[2])) - mean_y) * scale
-                    bu = center_x + (((float(b[0]) - float(b[1])) * cos30) - mean_x) * scale
-                    bv = center_y + (((float(b[0]) + float(b[1])) * sin30 + float(b[2])) - mean_y) * scale
-                    cu = center_x + (((float(c[0]) - float(c[1])) * cos30) - mean_x) * scale
-                    cv = center_y + (((float(c[0]) + float(c[1])) * sin30 + float(c[2])) - mean_y) * scale
-
-                    delta = (bu - au) * (cv - av) - (bv - av) * (cu - au)
-                    if abs(delta) < 1e-7:
-                        continue
-                    wa = ((bu - u_m) * (cv - v_m) - (bv - v_m) * (cu - u_m)) / delta
-                    wb = ((cu - u_m) * (av - v_m) - (cv - v_m) * (au - u_m)) / delta
-                    wc = 1.0 - wa - wb
-                    if wa > 0.02 and wb > 0.02 and wc > 0.02:
-                        d_tri = wa * float(np.dot(a, view_dir)) + wb * float(np.dot(b, view_dir)) + wc * float(np.dot(c, view_dir))
-                        if d_tri < d_m - 0.1:
-                            is_hidden = True
-                            break
+                is_hidden = self._is_point_occluded(
+                    (p0 + p1) * 0.5, (x1 + x2) * 0.5, (y1 + y2) * 0.5, view_dir, front_faces
+                )
 
             sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=is_hidden))
 

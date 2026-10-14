@@ -24,7 +24,7 @@ from src.core.operations_advanced import (
     MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
     LoftFeature, SweepFeature, FilletFeature, ChamferFeature, DraftFeature,
     PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature, MultiTransformStep,
-    HelixFeature, RibFeature
+    HelixFeature, RibFeature, SplitFeature, SubtractiveLoftFeature, SubtractiveSweepFeature
 )
 from src.core.fasteners import FastenerFeature
 from src.sheetmetal.sheet_metal import SheetMetalFeature
@@ -162,6 +162,10 @@ class ProjectSerializer:
                 f_dict["thickness"] = getattr(feat, "thickness")
             if hasattr(feat, "draft_angle"):
                 f_dict["draft_angle"] = getattr(feat, "draft_angle")
+            if hasattr(feat, "keep_side"):
+                f_dict["keep_side"] = getattr(feat, "keep_side")
+            if hasattr(feat, "plane") and isinstance(getattr(feat, "plane"), PlaneType):
+                f_dict["plane"] = getattr(feat, "plane").value
 
             data["features"].append(f_dict)
 
@@ -463,6 +467,31 @@ class ProjectSerializer:
                         sym = bool(params.get("symmetric", 1.0) > 0.5 or f_data.get("symmetric", True))
                         draft = float(params.get("draft_angle", 0.0))
                         feat = RibFeature(f_id, f_name, sketch_id=s_id, thickness=thick, symmetric=sym, draft_angle=draft, target_body_id=target_id)
+
+                    elif f_cls == "SplitFeature":
+                        pl_str = str(f_data.get("plane", "XY"))
+                        pl = PlaneType(pl_str) if pl_str in PlaneType._value2member_map_ else PlaneType.XY
+                        off = float(params.get("plane_offset", 0.0))
+                        side = str(f_data.get("keep_side", "positive"))
+                        feat = SplitFeature(f_id, f_name, target_body_id=target_id or "", plane=pl, plane_offset=off, keep_side=side)
+
+                    elif f_cls == "SubtractiveLoftFeature":
+                        s_start = str(f_data.get("start_sketch_id", ""))
+                        s_end = str(f_data.get("end_sketch_id", ""))
+                        h_off = float(params.get("height_offset", 30.0))
+                        s_top = float(params.get("scale_top", 1.0))
+                        segs = int(params.get("num_segments", 36))
+                        feat = SubtractiveLoftFeature(f_id, f_name, s_start, s_end, h_off, s_top, segs, target_id)
+
+                    elif f_cls == "SubtractiveSweepFeature":
+                        prof_id = str(f_data.get("profile_sketch_id", ""))
+                        traj_type = str(f_data.get("trajectory_type", "arc"))
+                        rad = float(params.get("radius", 30.0))
+                        h = float(params.get("height", 40.0))
+                        turns = float(params.get("turns", 1.0))
+                        k_steps = int(params.get("num_steps", 24))
+                        n_segs = int(params.get("segments", 24))
+                        feat = SubtractiveSweepFeature(f_id, f_name, prof_id, traj_type, rad, h, turns, k_steps, n_segs, target_id)
 
                     if feat:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))

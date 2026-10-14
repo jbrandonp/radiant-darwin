@@ -114,6 +114,55 @@ class Solid:
         res.color = self.color
         return res
 
+    def split_by_plane(
+        self,
+        normal: Union[Vector3D, Tuple[float, float, float], Sequence[float]] = (0.0, 0.0, 1.0),
+        offset: float = 0.0,
+        origin_offset: Optional[float] = None
+    ) -> Tuple[Solid, Solid]:
+        """
+        Découpe le solide en deux sous-solides étanches selon un plan infini (FreeCAD Part Slice).
+        - normal : vecteur normal au plan de coupe (Vector3D ou tuple de 3 floats)
+        - offset / origin_offset : distance du plan par rapport à l'origine le long de la normale
+        Retourne (solide_cote_positif, solide_cote_negatif).
+        """
+        off = float(offset if origin_offset is None else origin_offset)
+        if isinstance(normal, Vector3D):
+            norm_list = [normal.x, normal.y, normal.z]
+        else:
+            norm_list = [float(normal[0]), float(normal[1]), float(normal[2])]
+
+        if self._manifold.is_empty():
+            return (Solid(self._manifold, f"{self.name}_Pos"), Solid(self._manifold, f"{self.name}_Neg"))
+        m_pos, m_neg = self._manifold.split_by_plane(norm_list, off)
+        s_pos = Solid(m_pos, f"{self.name}_Pos")
+        s_pos.color = self.color
+        s_neg = Solid(m_neg, f"{self.name}_Neg")
+        s_neg.color = self.color
+        return (s_pos, s_neg)
+
+    def trim_by_plane(
+        self,
+        normal: Union[Vector3D, Tuple[float, float, float], Sequence[float]] = (0.0, 0.0, 1.0),
+        offset: float = 0.0,
+        origin_offset: Optional[float] = None
+    ) -> Solid:
+        """
+        Tronque le solide selon un plan et conserve uniquement le demi-espace positif.
+        """
+        off = float(offset if origin_offset is None else origin_offset)
+        if isinstance(normal, Vector3D):
+            norm_list = [normal.x, normal.y, normal.z]
+        else:
+            norm_list = [float(normal[0]), float(normal[1]), float(normal[2])]
+
+        if self._manifold.is_empty():
+            return Solid(self._manifold, f"{self.name}_Trimmed")
+        m_trimmed = self._manifold.trim_by_plane(norm_list, off)
+        res = Solid(m_trimmed, f"{self.name}_Trimmed")
+        res.color = self.color
+        return res
+
     def surface_area(self) -> float:
         """Calcule la surface extérieure totale du solide en mm²."""
         if self._manifold.is_empty():
@@ -148,13 +197,6 @@ class Solid:
         """Simplifie le maillage du solide en conservant sa topologie étanche."""
         new_manifold = self._manifold.simplify(tolerance)
         res = Solid(new_manifold, f"{self.name}_Simplified")
-        res.color = self.color
-        return res
-
-    def trim_by_plane(self, normal: Vector3D, offset: float) -> Solid:
-        """Découpe le solide par un demi-espace défini par un plan (normal et distance)."""
-        new_manifold = self._manifold.trim_by_plane([normal.x, normal.y, normal.z], offset)
-        res = Solid(new_manifold, f"{self.name}_Trimmed")
         res.color = self.color
         return res
 

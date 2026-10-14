@@ -13,7 +13,7 @@ from src.core.operations_advanced import (
     RevolveFeature, LinearPatternFeature, CircularPatternFeature,
     MirrorFeature, HoleFeature, ShellFeature, PipeFeature,
     PocketFeature, DatumPlaneFeature, GrooveFeature, MultiTransformFeature,
-    HelixFeature, RibFeature
+    HelixFeature, RibFeature, SplitFeature, SubtractiveLoftFeature, SubtractiveSweepFeature
 )
 from src.core.document import CADDocument
 from src.core.exporter import CADExporter
@@ -56,6 +56,9 @@ __all__ = [
     "MultiTransformFeature",
     "HelixFeature",
     "RibFeature",
+    "SplitFeature",
+    "SubtractiveLoftFeature",
+    "SubtractiveSweepFeature",
     "CADDocument",
     "CADExporter",
     "ProjectSerializer",

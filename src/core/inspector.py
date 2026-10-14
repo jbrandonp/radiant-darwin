@@ -102,6 +102,123 @@ def compute_center_of_mass(solid: Solid) -> Vector3D:
     return Vector3D(float(com[0]), float(com[1]), float(com[2]))
 
 
+@dataclass(frozen=True)
+class InertiaTensor:
+    """Tenseur d'inertie 3D complet (moments et produits d'inertie) et axes principaux."""
+    ixx: float
+    iyy: float
+    izz: float
+    ixy: float
+    ixz: float
+    iyz: float
+    principal_moments: Tuple[float, float, float]
+    radius_of_gyration: Tuple[float, float, float]
+
+
+def compute_inertia_tensor(solid: Solid, density_g_cm3: float = 1.0) -> InertiaTensor:
+    """
+    Calcule le tenseur d'inertie 3D exact par rapport au centre de gravité du solide.
+    Utilise la décomposition tétraédrique vectorisée du théorème de la divergence.
+    """
+    if solid.is_empty():
+        return InertiaTensor(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+
+    mesh = solid.manifold.to_mesh()
+    vert_props = np.array(mesh.vert_properties, dtype=np.float64)[:, :3]
+    tri_verts = np.array(mesh.tri_verts, dtype=np.int64)
+
+    if len(vert_props) == 0 or len(tri_verts) == 0:
+        return InertiaTensor(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+
+    v0 = vert_props[tri_verts[:, 0]]
+    v1 = vert_props[tri_verts[:, 1]]
+    v2 = vert_props[tri_verts[:, 2]]
+
+    dets = np.einsum("ij,ij->i", np.cross(v0, v1), v2)
+    v_tets = dets / 6.0
+    total_vol = float(np.sum(v_tets))
+
+    if abs(total_vol) < 1e-9:
+        return InertiaTensor(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+
+    # Intégrales polynomiales de second ordre par rapport à l'origine
+    coeff_sq = dets / 60.0
+    x2 = np.sum(coeff_sq * (v0[:, 0]**2 + v1[:, 0]**2 + v2[:, 0]**2 + v0[:, 0]*v1[:, 0] + v0[:, 0]*v2[:, 0] + v1[:, 0]*v2[:, 0]))
+    y2 = np.sum(coeff_sq * (v0[:, 1]**2 + v1[:, 1]**2 + v2[:, 1]**2 + v0[:, 1]*v1[:, 1] + v0[:, 1]*v2[:, 1] + v1[:, 1]*v2[:, 1]))
+    z2 = np.sum(coeff_sq * (v0[:, 2]**2 + v1[:, 2]**2 + v2[:, 2]**2 + v0[:, 2]*v1[:, 2] + v0[:, 2]*v2[:, 2] + v1[:, 2]*v2[:, 2]))
+
+    coeff_prod = dets / 120.0
+    xy = np.sum(coeff_prod * (2.0*v0[:, 0]*v0[:, 1] + 2.0*v1[:, 0]*v1[:, 1] + 2.0*v2[:, 0]*v2[:, 1] +
+                             v0[:, 0]*v1[:, 1] + v0[:, 1]*v1[:, 0] + v0[:, 0]*v2[:, 1] + v0[:, 1]*v2[:, 0] +
+                             v1[:, 0]*v2[:, 1] + v1[:, 1]*v2[:, 0]))
+    xz = np.sum(coeff_prod * (2.0*v0[:, 0]*v0[:, 2] + 2.0*v1[:, 0]*v1[:, 2] + 2.0*v2[:, 0]*v2[:, 2] +
+                             v0[:, 0]*v1[:, 2] + v0[:, 2]*v1[:, 0] + v0[:, 0]*v2[:, 2] + v0[:, 2]*v2[:, 0] +
+                             v1[:, 0]*v2[:, 2] + v1[:, 2]*v2[:, 0]))
+    yz = np.sum(coeff_prod * (2.0*v0[:, 1]*v0[:, 2] + 2.0*v1[:, 1]*v1[:, 2] + 2.0*v2[:, 1]*v2[:, 2] +
+                             v0[:, 1]*v1[:, 2] + v0[:, 2]*v1[:, 1] + v0[:, 1]*v2[:, 2] + v0[:, 2]*v2[:, 1] +
+                             v1[:, 1]*v2[:, 2] + v1[:, 2]*v2[:, 1]))
+
+    # Moments à l'origine (volumiques)
+    i_xx_0 = float(y2 + z2)
+    i_yy_0 = float(x2 + z2)
+    i_zz_0 = float(x2 + y2)
+    i_xy_0 = -float(xy)
+    i_xz_0 = -float(xz)
+    i_yz_0 = -float(yz)
+
+    # Centre de masse
+    c_tet = (v0 + v1 + v2) / 4.0
+    com = np.sum(v_tets[:, None] * c_tet, axis=0) / total_vol
+    cx, cy, cz = float(com[0]), float(com[1]), float(com[2])
+
+    # Théorème de Huygens / axes parallèles pour ramener au centre de gravité
+    i_xx_g = float(i_xx_0 - total_vol * (cy**2 + cz**2))
+    i_yy_g = float(i_yy_0 - total_vol * (cx**2 + cz**2))
+    i_zz_g = float(i_zz_0 - total_vol * (cx**2 + cy**2))
+    i_xy_g = float(i_xy_0 + total_vol * cx * cy)
+    i_xz_g = float(i_xz_0 + total_vol * cx * cz)
+    i_yz_g = float(i_yz_0 + total_vol * cy * cz)
+
+    # Multiplication par la masse volumique (conversion mm³ et g/cm³ -> g.mm²)
+    density_factor = density_g_cm3 * 1e-3  # g/mm³
+    ixx = i_xx_g * density_factor
+    iyy = i_yy_g * density_factor
+    izz = i_zz_g * density_factor
+    ixy = i_xy_g * density_factor
+    ixz = i_xz_g * density_factor
+    iyz = i_yz_g * density_factor
+
+    # Matrice d'inertie 3x3 et diagonalisation (moments principaux)
+    inertia_matrix = np.array([
+        [ixx, ixy, ixz],
+        [ixy, iyy, iyz],
+        [ixz, iyz, izz]
+    ], dtype=np.float64)
+
+    eigenvalues, _ = np.linalg.eigh(inertia_matrix)
+    principal = (float(eigenvalues[0]), float(eigenvalues[1]), float(eigenvalues[2]))
+
+    # Rayons de giration rg = sqrt(I / M)
+    total_mass = total_vol * density_factor
+    if total_mass > 1e-9:
+        rg_x = float(np.sqrt(max(0.0, ixx / total_mass)))
+        rg_y = float(np.sqrt(max(0.0, iyy / total_mass)))
+        rg_z = float(np.sqrt(max(0.0, izz / total_mass)))
+    else:
+        rg_x, rg_y, rg_z = 0.0, 0.0, 0.0
+
+    return InertiaTensor(
+        ixx=ixx,
+        iyy=iyy,
+        izz=izz,
+        ixy=ixy,
+        ixz=ixz,
+        iyz=iyz,
+        principal_moments=principal,
+        radius_of_gyration=(rg_x, rg_y, rg_z)
+    )
+
+
 def compute_clearance(solid_a: Solid, solid_b: Solid, max_search: float = 1000.0) -> float:
     """Calcule la distance minimale (jeu mécanique / clearance) entre deux pièces solides."""
     if solid_a.is_empty() or solid_b.is_empty():
@@ -125,7 +242,7 @@ def generate_inspection_report(
     solid: Solid,
     material_name: str = "Aluminium 6061",
     density_g_cm3: float = 2.7
-) -> Dict[str, Union[str, float, Vector3D]]:
+) -> Dict[str, Union[str, float, Vector3D, InertiaTensor]]:
     """Génère un rapport métrologique complet pour un corps solide."""
     vol_mm3 = solid.volume()
     vol_cm3 = vol_mm3 / 1000.0
@@ -136,6 +253,7 @@ def generate_inspection_report(
     dy = b_max.y - b_min.y
     dz = b_max.z - b_min.z
     com = compute_center_of_mass(solid)
+    inertia = compute_inertia_tensor(solid, density_g_cm3)
 
     return {
         "solid_name": solid.name,
@@ -152,6 +270,7 @@ def generate_inspection_report(
         "box_min": b_min,
         "box_max": b_max,
         "center_of_mass": com,
+        "inertia": inertia,
         "genus": float(solid.genus()),
         "vertices_count": float(solid.num_vertices()),
         "faces_count": float(solid.num_faces()),

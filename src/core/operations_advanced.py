@@ -1442,3 +1442,141 @@ class RibFeature(Feature):
         return _apply_boolean_operation(existing_bodies, rib_solid, self.operation, self.body_id, self.target_body_id)
 
 
+class SplitFeature(Feature):
+    """
+    Fonctionnalité de découpe / partitionnement 3D par un plan (FreeCAD Part::Slice / Split).
+    Découpe un corps solide selon un plan de référence (XY, XZ, YZ ou vecteur normal personnalisé).
+    Permet de conserver la moitié positive, la moitié négative, ou les deux moitiés sous forme de corps distincts.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "Split",
+        target_body_id: str = "",
+        plane: PlaneType = PlaneType.XY,
+        plane_offset: float = 0.0,
+        keep_side: str = "positive",
+        normal_custom: Optional[Tuple[float, float, float]] = None
+    ) -> None:
+        super().__init__(feature_id, name)
+        self.target_body_id = target_body_id
+        self.plane = plane
+        self.plane_offset = float(plane_offset)
+        self.keep_side = str(keep_side).lower()
+        self.normal_custom = normal_custom
+        self.parameters = {
+            "plane_offset": self.plane_offset,
+        }
+        self.body_id = f"body_{feature_id}"
+
+    def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
+        """Découpe le corps cible selon le plan de référence de façon instantanée et étanche."""
+        updated = dict(existing_bodies)
+        target_key = resolve_target_body_id(self.target_body_id, updated)
+        if not target_key or target_key not in updated:
+            self.status = FeatureStatus.ERROR
+            return updated
+
+        target_solid = updated[target_key]
+        if target_solid.is_empty():
+            self.status = FeatureStatus.OK
+            return updated
+
+        if self.normal_custom is not None:
+            nx, ny, nz = self.normal_custom
+            length = float(np.sqrt(nx * nx + ny * ny + nz * nz))
+            normal = (nx / length, ny / length, nz / length) if length > 1e-6 else (0.0, 0.0, 1.0)
+        elif self.plane == PlaneType.XZ:
+            normal = (0.0, 1.0, 0.0)
+        elif self.plane == PlaneType.YZ:
+            normal = (1.0, 0.0, 0.0)
+        else:
+            normal = (0.0, 0.0, 1.0)
+
+        offset = float(self.parameters.get("plane_offset", self.plane_offset))
+
+        if self.keep_side == "negative":
+            inv_normal = (-normal[0], -normal[1], -normal[2])
+            res = target_solid.trim_by_plane(inv_normal, -offset)
+            res.name = self.name
+            updated[target_key] = res
+        elif self.keep_side == "both":
+            s_pos, s_neg = target_solid.split_by_plane(normal, offset)
+            s_pos.name = f"{self.name}_1"
+            s_neg.name = f"{self.name}_2"
+            updated[target_key] = s_pos
+            updated[f"{target_key}_split_2"] = s_neg
+        else:  # "positive"
+            res = target_solid.trim_by_plane(normal, offset)
+            res.name = self.name
+            updated[target_key] = res
+
+        self.status = FeatureStatus.OK
+        return updated
+
+
+class SubtractiveLoftFeature(LoftFeature):
+    """
+    Lissage soustractif (FreeCAD PartDesign::SubtractiveLoft).
+    Creuse une cavité lissée complexe entre deux profils d'esquisse dans un corps cible.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "SubtractiveLoft",
+        start_sketch_id: str = "",
+        end_sketch_id: str = "",
+        height_offset: float = 30.0,
+        scale_top: float = 1.0,
+        num_segments: int = 36,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(
+            feature_id=feature_id,
+            name=name,
+            start_sketch_id=start_sketch_id,
+            end_sketch_id=end_sketch_id,
+            height_offset=height_offset,
+            scale_top=scale_top,
+            num_segments=num_segments,
+            operation=BooleanOperation.CUT,
+            target_body_id=target_body_id
+        )
+
+
+class SubtractiveSweepFeature(SweepFeature):
+    """
+    Balayage soustractif le long d'une trajectoire (FreeCAD PartDesign::SubtractivePipe).
+    Creuse un conduit ou rainure le long d'un chemin 3D dans le corps cible.
+    """
+
+    def __init__(
+        self,
+        feature_id: str,
+        name: str = "SubtractiveSweep",
+        profile_sketch_id: str = "",
+        trajectory_type: str = "arc",
+        radius: float = 30.0,
+        height: float = 40.0,
+        turns: float = 1.0,
+        num_steps: int = 24,
+        segments: int = 24,
+        target_body_id: Optional[str] = None
+    ) -> None:
+        super().__init__(
+            feature_id=feature_id,
+            name=name,
+            profile_sketch_id=profile_sketch_id,
+            trajectory_type=trajectory_type,
+            radius=radius,
+            height=height,
+            turns=turns,
+            num_steps=num_steps,
+            segments=segments,
+            operation=BooleanOperation.CUT,
+            target_body_id=target_body_id
+        )
+
+

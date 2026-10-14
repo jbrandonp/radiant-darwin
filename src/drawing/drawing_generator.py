@@ -60,6 +60,33 @@ class LeaderLine:
 
 
 @dataclass
+class GDTFrame:
+    """
+    Cadre de tolérancement géométrique ISO 1101 (GD&T - Feature Control Frame).
+    Symboles normalisés : Planéité (⏥), Parallélisme (∥), Perpendicularité (⟂),
+    Concentricité (◎), Cylindricité (⌭), Position (⌖).
+    """
+    x: float
+    y: float
+    characteristic: str      # Symbole ou libellé (ex. "⏥", "∥", "⟂", "⌖")
+    tolerance_value: str     # Valeur numérique avec modificateurs (ex. "0.02", "Ø0.05")
+    datum_primary: str = ""   # Référence primaire (ex. "A")
+    datum_secondary: str = "" # Référence secondaire (ex. "B")
+    datum_tertiary: str = ""  # Référence tertiaire (ex. "C")
+
+
+@dataclass
+class SurfaceFinishSymbol:
+    """
+    Symbole d'état de surface et rugosité normalisé ISO 1302.
+    """
+    x: float
+    y: float
+    roughness: str           # Valeur de rugosité (ex. "Ra 1.6", "Ra 0.8", "N7")
+    machining_required: bool = True  # Enlèvement de matière requis (symbole fermé)
+
+
+@dataclass
 class TitleBlock:
     """Cartouche de mise en plan normalisé ISO."""
     project_title: str
@@ -79,6 +106,8 @@ class TechnicalSheet:
     lines: List[DrawingLine2D] = field(default_factory=list)
     dimensions: List[DimensionLabel] = field(default_factory=list)
     leaders: List[LeaderLine] = field(default_factory=list)
+    gdt_frames: List[GDTFrame] = field(default_factory=list)
+    surface_symbols: List[SurfaceFinishSymbol] = field(default_factory=list)
 
 
 class TechnicalDrawingGenerator:
@@ -469,5 +498,147 @@ class TechnicalDrawingGenerator:
             sheet.dimensions.append(dim_label)
 
         return leader
+
+    def add_gdt_frame(
+        self,
+        x: float,
+        y: float,
+        characteristic: str,
+        tolerance_value: str,
+        datum_primary: str = "",
+        datum_secondary: str = "",
+        datum_tertiary: str = "",
+        sheet: Optional[TechnicalSheet] = None
+    ) -> GDTFrame:
+        """
+        Ajoute un cadre de tolérancement géométrique ISO 1101 (GD&T Feature Control Frame).
+        Dessine le cadre compartimenté avec le symbole géométrique, la valeur de tolérance et les références.
+        """
+        frame = GDTFrame(
+            x=x, y=y, characteristic=characteristic, tolerance_value=tolerance_value,
+            datum_primary=datum_primary, datum_secondary=datum_secondary, datum_tertiary=datum_tertiary
+        )
+
+        h = 7.0  # Hauteur standardisée du cadre en mm
+        widths: List[float] = [8.0, 16.0]
+        texts: List[str] = [characteristic, tolerance_value]
+        if datum_primary:
+            widths.append(7.0)
+            texts.append(datum_primary)
+        if datum_secondary:
+            widths.append(7.0)
+            texts.append(datum_secondary)
+        if datum_tertiary:
+            widths.append(7.0)
+            texts.append(datum_tertiary)
+
+        total_w = sum(widths)
+        lines: List[DrawingLine2D] = [
+            DrawingLine2D(x, y, x + total_w, y, is_dimension=True),
+            DrawingLine2D(x, y + h, x + total_w, y + h, is_dimension=True),
+            DrawingLine2D(x, y, x, y + h, is_dimension=True),
+            DrawingLine2D(x + total_w, y, x + total_w, y + h, is_dimension=True),
+        ]
+
+        curr_x = x
+        labels: List[DimensionLabel] = []
+        for w_cell, txt in zip(widths, texts):
+            next_x = curr_x + w_cell
+            lines.append(DrawingLine2D(next_x, y, next_x, y + h, is_dimension=True))
+            labels.append(DimensionLabel(curr_x + w_cell * 0.5, y + 2.0, txt))
+            curr_x = next_x
+
+        if sheet is not None:
+            sheet.gdt_frames.append(frame)
+            sheet.lines.extend(lines)
+            sheet.dimensions.extend(labels)
+
+        return frame
+
+    def add_surface_finish_symbol(
+        self,
+        x: float,
+        y: float,
+        roughness: str = "Ra 1.6",
+        machining_required: bool = True,
+        sheet: Optional[TechnicalSheet] = None
+    ) -> SurfaceFinishSymbol:
+        """
+        Ajoute un symbole d'état de surface normalisé ISO 1302 au point indiqué.
+        """
+        symbol = SurfaceFinishSymbol(x=x, y=y, roughness=roughness, machining_required=machining_required)
+        lines: List[DrawingLine2D] = [
+            DrawingLine2D(x - 3.0, y + 5.0, x, y, is_dimension=True),
+            DrawingLine2D(x, y, x + 4.0, y + 9.0, is_dimension=True),
+            DrawingLine2D(x + 4.0, y + 9.0, x + 18.0, y + 9.0, is_dimension=True),
+        ]
+        if machining_required:
+            lines.append(DrawingLine2D(x - 1.5, y + 2.5, x + 1.5, y + 2.5, is_dimension=True))
+
+        label = DimensionLabel(x + 10.0, y + 11.0, roughness)
+
+        if sheet is not None:
+            sheet.surface_symbols.append(symbol)
+            sheet.lines.extend(lines)
+            sheet.dimensions.append(label)
+
+        return symbol
+
+    def add_detail_view(
+        self,
+        source_center_x: float,
+        source_center_y: float,
+        radius: float,
+        dest_center_x: float,
+        dest_center_y: float,
+        scale_factor: float = 2.0,
+        label: str = "Détail B",
+        sheet: Optional[TechnicalSheet] = None
+    ) -> List[DrawingLine2D]:
+        """
+        Génère une vue de détail circulaire agrandie (FreeCAD TechDraw Detail View).
+        Entoure la zone source d'un cercle repère et reproduit les éléments agrandis à l'emplacement cible.
+        """
+        if sheet is None:
+            return []
+
+        # 1. Cercle repère autour de la zone source (lignes de cote fines)
+        n_pts = 24
+        angles = np.linspace(0.0, 2.0 * np.pi, n_pts, endpoint=True)
+        circle_lines: List[DrawingLine2D] = []
+        for i in range(len(angles) - 1):
+            a1, a2 = angles[i], angles[i + 1]
+            x1 = source_center_x + radius * float(np.cos(a1))
+            y1 = source_center_y + radius * float(np.sin(a1))
+            x2 = source_center_x + radius * float(np.cos(a2))
+            y2 = source_center_y + radius * float(np.sin(a2))
+            circle_lines.append(DrawingLine2D(x1, y1, x2, y2, is_dimension=True))
+
+        letter = label.replace("Détail", "").strip() or "B"
+        sheet.dimensions.append(DimensionLabel(source_center_x + radius + 3.0, source_center_y + radius, letter))
+        sheet.lines.extend(circle_lines)
+
+        # 2. Extraction et agrandissement des lignes comprises dans la zone circulaire source
+        detail_lines: List[DrawingLine2D] = []
+        r_sq = radius * radius
+        for line in list(sheet.lines):
+            d1_sq = (line.x1 - source_center_x)**2 + (line.y1 - source_center_y)**2
+            d2_sq = (line.x2 - source_center_x)**2 + (line.y2 - source_center_y)**2
+            if d1_sq <= r_sq or d2_sq <= r_sq:
+                new_x1 = dest_center_x + (line.x1 - source_center_x) * scale_factor
+                new_y1 = dest_center_y + (line.y1 - source_center_y) * scale_factor
+                new_x2 = dest_center_x + (line.x2 - source_center_x) * scale_factor
+                new_y2 = dest_center_y + (line.y2 - source_center_y) * scale_factor
+                detail_lines.append(DrawingLine2D(
+                    new_x1, new_y1, new_x2, new_y2,
+                    is_hidden=line.is_hidden, is_dimension=line.is_dimension,
+                    is_hatch=line.is_hatch, is_centerline=line.is_centerline
+                ))
+
+        # 3. Titre de la vue de détail avec échelle
+        scale_txt = f"{int(scale_factor)}:1" if scale_factor >= 1.0 else f"1:{int(1.0/scale_factor)}"
+        sheet.dimensions.append(DimensionLabel(dest_center_x, dest_center_y - radius * scale_factor - 8.0, f"{label} ({scale_txt})"))
+        sheet.lines.extend(detail_lines)
+        return detail_lines
 
 

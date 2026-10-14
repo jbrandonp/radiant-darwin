@@ -19,6 +19,10 @@ from src.core.document import CADDocument
 from src.core.exporter import CADExporter
 from src.core.serializer import ProjectSerializer
 from src.core.parameters import UserParameter, SafeExpressionEvaluator, ParameterTable
+from src.core.interfaces import GeometryProvider, FeatureEvaluator, ExporterService, WorkbenchModule, PipelineStage
+from src.core.event_bus import CADEventBus, CADEvent, DocumentModifiedEvent, FeatureEvaluatedEvent, SelectionChangedEvent, TimelineRollbackEvent, WorkbenchChangedEvent, global_event_bus
+from src.core.registry import FeatureRegistry, FeatureCategory, FeatureDescriptor, WorkbenchRegistry, WorkbenchDescriptor
+from src.core.pipeline import LegoPipeline, TranslateStage, RotateStage, ScaleStage, BooleanStage, SimplifyStage, InspectorCallbackStage
 
 __all__ = [
     "Vector3D",
@@ -65,4 +69,29 @@ __all__ = [
     "UserParameter",
     "SafeExpressionEvaluator",
     "ParameterTable",
+    "GeometryProvider",
+    "FeatureEvaluator",
+    "ExporterService",
+    "WorkbenchModule",
+    "PipelineStage",
+    "CADEventBus",
+    "CADEvent",
+    "DocumentModifiedEvent",
+    "FeatureEvaluatedEvent",
+    "SelectionChangedEvent",
+    "TimelineRollbackEvent",
+    "WorkbenchChangedEvent",
+    "global_event_bus",
+    "FeatureRegistry",
+    "FeatureCategory",
+    "FeatureDescriptor",
+    "WorkbenchRegistry",
+    "WorkbenchDescriptor",
+    "LegoPipeline",
+    "TranslateStage",
+    "RotateStage",
+    "ScaleStage",
+    "BooleanStage",
+    "SimplifyStage",
+    "InspectorCallbackStage",
 ]

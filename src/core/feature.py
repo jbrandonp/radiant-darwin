@@ -283,15 +283,17 @@ class ExtrudeFeature(Feature):
         taper_angle: float = 0.0,
         twist_degrees: float = 0.0,
         operation: BooleanOperation = BooleanOperation.NEW_BODY,
-        target_body_id: Optional[str] = None
+        target_body_id: Optional[str] = None,
+        height: Optional[float] = None
     ) -> None:
         super().__init__(feature_id, name)
         self.sketch_id = sketch_id
+        actual_dist = float(height if height is not None else distance)
         self.symmetric = symmetric
         self.taper_angle = float(taper_angle)
         self.twist_degrees = float(twist_degrees)
         self.parameters = {
-            "distance": float(distance),
+            "distance": actual_dist,
             "symmetric": 1.0 if symmetric else 0.0,
             "taper_angle": float(taper_angle),
             "twist_degrees": float(twist_degrees),

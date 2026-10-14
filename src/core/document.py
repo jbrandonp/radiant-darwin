@@ -45,6 +45,17 @@ class CADDocument:
             except Exception as e:
                 print(f"Erreur callback document : {e}")
 
+        # Notification sur le bus d'événements LEGO découplé
+        try:
+            from src.core.event_bus import global_event_bus, DocumentModifiedEvent
+            global_event_bus.publish(DocumentModifiedEvent(
+                document_name=self.name,
+                num_bodies=len(self.bodies),
+                num_features=len(self.features)
+            ))
+        except Exception:
+            pass
+
     def invalidate_cache(self) -> None:
         """Invalide les instantanés d'historique lors d'une modification paramétrique."""
         self._timeline_snapshots.clear()
@@ -101,8 +112,21 @@ class CADDocument:
         Déplace le curseur de rollback de l'historique (comme la barre en bas de Fusion 360).
         Restauration instantanée O(1) si l'étape est déjà présente en cache.
         """
+        prev_idx = self.rollback_index
         clamped_idx = max(-1, min(index, len(self.features) - 1))
         self.rollback_index = clamped_idx
+
+        # Notification sur le bus d'événements LEGO
+        try:
+            from src.core.event_bus import global_event_bus, TimelineRollbackEvent
+            global_event_bus.publish(TimelineRollbackEvent(
+                previous_index=prev_idx,
+                new_index=clamped_idx,
+                max_index=len(self.features) - 1
+            ))
+        except Exception:
+            pass
+
         self.rebuild()
 
     def rebuild(self) -> None:

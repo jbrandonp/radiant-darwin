@@ -137,15 +137,19 @@ class TechnicalDrawingGenerator:
         solid: Solid,
         title: str = "Composant Mécanique",
         author: str = "Brandon",
-        material_name: str = "Aluminium 6061-T6"
+        material_name: str = "Aluminium 6061-T6",
+        part_name: Optional[str] = None,
+        material: Optional[str] = None
     ) -> TechnicalSheet:
         """
         Extrait les projections orthogonales d'un solide et dispose les vues et cotations.
         """
+        proj_title = part_name if part_name is not None else title
+        mat = material if material is not None else material_name
         sheet = TechnicalSheet(
             width_mm=self.width,
             height_mm=self.height,
-            title_block=TitleBlock(project_title=title, author=author, material=material_name)
+            title_block=TitleBlock(project_title=proj_title, author=author, material=mat)
         )
 
         # 1. Dessiner le cadre extérieur (Marge 10 mm)
@@ -274,25 +278,27 @@ class TechnicalDrawingGenerator:
         center_y: float = 150.0,
         scale: float = 1.0,
         hatch_spacing: float = 4.0,
-        title: str = "Coupe A-A (Section View ISO)"
+        title: str = "Coupe A-A (Section View ISO)",
+        sheet: Optional[TechnicalSheet] = None
     ) -> TechnicalSheet:
         """
         Génère une vue en coupe technique normalisée (FreeCAD TechDraw Section View).
         Découpe le solide à la hauteur cut_height, projette le contour et applique
         des hachures diagonales à 45° selon la norme ISO 128.
         """
-        sheet = TechnicalSheet(
-            width_mm=self.width,
-            height_mm=self.height,
-            title_block=TitleBlock(project_title=title)
-        )
-        # Cadre extérieur (Marge 10 mm)
-        sheet.lines.extend([
-            DrawingLine2D(10.0, 10.0, self.width - 10.0, 10.0),
-            DrawingLine2D(self.width - 10.0, 10.0, self.width - 10.0, self.height - 10.0),
-            DrawingLine2D(self.width - 10.0, self.height - 10.0, 10.0, self.height - 10.0),
-            DrawingLine2D(10.0, self.height - 10.0, 10.0, 10.0),
-        ])
+        if sheet is None:
+            sheet = TechnicalSheet(
+                width_mm=self.width,
+                height_mm=self.height,
+                title_block=TitleBlock(project_title=title)
+            )
+            # Cadre extérieur (Marge 10 mm)
+            sheet.lines.extend([
+                DrawingLine2D(10.0, 10.0, self.width - 10.0, 10.0),
+                DrawingLine2D(self.width - 10.0, 10.0, self.width - 10.0, self.height - 10.0),
+                DrawingLine2D(self.width - 10.0, self.height - 10.0, 10.0, self.height - 10.0),
+                DrawingLine2D(10.0, self.height - 10.0, 10.0, 10.0),
+            ])
 
         if solid.is_empty():
             return sheet
@@ -640,5 +646,8 @@ class TechnicalDrawingGenerator:
         sheet.dimensions.append(DimensionLabel(dest_center_x, dest_center_y - radius * scale_factor - 8.0, f"{label} ({scale_txt})"))
         sheet.lines.extend(detail_lines)
         return detail_lines
+
+    # Alias de compatibilité
+    generate_standard_sheet = generate_sheet
 
 

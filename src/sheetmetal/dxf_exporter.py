@@ -95,3 +95,6 @@ class DXFExporter:
                 f.write(dxf_content)
 
         return dxf_content
+
+    # Alias pratique pour l'exportation standard
+    export_dxf = export_flat_pattern_dxf

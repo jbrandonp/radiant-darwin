@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import re
-from typing import Dict, List, Tuple, Optional
+from typing import Callable, Dict, List, Tuple, Optional
 
 from src.core.types import Vector3D
 from src.core.geometry import (
@@ -169,6 +169,55 @@ class CADAIBridge:
             "rollback_index": str(self.doc.rollback_index),
         }
 
+    def _get_intent_dispatch_table(self) -> List[Tuple[List[str], Callable[[str], CADAIExecutionResult]]]:
+        """Retourne la table de correspondance mots-clés → gestionnaire d'intention CAO."""
+        return [
+            (["efface", "nettoie", "vide", "clear", "reset"], self._handle_clear_scene),
+            (["usinage", "cam", "gcode", "g-code", "fraisage", "contournage"], self._handle_cam_intent),
+            (["simulation", "fea", "contrainte", "mises", "force", "charge", "resistance", "résistance"], self._handle_fea_intent),
+            (["plan", "techdraw", "mise en plan", "dessin technique"], self._handle_techdraw_intent),
+            (["tôle", "tole", "pliage", "plie", "flan", "sheetmetal", "sheet metal"], self._handle_sheet_metal_intent),
+            (["materiau", "matériau", "matiere", "matière", "inox", "titane", "masse", "poids"], self._handle_material_intent),
+            (["pousse", "tire", "push", "pull", "conge", "congé", "fillet", "chanfrein", "coque", "shell", "évide", "evide"], self._handle_direct_modeling_intent),
+            (["export", "exporter", "step", "stl"], self._handle_export_intent),
+        ]
+
+    def _get_shape_dispatch_table(self) -> List[Tuple[Callable[[str], bool], Callable[[str], CADAIExecutionResult]]]:
+        """Retourne la table de correspondance conditionnelle → gestionnaire de forme 3D."""
+        def is_stepped_shaft(p: str) -> bool:
+            return "arbre" in p and any(w in p for w in ["étagé", "etage", "stepped", "multistep", "étages", "etages"])
+
+        kw_handlers: List[Tuple[List[str], Callable[[str], CADAIExecutionResult]]] = [
+            (["palier", "pillow"], self._handle_pillow_block_intent),
+            (["poulie", "pulley"], self._handle_pulley_intent),
+            (["engrenage", "pignon", "gear", "dent"], self._handle_spur_gear_intent),
+            (["bride", "flange"], self._handle_flange_intent),
+            (["dissipateur", "ailette", "heatsink", "refroidisseur"], self._handle_heat_sink_intent),
+            (["boitier", "boîtier", "enclosure", "coffret"], self._handle_enclosure_intent),
+            (["equerre", "équerre", "bracket", "renfort"], self._handle_bracket_intent),
+            (["cylindre", "cylinder", "shaft"], self._handle_cylinder_intent),
+            (["sphere", "sphère", "balle", "boule"], self._handle_sphere_intent),
+            (["perce", "perçage", "trou", "alesage", "alésage", "drill", "hole"], self._handle_drill_hole_intent),
+            (["cube", "boite", "boîte", "pave", "pavé", "box", "plaque", "platine"], self._handle_box_intent),
+        ]
+        result: List[Tuple[Callable[[str], bool], Callable[[str], CADAIExecutionResult]]] = []
+        result.append((is_stepped_shaft, self._handle_stepped_shaft_intent))
+        for keywords, handler in kw_handlers:
+            result.append((lambda p, kw=keywords: any(w in p for w in kw), handler))
+        return result
+
+    def _handle_clear_scene(self, p_clean: str) -> CADAIExecutionResult:
+        """Efface tous les corps de la scène."""
+        self.doc.bodies.clear()
+        self.doc.features.clear()
+        self.doc._notify_change()
+        return CADAIExecutionResult(
+            success=True,
+            message="Scène nettoyée avec succès. Tous les corps ont été supprimés.",
+            command_executed="clear_scene",
+            command_type=AICommandType.CLEAR_SCENE
+        )
+
     def interpret_and_execute(self, prompt: str) -> CADAIExecutionResult:
         """Alias direct pour execute_natural_language_prompt."""
         return self.execute_natural_language_prompt(prompt)
@@ -180,96 +229,17 @@ class CADAIBridge:
         """
         p_clean = prompt.lower().strip()
 
-        # 1. Commande d'effacement / Nettoyage de la scène
-        if any(w in p_clean for w in ["efface", "nettoie", "vide", "clear", "reset"]):
-            self.doc.bodies.clear()
-            self.doc.features.clear()
-            self.doc._notify_change()
-            return CADAIExecutionResult(
-                success=True,
-                message="Scène nettoyée avec succès. Tous les corps ont été supprimés.",
-                command_executed="clear_scene",
-                command_type=AICommandType.CLEAR_SCENE
-            )
+        # Phase 1 : intentions techniques (CAM, FEA, export, etc.)
+        for keywords, handler in self._get_intent_dispatch_table():
+            if any(w in p_clean for w in keywords):
+                return handler(p_clean)
 
-        # 2. CAM / Usinage & G-Code
-        if any(w in p_clean for w in ["usinage", "cam", "gcode", "g-code", "fraisage", "contournage"]):
-            return self._handle_cam_intent(p_clean)
+        # Phase 2 : intentions de forme 3D
+        for predicate, handler in self._get_shape_dispatch_table():
+            if predicate(p_clean):
+                return handler(p_clean)
 
-        # 3. FEA / Simulation mécanique & contraintes
-        if any(w in p_clean for w in ["simulation", "fea", "contrainte", "mises", "force", "charge", "resistance", "résistance"]):
-            return self._handle_fea_intent(p_clean)
-
-        # 4. TechDraw / Mise en plan 2D
-        if any(w in p_clean for w in ["plan", "techdraw", "mise en plan", "dessin technique"]):
-            return self._handle_techdraw_intent(p_clean)
-
-        # 5. Tôlerie industrielle & Déplié
-        if any(w in p_clean for w in ["tôle", "tole", "pliage", "plie", "flan", "sheetmetal", "sheet metal"]):
-            return self._handle_sheet_metal_intent(p_clean)
-
-        # 6. Matériaux & Propriétés massiques
-        if any(w in p_clean for w in ["materiau", "matériau", "matiere", "matière", "inox", "titane", "masse", "poids"]):
-            return self._handle_material_intent(p_clean)
-
-        # 7. Modélisation directe (push-pull, congé, coque)
-        if any(w in p_clean for w in ["pousse", "tire", "push", "pull", "conge", "congé", "fillet", "chanfrein", "coque", "shell", "évide", "evide"]):
-            return self._handle_direct_modeling_intent(p_clean)
-
-        # 8. Export multi-formats
-        if any(w in p_clean for w in ["export", "exporter", "step", "stl"]):
-            return self._handle_export_intent(p_clean)
-
-        # 9. Arbre étagé concentrique
-        if "arbre" in p_clean and any(w in p_clean for w in ["étagé", "etage", "stepped", "multistep", "étages", "etages"]):
-            return self._handle_stepped_shaft_intent(p_clean)
-
-
-        # 3. Palier à semelle (Pillow Block)
-        if any(w in p_clean for w in ["palier", "pillow"]):
-            return self._handle_pillow_block_intent(p_clean)
-
-        # 4. Poulie mécanique
-        if any(w in p_clean for w in ["poulie", "pulley"]):
-            return self._handle_pulley_intent(p_clean)
-
-        # 5. Engrenage / Pignon
-        if any(w in p_clean for w in ["engrenage", "pignon", "gear", "dent"]):
-            return self._handle_spur_gear_intent(p_clean)
-
-        # 6. Bride de tuyauterie
-        if any(w in p_clean for w in ["bride", "flange"]):
-            return self._handle_flange_intent(p_clean)
-
-        # 7. Dissipateur thermique à ailettes
-        if any(w in p_clean for w in ["dissipateur", "ailette", "heatsink", "refroidisseur"]):
-            return self._handle_heat_sink_intent(p_clean)
-
-        # 8. Boîtier électronique évidé
-        if any(w in p_clean for w in ["boitier", "boîtier", "enclosure", "coffret"]):
-            return self._handle_enclosure_intent(p_clean)
-
-        # 9. Équerre de fixation
-        if any(w in p_clean for w in ["equerre", "équerre", "bracket", "renfort"]):
-            return self._handle_bracket_intent(p_clean)
-
-        # 10. Cylindre / Arbre simple
-        if any(w in p_clean for w in ["cylindre", "cylinder", "shaft"]):
-            return self._handle_cylinder_intent(p_clean)
-
-        # 11. Sphère
-        if any(w in p_clean for w in ["sphere", "sphère", "balle", "boule"]):
-            return self._handle_sphere_intent(p_clean)
-
-        # 12. Perçage / Alésage sur la pièce active
-        if any(w in p_clean for w in ["perce", "perçage", "trou", "alesage", "alésage", "drill", "hole"]):
-            return self._handle_drill_hole_intent(p_clean)
-
-        # 13. Pavé / Boîte / Plaque / Cube
-        if any(w in p_clean for w in ["cube", "boite", "boîte", "pave", "pavé", "box", "plaque", "platine"]):
-            return self._handle_box_intent(p_clean)
-
-        # 14. Commande non reconnue : suggestions interactives
+        # Commande non reconnue : suggestions interactives
         return CADAIExecutionResult(
             success=False,
             message="Instruction non reconnue. Vous pouvez demander par exemple : 'Crée un engrenage', 'Bride de tuyauterie', 'Palier à semelle', 'Poulie', 'Dissipateur thermique', 'Boîtier électronique', 'Équerre renforcée', 'Arbre étagé', 'Cube 50x50x20', 'Cylindre r=15 h=40', 'Perce un trou Ø10'.",

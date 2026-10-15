@@ -354,7 +354,7 @@ class KernelMutationRegistry:
     # SOUS-SYSTÈME 1 : GÉOMÉTRIE CSG ET PRIMITIVES 3D (36 mutants)
     # ------------------------------------------------------------------------
     @classmethod
-    def _get_geometry_mutants(cls) -> List[KernelMutant]:
+    def _get_geometry_mutants_part1(cls) -> List[KernelMutant]:
         m_list: List[KernelMutant] = []
 
         # MUT-GAOR-GEOM-001: Solid.union remplacé par soustraction
@@ -602,6 +602,11 @@ class KernelMutationRegistry:
             return abs(c.volume() - expected) < 50.0
 
         m_list.append(KernelMutant("MUT-GROR-GEOM-018", MutationFamily.G_ROR, "geometry", "src.core.geometry", None, "make_cylinder", "Doublement involontaire du rayon de cylindre", patch_cyl, test_cyl))
+        return m_list
+
+    @classmethod
+    def _get_geometry_mutants_part2(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GROR-GEOM-019: make_sphere rayon altéré
         def patch_sph() -> MutantCallable:
@@ -859,14 +864,20 @@ class KernelMutationRegistry:
             return abs(bmin.x - (-5.0)) < 0.1 and abs(bmax.x - 5.0) < 0.1
 
         m_list.append(KernelMutant("MUT-GROR-GEOM-036", MutationFamily.G_ROR, "geometry", "src.core.geometry", None, "make_box", "Désactivation du centrage paramétrique sur l'origine", patch_box_center, test_box_center))
+        return m_list
 
+    @classmethod
+    def _get_geometry_mutants(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
+        m_list.extend(cls._get_geometry_mutants_part1())
+        m_list.extend(cls._get_geometry_mutants_part2())
         return m_list
 
     # ------------------------------------------------------------------------
     # SOUS-SYSTÈME 2 : SOLVEUR 2D ET LEVENBERG-MARQUARDT (36 mutants)
     # ------------------------------------------------------------------------
     @classmethod
-    def _get_solver_jacobian_mutants(cls) -> List[KernelMutant]:
+    def _get_solver_jacobian_mutants_part1a(cls) -> List[KernelMutant]:
         m_list: List[KernelMutant] = []
 
         # MUT-GSOLV-SOLV-037: COINCIDENT Jacobienne x signe inversé
@@ -962,6 +973,11 @@ class KernelMutationRegistry:
             return abs(j[0, 0] - 1.0) < 1e-6
 
         m_list.append(KernelMutant("MUT-GSOLV-SOLV-040", MutationFamily.G_SOLV, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "_fill_single_constraint_jacobian", "Inversion dérivée VERTICAL dans la Jacobienne", patch_jac_vert, test_jac_vert))
+        return m_list
+
+    @classmethod
+    def _get_solver_jacobian_mutants_part1b(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GSOLV-SOLV-041: DISTANCE Jacobienne dx_a inversé
         def patch_jac_dist_dxa() -> MutantCallable:
@@ -1018,6 +1034,18 @@ class KernelMutationRegistry:
             return abs(j[0, 0]) < 1e-6
 
         m_list.append(KernelMutant("MUT-GSOLV-SOLV-042", MutationFamily.G_SOLV, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "_fill_single_constraint_jacobian", "Permutation dx/dy dans le gradient de distance", patch_jac_dist_swap, test_jac_dist_diag))
+        return m_list
+
+    @classmethod
+    def _get_solver_jacobian_mutants_part1(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
+        m_list.extend(cls._get_solver_jacobian_mutants_part1a())
+        m_list.extend(cls._get_solver_jacobian_mutants_part1b())
+        return m_list
+
+    @classmethod
+    def _get_solver_jacobian_mutants_part2(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GSOLV-SOLV-043: PARALLEL Jacobienne dérivée inversée
         def patch_jac_parallel() -> MutantCallable:
@@ -1168,11 +1196,17 @@ class KernelMutationRegistry:
             return ok and abs(pts[p1].v - 10.0) < 0.1
 
         m_list.append(KernelMutant("MUT-GSOLV-SOLV-048", MutationFamily.G_SOLV, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "_fill_single_constraint_jacobian", "Annulation de dérivée de contrainte TANGENT", patch_jac_tangent, test_jac_tangent))
-
         return m_list
 
     @classmethod
-    def _get_solver_residual_mutants(cls) -> List[KernelMutant]:
+    def _get_solver_jacobian_mutants(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
+        m_list.extend(cls._get_solver_jacobian_mutants_part1())
+        m_list.extend(cls._get_solver_jacobian_mutants_part2())
+        return m_list
+
+    @classmethod
+    def _get_solver_residual_mutants_part1(cls) -> List[KernelMutant]:
         m_list: List[KernelMutant] = []
 
         # MUT-GAOR-SOLV-049: COINCIDENT résidu addition au lieu de soustraction
@@ -1345,6 +1379,11 @@ class KernelMutationRegistry:
             return ok is True
 
         m_list.append(KernelMutant("MUT-GROR-SOLV-056", MutationFamily.G_ROR, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "solve", "Invalidation inconditionnelle du succès de résolution", patch_solve_thresh, test_solve_thresh))
+        return m_list
+
+    @classmethod
+    def _get_solver_residual_mutants_part2(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GROR-SOLV-057: solve max_iterations bridé à 1
         def patch_solve_iter() -> MutantCallable:
@@ -1488,6 +1527,11 @@ class KernelMutationRegistry:
             return abs(res[0]) < 1e-3
 
         m_list.append(KernelMutant("MUT-GSOLV-SOLV-064", MutationFamily.G_SOLV, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "_eval_single_constraint_residual", "Altération du résidu de calcul d'angle géométrique", patch_res_angle, test_res_angle))
+        return m_list
+
+    @classmethod
+    def _get_solver_residual_mutants_part3(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GSOLV-SOLV-065: EQUAL résidu addition au lieu de différence
         def patch_res_eq() -> MutantCallable:
@@ -1654,7 +1698,14 @@ class KernelMutationRegistry:
             return res[0] > 0.0
 
         m_list.append(KernelMutant("MUT-GSOLV-SOLV-072", MutationFamily.G_SOLV, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "_evaluate_residuals", "Inversion de signe du vecteur global des résidus", patch_res_sign, test_res_sign))
+        return m_list
 
+    @classmethod
+    def _get_solver_residual_mutants(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
+        m_list.extend(cls._get_solver_residual_mutants_part1())
+        m_list.extend(cls._get_solver_residual_mutants_part2())
+        m_list.extend(cls._get_solver_residual_mutants_part3())
         return m_list
 
     @classmethod
@@ -2118,6 +2169,44 @@ class KernelAstMutationEngine:
             execution_time_ms = (time.perf_counter() - t_start) * 1000.0
             return MutantResult(mutant.mutant_id, mutant.family, mutant.subsystem, MutantStatus.KILLED, execution_time_ms, error_message=str(exc))
 
+    @staticmethod
+    def _compute_family_stats(results: List[MutantResult]) -> Dict[str, Dict[str, float]]:
+        """Calcule les statistiques de mutation par famille d'opérateurs."""
+        family_stats: Dict[str, Dict[str, float]] = {}
+        for fam in MutationFamily:
+            fam_results = [r for r in results if r.family == fam]
+            f_tot = len(fam_results)
+            f_kill = sum(1 for r in fam_results if r.status == MutantStatus.KILLED)
+            f_rate = (float(f_kill) / float(f_tot) * 100.0) if f_tot > 0 else 0.0
+            family_stats[fam.value] = {"total": float(f_tot), "killed": float(f_kill), "rate": f_rate}
+        return family_stats
+
+    @staticmethod
+    def _compute_subsystem_stats(results: List[MutantResult]) -> Dict[str, Dict[str, float]]:
+        """Calcule les statistiques de mutation par sous-système architectural."""
+        subsystem_stats: Dict[str, Dict[str, float]] = {}
+        subsystems = sorted(list(set(r.subsystem for r in results)))
+        for sub in subsystems:
+            sub_results = [r for r in results if r.subsystem == sub]
+            s_tot = len(sub_results)
+            s_kill = sum(1 for r in sub_results if r.status == MutantStatus.KILLED)
+            s_rate = (float(s_kill) / float(s_tot) * 100.0) if s_tot > 0 else 0.0
+            subsystem_stats[sub] = {"total": float(s_tot), "killed": float(s_kill), "rate": s_rate}
+        return subsystem_stats
+
+    def _filter_mutants(
+        self,
+        filter_family: Optional[MutationFamily] = None,
+        filter_subsystem: Optional[str] = None
+    ) -> List[KernelMutant]:
+        """Filtre la liste des mutants selon la famille et le sous-système."""
+        selected_mutants = self.mutants
+        if filter_family is not None:
+            selected_mutants = [m for m in selected_mutants if m.family == filter_family]
+        if filter_subsystem is not None:
+            selected_mutants = [m for m in selected_mutants if m.subsystem == filter_subsystem]
+        return selected_mutants
+
     def run_all(
         self,
         filter_family: Optional[MutationFamily] = None,
@@ -2133,19 +2222,10 @@ class KernelAstMutationEngine:
         Returns:
             Rapport complet de mutation testing.
         """
-        selected_mutants = self.mutants
-        if filter_family is not None:
-            selected_mutants = [m for m in selected_mutants if m.family == filter_family]
-        if filter_subsystem is not None:
-            selected_mutants = [m for m in selected_mutants if m.subsystem == filter_subsystem]
+        selected_mutants = self._filter_mutants(filter_family, filter_subsystem)
 
-        results: List[MutantResult] = []
         t0 = time.perf_counter()
-
-        for mutant in selected_mutants:
-            res = self.run_mutant(mutant)
-            results.append(res)
-
+        results: List[MutantResult] = [self.run_mutant(mutant) for mutant in selected_mutants]
         total_duration = time.perf_counter() - t0
 
         killed = sum(1 for r in results if r.status == MutantStatus.KILLED)
@@ -2154,25 +2234,6 @@ class KernelAstMutationEngine:
         total = len(results)
         rate = (float(killed) / float(total) * 100.0) if total > 0 else 0.0
 
-        # Statistiques par famille
-        family_stats: Dict[str, Dict[str, float]] = {}
-        for fam in MutationFamily:
-            fam_results = [r for r in results if r.family == fam]
-            f_tot = len(fam_results)
-            f_kill = sum(1 for r in fam_results if r.status == MutantStatus.KILLED)
-            f_rate = (float(f_kill) / float(f_tot) * 100.0) if f_tot > 0 else 0.0
-            family_stats[fam.value] = {"total": float(f_tot), "killed": float(f_kill), "rate": f_rate}
-
-        # Statistiques par sous-système
-        subsystem_stats: Dict[str, Dict[str, float]] = {}
-        subsystems = sorted(list(set(r.subsystem for r in results)))
-        for sub in subsystems:
-            sub_results = [r for r in results if r.subsystem == sub]
-            s_tot = len(sub_results)
-            s_kill = sum(1 for r in sub_results if r.status == MutantStatus.KILLED)
-            s_rate = (float(s_kill) / float(s_tot) * 100.0) if s_tot > 0 else 0.0
-            subsystem_stats[sub] = {"total": float(s_tot), "killed": float(s_kill), "rate": s_rate}
-
         return MutationReport(
             total_mutants=total,
             killed_count=killed,
@@ -2180,7 +2241,7 @@ class KernelAstMutationEngine:
             errored_count=errored,
             kill_rate_percent=rate,
             total_duration_seconds=total_duration,
-            family_stats=family_stats,
-            subsystem_stats=subsystem_stats,
+            family_stats=self._compute_family_stats(results),
+            subsystem_stats=self._compute_subsystem_stats(results),
             results=results
         )

@@ -244,27 +244,44 @@ class SketchConstraintSolver2D:
             if idx < 0 or idx >= num_pts:
                 return [100.0]
 
+        pair_res = self._residual_pair_constraint(c_type, indices, x, c)
+        if pair_res is not None:
+            return pair_res
+
+        complex_res = self._residual_complex_constraint(c_type, indices, x, c)
+        if complex_res is not None:
+            return complex_res
+
+        return [0.0]
+
+    @staticmethod
+    def _residual_pair_constraint(
+        c_type: ConstraintType, indices: List[int], x: np.ndarray, c: GeometricConstraint2D
+    ) -> Optional[List[float]]:
+        """Calcule les résidus pour les contraintes simples (2 points). Retourne None si non applicable."""
         if c_type == ConstraintType.COINCIDENT:
             i_a, i_b = indices[0], indices[1]
             return [float(x[2 * i_a] - x[2 * i_b]), float(x[2 * i_a + 1] - x[2 * i_b + 1])]
-
         if c_type == ConstraintType.HORIZONTAL:
             i_a, i_b = indices[0], indices[1]
             return [float(x[2 * i_a + 1] - x[2 * i_b + 1])]
-
         if c_type == ConstraintType.VERTICAL:
             i_a, i_b = indices[0], indices[1]
             return [float(x[2 * i_a] - x[2 * i_b])]
-
         if c_type == ConstraintType.DISTANCE:
             i_a, i_b = indices[0], indices[1]
             cur_dist = float(np.hypot(x[2 * i_a] - x[2 * i_b], x[2 * i_a + 1] - x[2 * i_b + 1]))
             return [cur_dist - c.target_value]
-
         if c_type in (ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE):
             i_a = indices[0]
             return [float(x[2 * i_a] - c.target_value), float(x[2 * i_a + 1] - c.target_value_v)]
+        return None
 
+    @staticmethod
+    def _residual_complex_constraint(
+        c_type: ConstraintType, indices: List[int], x: np.ndarray, c: GeometricConstraint2D
+    ) -> Optional[List[float]]:
+        """Calcule les résidus pour les contraintes complexes (4-5 points). Retourne None si non applicable."""
         if c_type == ConstraintType.PARALLEL:
             i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
             dx_a = x[2 * i_a2] - x[2 * i_a1]
@@ -272,7 +289,6 @@ class SketchConstraintSolver2D:
             dx_b = x[2 * i_b2] - x[2 * i_b1]
             dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
             return [float(dx_a * dy_b - dy_a * dx_b)]
-
         if c_type == ConstraintType.PERPENDICULAR:
             i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
             dx_a = x[2 * i_a2] - x[2 * i_a1]
@@ -280,13 +296,11 @@ class SketchConstraintSolver2D:
             dx_b = x[2 * i_b2] - x[2 * i_b1]
             dy_b = x[2 * i_b2 + 1] - x[2 * i_b1 + 1]
             return [float(dx_a * dx_b + dy_a * dy_b)]
-
         if c_type == ConstraintType.EQUAL:
             i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
             dist_a = float(np.hypot(x[2 * i_a2] - x[2 * i_a1], x[2 * i_a2 + 1] - x[2 * i_a1 + 1]))
             dist_b = float(np.hypot(x[2 * i_b2] - x[2 * i_b1], x[2 * i_b2 + 1] - x[2 * i_b1 + 1]))
             return [dist_a - dist_b]
-
         if c_type == ConstraintType.ANGLE:
             i_a1, i_a2, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3]
             dx_a = x[2 * i_a2] - x[2 * i_a1]
@@ -300,7 +314,6 @@ class SketchConstraintSolver2D:
                 dot_prod = float((dx_a * dx_b + dy_a * dy_b) / (len_a * len_b))
                 return [dot_prod - cos_target]
             return [0.0]
-
         if c_type == ConstraintType.POINT_ON_LINE:
             i_l1, i_l2, i_p = indices[0], indices[1], indices[2]
             dx_l = x[2 * i_l2] - x[2 * i_l1]
@@ -309,7 +322,6 @@ class SketchConstraintSolver2D:
             dy_p = x[2 * i_p + 1] - x[2 * i_l1 + 1]
             len_l = float(np.hypot(dx_l, dy_l))
             return [float((dx_l * dy_p - dy_l * dx_p) / len_l)] if len_l > 1e-9 else [0.0]
-
         if c_type == ConstraintType.TANGENT:
             i_l1, i_l2, i_c = indices[0], indices[1], indices[2]
             x1, y1 = x[2 * i_l1], x[2 * i_l1 + 1]
@@ -322,7 +334,6 @@ class SketchConstraintSolver2D:
                 dist_center = float(abs(dx * (y1 - yc) - dy * (x1 - xc)) / line_len)
                 return [dist_center - c.target_value]
             return [0.0]
-
         if c_type == ConstraintType.G2_CURVATURE:
             i_a0, i_a1, i_joint, i_b1, i_b2 = indices[0], indices[1], indices[2], indices[3], indices[4]
             v_ax = x[2 * i_joint] - x[2 * i_a1]
@@ -344,8 +355,7 @@ class SketchConstraintSolver2D:
                 kappa_b = (v_bx * a_by - v_by * a_bx) / (v_b_norm_sq ** 1.5)
                 g2_res = float(kappa_a - kappa_b)
             return [g1_res, g2_res]
-
-        return [0.0]
+        return None
 
     def _evaluate_jacobian(self, x: np.ndarray) -> np.ndarray:
         """
@@ -384,6 +394,33 @@ class SketchConstraintSolver2D:
                 num_sub_eqs = 2 if c_type in (ConstraintType.COINCIDENT, ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE, ConstraintType.G2_CURVATURE) else 1
                 return num_sub_eqs
 
+        pair_result = self._fill_jac_pair_constraint(c_type, indices, x, j_mat, row)
+        if pair_result >= 0:
+            return pair_result
+
+        quad_result = self._fill_jac_quad_constraint(c_type, indices, x, j_mat, row)
+        if quad_result >= 0:
+            return quad_result
+
+        # Approximation par différences finies centrales pour contraintes non-linéaires complexes
+        eps = 1e-7
+        num_sub_eqs = 2 if c_type == ConstraintType.G2_CURVATURE else 1
+        for col in range(num_vars):
+            x_step = x.copy()
+            x_step[col] += eps
+            f_step = self._evaluate_residuals(x_step)
+            for sub_k in range(num_sub_eqs):
+                if row + sub_k < num_eqs:
+                    j_mat[row + sub_k, col] = (f_step[row + sub_k] - f0[row + sub_k]) / eps
+
+        return num_sub_eqs
+
+    @staticmethod
+    def _fill_jac_pair_constraint(
+        c_type: ConstraintType, indices: List[int], x: np.ndarray,
+        j_mat: np.ndarray, row: int
+    ) -> int:
+        """Remplit la Jacobienne pour les contraintes à 2 points. Retourne -1 si non applicable."""
         if c_type == ConstraintType.COINCIDENT:
             ia, ib = indices[0], indices[1]
             j_mat[row, 2 * ia] = 1.0
@@ -391,19 +428,16 @@ class SketchConstraintSolver2D:
             j_mat[row + 1, 2 * ia + 1] = 1.0
             j_mat[row + 1, 2 * ib + 1] = -1.0
             return 2
-
         if c_type == ConstraintType.HORIZONTAL:
             ia, ib = indices[0], indices[1]
             j_mat[row, 2 * ia + 1] = 1.0
             j_mat[row, 2 * ib + 1] = -1.0
             return 1
-
         if c_type == ConstraintType.VERTICAL:
             ia, ib = indices[0], indices[1]
             j_mat[row, 2 * ia] = 1.0
             j_mat[row, 2 * ib] = -1.0
             return 1
-
         if c_type == ConstraintType.DISTANCE:
             ia, ib = indices[0], indices[1]
             dx = x[2 * ib] - x[2 * ia]
@@ -415,13 +449,19 @@ class SketchConstraintSolver2D:
                 j_mat[row, 2 * ib] = dx / dist
                 j_mat[row, 2 * ib + 1] = dy / dist
             return 1
-
         if c_type in (ConstraintType.FIXED, ConstraintType.EXTERNAL_REFERENCE):
             ia = indices[0]
             j_mat[row, 2 * ia] = 1.0
             j_mat[row + 1, 2 * ia + 1] = 1.0
             return 2
+        return -1
 
+    @staticmethod
+    def _fill_jac_quad_constraint(
+        c_type: ConstraintType, indices: List[int], x: np.ndarray,
+        j_mat: np.ndarray, row: int
+    ) -> int:
+        """Remplit la Jacobienne pour les contraintes à 4 points. Retourne -1 si non applicable."""
         if c_type == ConstraintType.PARALLEL:
             ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
             dx_a = x[2 * ia2] - x[2 * ia1]
@@ -437,7 +477,6 @@ class SketchConstraintSolver2D:
             j_mat[row, 2 * ib1 + 1] = -dx_a
             j_mat[row, 2 * ib2 + 1] = dx_a
             return 1
-
         if c_type == ConstraintType.PERPENDICULAR:
             ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
             dx_a = x[2 * ia2] - x[2 * ia1]
@@ -453,7 +492,6 @@ class SketchConstraintSolver2D:
             j_mat[row, 2 * ib1 + 1] = -dy_a
             j_mat[row, 2 * ib2 + 1] = dy_a
             return 1
-
         if c_type == ConstraintType.EQUAL:
             ia1, ia2, ib1, ib2 = indices[0], indices[1], indices[2], indices[3]
             dx_a = x[2 * ia2] - x[2 * ia1]
@@ -473,19 +511,7 @@ class SketchConstraintSolver2D:
                 j_mat[row, 2 * ib2] = -dx_b / len_b
                 j_mat[row, 2 * ib2 + 1] = -dy_b / len_b
             return 1
-
-        # Approximation par différences finies centrales pour contraintes non-linéaires complexes
-        eps = 1e-7
-        num_sub_eqs = 2 if c_type == ConstraintType.G2_CURVATURE else 1
-        for col in range(num_vars):
-            x_step = x.copy()
-            x_step[col] += eps
-            f_step = self._evaluate_residuals(x_step)
-            for sub_k in range(num_sub_eqs):
-                if row + sub_k < num_eqs:
-                    j_mat[row + sub_k, col] = (f_step[row + sub_k] - f0[row + sub_k]) / eps
-
-        return num_sub_eqs
+        return -1
 
     def calculate_degrees_of_freedom(self) -> Tuple[int, str]:
         """

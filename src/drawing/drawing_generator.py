@@ -7,7 +7,7 @@ génère les cotations dimensionnelles et le cartouche ISO.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Tuple, Dict, Optional
+from typing import List, Sequence, Tuple, Dict, Optional
 import numpy as np
 
 from src.core.geometry import Solid
@@ -465,6 +465,84 @@ class TechnicalDrawingGenerator:
 
             sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=is_hidden))
 
+    @staticmethod
+    def _draw_section_contour(
+        sheet: TechnicalSheet,
+        poly: Sequence[Point2D],
+        center_x: float,
+        center_y: float,
+        mean_u: float,
+        mean_v: float,
+        scale: float
+    ) -> None:
+        """Dessine les arêtes du contour extérieur de coupe."""
+        n = len(poly)
+        for i in range(n):
+            p_curr = poly[i]
+            p_next = poly[(i + 1) % n]
+            x1 = center_x + (p_curr.u - mean_u) * scale
+            y1 = center_y + (p_curr.v - mean_v) * scale
+            x2 = center_x + (p_next.u - mean_u) * scale
+            y2 = center_y + (p_next.v - mean_v) * scale
+            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2))
+
+    @staticmethod
+    def _find_hatch_intersections(
+        poly: Sequence[Point2D],
+        c_val: float
+    ) -> List[float]:
+        """Calcule les abscisses d'intersection d'une droite à 45° (v = u + c) avec le polygone."""
+        intersections: List[float] = []
+        n = len(poly)
+        for i in range(n):
+            pa = poly[i]
+            pb = poly[(i + 1) % n]
+            du = pb.u - pa.u
+            dv = pb.v - pa.v
+            denom = dv - du
+            if abs(denom) > 1e-7:
+                t = (c_val - (pa.v - pa.u)) / denom
+                if 0.0 <= t <= 1.0:
+                    intersections.append(pa.u + t * du)
+        intersections.sort()
+        return intersections
+
+    @classmethod
+    def _generate_polygon_hatches(
+        cls,
+        sheet: TechnicalSheet,
+        poly: Sequence[Point2D],
+        center_x: float,
+        center_y: float,
+        mean_u: float,
+        mean_v: float,
+        scale: float,
+        hatch_spacing: float
+    ) -> None:
+        """Génère les segments de hachures ISO à 45 degrés dans un polygone de coupe."""
+        poly_u = [pt.u for pt in poly]
+        poly_v = [pt.v for pt in poly]
+        c_min = min(poly_v) - max(poly_u)
+        c_max = max(poly_v) - min(poly_u)
+        step = hatch_spacing / scale if scale > 1e-4 else hatch_spacing
+
+        c_val = c_min
+        while c_val <= c_max:
+            intersections = cls._find_hatch_intersections(poly, c_val)
+            for k in range(0, len(intersections) - 1, 2):
+                u_start = intersections[k]
+                u_end = intersections[k + 1]
+                v_start = u_start + c_val
+                v_end = u_end + c_val
+
+                hx1 = center_x + (u_start - mean_u) * scale
+                hy1 = center_y + (v_start - mean_v) * scale
+                hx2 = center_x + (u_end - mean_u) * scale
+                hy2 = center_y + (v_end - mean_v) * scale
+                sheet.lines.append(DrawingLine2D(hx1, hy1, hx2, hy2, is_hatch=True))
+
+            c_val += step
+
     def generate_section_view(
         self,
         solid: Solid,
@@ -509,59 +587,10 @@ class TechnicalDrawingGenerator:
         mean_v = float(np.mean(all_v)) if all_v else 0.0
 
         for poly in contours:
-            n = len(poly)
-            if n < 3:
+            if len(poly) < 3:
                 continue
-
-            # 1. Dessiner les arêtes du contour extérieur de coupe
-            for i in range(n):
-                p_curr = poly[i]
-                p_next = poly[(i + 1) % n]
-                x1 = center_x + (p_curr.u - mean_u) * scale
-                y1 = center_y + (p_curr.v - mean_v) * scale
-                x2 = center_x + (p_next.u - mean_u) * scale
-                y2 = center_y + (p_next.v - mean_v) * scale
-                sheet.lines.append(DrawingLine2D(x1, y1, x2, y2))
-
-            # 2. Hachures ISO à 45 degrés dans le polygone
-            poly_u = [pt.u for pt in poly]
-            poly_v = [pt.v for pt in poly]
-            min_u, max_u = min(poly_u), max(poly_u)
-            min_v, max_v = min(poly_v), max(poly_v)
-
-            # Ligne à 45 deg : v = u + c  =>  c = v - u
-            c_min = min_v - max_u
-            c_max = max_v - min_u
-            step = hatch_spacing / scale if scale > 1e-4 else hatch_spacing
-
-            c_val = c_min
-            while c_val <= c_max:
-                intersections: List[float] = []
-                for i in range(n):
-                    pa = poly[i]
-                    pb = poly[(i + 1) % n]
-                    du = pb.u - pa.u
-                    dv = pb.v - pa.v
-                    denom = dv - du
-                    if abs(denom) > 1e-7:
-                        t = (c_val - (pa.v - pa.u)) / denom
-                        if 0.0 <= t <= 1.0:
-                            intersections.append(pa.u + t * du)
-
-                intersections.sort()
-                for k in range(0, len(intersections) - 1, 2):
-                    u_start = intersections[k]
-                    u_end = intersections[k + 1]
-                    v_start = u_start + c_val
-                    v_end = u_end + c_val
-
-                    hx1 = center_x + (u_start - mean_u) * scale
-                    hy1 = center_y + (v_start - mean_v) * scale
-                    hx2 = center_x + (u_end - mean_u) * scale
-                    hy2 = center_y + (v_end - mean_v) * scale
-                    sheet.lines.append(DrawingLine2D(hx1, hy1, hx2, hy2, is_hatch=True))
-
-                c_val += step
+            self._draw_section_contour(sheet, poly, center_x, center_y, mean_u, mean_v, scale)
+            self._generate_polygon_hatches(sheet, poly, center_x, center_y, mean_u, mean_v, scale, hatch_spacing)
 
         sheet.dimensions.append(DimensionLabel(center_x, center_y - 80.0, f"Coupe A-A (Z = {cut_height:.1f} mm)"))
         return sheet

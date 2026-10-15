@@ -467,8 +467,40 @@ class FeatureDeserializerRegistry:
         return None
 
     @staticmethod
+    def _parse_optional_point3d(
+        raw: Optional[JSONValue],
+        default: Optional[Tuple[float, float, float]] = None
+    ) -> Optional[Tuple[float, float, float]]:
+        """Parse un vecteur 3D optionnel depuis les données JSON brutes."""
+        if isinstance(raw, list) and len(raw) == 3:
+            return (float(raw[0]), float(raw[1]), float(raw[2]))
+        return default
+
+    @classmethod
+    def _build_dynamic_datum_plane(
+        cls, f_id: str, f_name: str, params: Dict[str, JSONPrimitive], f_data: Dict[str, JSONValue]
+    ) -> DynamicDatumPlaneFeature:
+        """Reconstruit un DynamicDatumPlaneFeature depuis les données sérialisées."""
+        mode_str = str(f_data.get("mode", "OFFSET"))
+        mode = DatumAttachmentMode(mode_str) if mode_str in DatumAttachmentMode._value2member_map_ else DatumAttachmentMode.OFFSET
+        bp_str = str(f_data.get("base_plane", "XY"))
+        bp = PlaneType(bp_str) if bp_str in PlaneType._value2member_map_ else PlaneType.XY
+        off = float(params.get("offset_distance", 0.0))
+
+        p1 = cls._parse_optional_point3d(f_data.get("point1", [0.0, 0.0, 0.0]), (0.0, 0.0, 0.0))
+        assert p1 is not None  # default garantit non-None
+        p2 = cls._parse_optional_point3d(f_data.get("point2"))
+        p3 = cls._parse_optional_point3d(f_data.get("point3"))
+        tn = cls._parse_optional_point3d(f_data.get("tangent_or_normal"))
+
+        return DynamicDatumPlaneFeature(
+            f_id, f_name, mode=mode, base_plane=bp, offset_distance=off,
+            point1=p1, point2=p2, point3=p3, tangent_or_normal=tn
+        )
+
+    @classmethod
     def _build_datum_and_specialized(
-        f_cls: str, f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
+        cls, f_cls: str, f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
         op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
     ) -> Optional[Feature]:
         """Reconstruit les plans de référence, la tôlerie et la visserie."""
@@ -479,25 +511,7 @@ class FeatureDeserializerRegistry:
             return DatumPlaneFeature(f_id, f_name, bp, off)
 
         if f_cls == "DynamicDatumPlaneFeature":
-            mode_str = str(f_data.get("mode", "OFFSET"))
-            mode = DatumAttachmentMode(mode_str) if mode_str in DatumAttachmentMode._value2member_map_ else DatumAttachmentMode.OFFSET
-            bp_str = str(f_data.get("base_plane", "XY"))
-            bp = PlaneType(bp_str) if bp_str in PlaneType._value2member_map_ else PlaneType.XY
-            off = float(params.get("offset_distance", 0.0))
-
-            raw_p1 = f_data.get("point1", [0.0, 0.0, 0.0])
-            p1 = (float(raw_p1[0]), float(raw_p1[1]), float(raw_p1[2])) if isinstance(raw_p1, list) and len(raw_p1) == 3 else (0.0, 0.0, 0.0)
-            raw_p2 = f_data.get("point2")
-            p2 = (float(raw_p2[0]), float(raw_p2[1]), float(raw_p2[2])) if isinstance(raw_p2, list) and len(raw_p2) == 3 else None
-            raw_p3 = f_data.get("point3")
-            p3 = (float(raw_p3[0]), float(raw_p3[1]), float(raw_p3[2])) if isinstance(raw_p3, list) and len(raw_p3) == 3 else None
-            raw_tn = f_data.get("tangent_or_normal")
-            tn = (float(raw_tn[0]), float(raw_tn[1]), float(raw_tn[2])) if isinstance(raw_tn, list) and len(raw_tn) == 3 else None
-
-            return DynamicDatumPlaneFeature(
-                f_id, f_name, mode=mode, base_plane=bp, offset_distance=off,
-                point1=p1, point2=p2, point3=p3, tangent_or_normal=tn
-            )
+            return cls._build_dynamic_datum_plane(f_id, f_name, params, f_data)
 
         if f_cls == "SplitFeature":
             pl_str = str(f_data.get("plane", "XY"))
@@ -567,8 +581,8 @@ class ProjectSerializer:
     )
 
     @staticmethod
-    def _serialize_special_attrs(feat: Feature, f_dict: Dict[str, JSONValue]) -> None:
-        """Sérialise les attributs complexes (énumérations, listes de pas, vecteurs 3D)."""
+    def _serialize_enum_attrs(feat: Feature, f_dict: Dict[str, JSONValue]) -> None:
+        """Sérialise les attributs de type énumération."""
         if hasattr(feat, "operation") and isinstance(feat.operation, BooleanOperation):
             f_dict["operation"] = feat.operation.value
         for enum_attr in ("mirror_plane", "base_plane"):
@@ -577,15 +591,25 @@ class ProjectSerializer:
                 f_dict[enum_attr] = val.value if hasattr(val, "value") else str(val)
         if hasattr(feat, "plane") and isinstance(getattr(feat, "plane"), PlaneType):
             f_dict["plane"] = getattr(feat, "plane").value
-        if hasattr(feat, "steps") and isinstance(getattr(feat, "steps"), list):
-            f_dict["steps"] = [st.to_dict() for st in getattr(feat, "steps") if hasattr(st, "to_dict")]
         if hasattr(feat, "mode"):
             mode_val = getattr(feat, "mode")
             f_dict["mode"] = mode_val.value if hasattr(mode_val, "value") else str(mode_val)
+
+    @staticmethod
+    def _serialize_compound_attrs(feat: Feature, f_dict: Dict[str, JSONValue]) -> None:
+        """Sérialise les attributs composés (listes de pas, vecteurs 3D)."""
+        if hasattr(feat, "steps") and isinstance(getattr(feat, "steps"), list):
+            f_dict["steps"] = [st.to_dict() for st in getattr(feat, "steps") if hasattr(st, "to_dict")]
         for pt_attr in ("point1", "point2", "point3", "tangent_or_normal"):
             if hasattr(feat, pt_attr):
                 pt_val = getattr(feat, pt_attr)
                 f_dict[pt_attr] = list(pt_val) if pt_val else None
+
+    @classmethod
+    def _serialize_special_attrs(cls, feat: Feature, f_dict: Dict[str, JSONValue]) -> None:
+        """Sérialise les attributs complexes (énumérations, listes de pas, vecteurs 3D)."""
+        cls._serialize_enum_attrs(feat, f_dict)
+        cls._serialize_compound_attrs(feat, f_dict)
 
     @classmethod
     def _serialize_feature(cls, feat: Feature) -> Dict[str, JSONValue]:

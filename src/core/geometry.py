@@ -476,6 +476,58 @@ def make_wedge(
     return Solid(m.Manifold(mesh), name)
 
 
+def _build_advanced_manifold(
+    points: Sequence[Point2D],
+    abs_h: float,
+    cu: float,
+    cv: float,
+    taper_angle: float,
+    twist_degrees: float
+) -> m.Manifold:
+    """Génère le maillage extrudé avec dépouille et torsion hélicoïdale."""
+    centered_coords: List[List[float]] = [[pt.u - cu, pt.v - cv] for pt in points]
+    cs = m.CrossSection([centered_coords])
+
+    u_vals = [pt.u for pt in points]
+    v_vals = [pt.v for pt in points]
+    span_u = max(u_vals) - min(u_vals)
+    span_v = max(v_vals) - min(v_vals)
+
+    if abs(taper_angle) > 1e-4:
+        delta = abs_h * float(np.tan(np.radians(taper_angle)))
+        sx = max(0.01, (span_u + 2.0 * delta) / span_u) if span_u > 1e-4 else 1.0
+        sy = max(0.01, (span_v + 2.0 * delta) / span_v) if span_v > 1e-4 else 1.0
+        scale_top = (sx, sy)
+    else:
+        scale_top = (1.0, 1.0)
+
+    n_divisions = max(10, int(abs(twist_degrees) / 5.0)) if abs(twist_degrees) > 1e-4 else 10
+    solid_manifold = m.Manifold.extrude(cs, abs_h, n_divisions=n_divisions, twist_degrees=twist_degrees, scale_top=scale_top)
+    return solid_manifold.translate([cu, cv, 0.0])
+
+
+def _apply_plane_orientation(
+    solid_manifold: m.Manifold,
+    plane: PlaneType,
+    plane_offset: float
+) -> m.Manifold:
+    """Oriente et décale le solide extrudé selon le plan de référence choisi."""
+    if plane == PlaneType.XZ:
+        solid_manifold = solid_manifold.rotate([90.0, 0.0, 0.0])
+    elif plane == PlaneType.YZ:
+        solid_manifold = solid_manifold.rotate([0.0, -90.0, 0.0])
+
+    if abs(plane_offset) > 1e-9:
+        if plane == PlaneType.XY:
+            solid_manifold = solid_manifold.translate([0.0, 0.0, plane_offset])
+        elif plane == PlaneType.XZ:
+            solid_manifold = solid_manifold.translate([0.0, plane_offset, 0.0])
+        elif plane == PlaneType.YZ:
+            solid_manifold = solid_manifold.translate([plane_offset, 0.0, 0.0])
+
+    return solid_manifold
+
+
 def extrude_polygon(
     points: Sequence[Point2D],
     height: float,
@@ -506,25 +558,7 @@ def extrude_polygon(
     has_advanced = (abs(taper_angle) > 1e-4) or (abs(twist_degrees) > 1e-4)
 
     if has_advanced:
-        centered_coords: List[List[float]] = [[pt.u - cu, pt.v - cv] for pt in points]
-        cs = m.CrossSection([centered_coords])
-
-        u_vals = [pt.u for pt in points]
-        v_vals = [pt.v for pt in points]
-        span_u = max(u_vals) - min(u_vals)
-        span_v = max(v_vals) - min(v_vals)
-
-        if abs(taper_angle) > 1e-4:
-            delta = abs_h * float(np.tan(np.radians(taper_angle)))
-            sx = max(0.01, (span_u + 2.0 * delta) / span_u) if span_u > 1e-4 else 1.0
-            sy = max(0.01, (span_v + 2.0 * delta) / span_v) if span_v > 1e-4 else 1.0
-            scale_top = (sx, sy)
-        else:
-            scale_top = (1.0, 1.0)
-
-        n_divisions = max(10, int(abs(twist_degrees) / 5.0)) if abs(twist_degrees) > 1e-4 else 10
-        solid_manifold = m.Manifold.extrude(cs, abs_h, n_divisions=n_divisions, twist_degrees=twist_degrees, scale_top=scale_top)
-        solid_manifold = solid_manifold.translate([cu, cv, 0.0])
+        solid_manifold = _build_advanced_manifold(points, abs_h, cu, cv, taper_angle, twist_degrees)
     else:
         poly_coords: List[List[float]] = [[pt.u, pt.v] for pt in points]
         cs = m.CrossSection([poly_coords])
@@ -535,22 +569,7 @@ def extrude_polygon(
     elif height < 0.0:
         solid_manifold = solid_manifold.translate([0.0, 0.0, -abs_h])
 
-    # Réorienter selon le plan choisi
-    if plane == PlaneType.XZ:
-        # Rotation pour coucher le plan XY sur XZ (90 deg autour de X)
-        solid_manifold = solid_manifold.rotate([90.0, 0.0, 0.0])
-    elif plane == PlaneType.YZ:
-        # Rotation pour coucher le plan XY sur YZ (-90 deg autour de Y)
-        solid_manifold = solid_manifold.rotate([0.0, -90.0, 0.0])
-
-    if abs(plane_offset) > 1e-9:
-        if plane == PlaneType.XY:
-            solid_manifold = solid_manifold.translate([0.0, 0.0, plane_offset])
-        elif plane == PlaneType.XZ:
-            solid_manifold = solid_manifold.translate([0.0, plane_offset, 0.0])
-        elif plane == PlaneType.YZ:
-            solid_manifold = solid_manifold.translate([plane_offset, 0.0, 0.0])
-
+    solid_manifold = _apply_plane_orientation(solid_manifold, plane, plane_offset)
     return Solid(solid_manifold, name)
 
 

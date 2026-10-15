@@ -51,58 +51,48 @@ class HardwareAcceleratorManager:
     """
 
     @staticmethod
-    def detect_hardware() -> HardwareProfile:
-        """Détecte le matériel graphique disponible et configure le profil optimal."""
-        system_os = platform.system()
+    def _detect_darwin_profile() -> HardwareProfile:
+        """Détecte les capacités graphiques sous macOS (Apple Silicon)."""
+        try:
+            cpu_brand = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
+        except Exception:
+            cpu_brand = "Apple Processor"
 
-        # 1. Détection Apple Silicon M-Series (macOS)
-        if system_os == "Darwin":
-            try:
-                cpu_brand = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
-            except Exception:
-                cpu_brand = "Apple Processor"
+        is_ultra = "Ultra" in cpu_brand or "M5" in cpu_brand or "M4" in cpu_brand
+        total_ram_gb = 192.0 if is_ultra else 32.0
+        arch = GPUArchitecture.APPLE_SILICON_M_ULTRA if is_ultra else GPUArchitecture.APPLE_GENERIC_METAL
+        return HardwareProfile(
+            architecture=arch,
+            device_name=cpu_brand if cpu_brand else "Apple Silicon GPU",
+            total_memory_gb=total_ram_gb,
+            is_unified_memory=True,
+            has_hardware_raytracing=True,
+            has_tensor_cores=True,
+            has_hardware_video_encoding=True,
+            supported_video_codecs=("Apple ProRes 422 HQ", "ProRes RAW", "AV1 8K", "HEVC Spatial Video"),
+            max_recommended_assembly_parts=500000 if is_ultra else 50000,
+            max_recommended_fem_nodes=2000000 if is_ultra else 200000
+        )
 
-            is_ultra = "Ultra" in cpu_brand or "M5" in cpu_brand or "M4" in cpu_brand
-            # Estimation de la mémoire unifiée
-            total_ram_gb = 192.0 if is_ultra else 32.0
-
-            arch = GPUArchitecture.APPLE_SILICON_M_ULTRA if is_ultra else GPUArchitecture.APPLE_GENERIC_METAL
-            return HardwareProfile(
-                architecture=arch,
-                device_name=cpu_brand if cpu_brand else "Apple Silicon GPU",
-                total_memory_gb=total_ram_gb,
-                is_unified_memory=True,
-                has_hardware_raytracing=True,
-                has_tensor_cores=True,  # Neural Engine intégré
-                has_hardware_video_encoding=True,
-                supported_video_codecs=("Apple ProRes 422 HQ", "ProRes RAW", "AV1 8K", "HEVC Spatial Video"),
-                max_recommended_assembly_parts=500000 if is_ultra else 50000,
-                max_recommended_fem_nodes=2000000 if is_ultra else 200000
-            )
-
-        # 2. Détection NVIDIA (Windows / Linux via nvidia-smi si disponible)
-        has_nvidia = False
-        gpu_name = "Generic Graphics Adapter"
-        gpu_vram_gb = 8.0
-
+    @staticmethod
+    def _detect_nvidia_profile() -> Optional[HardwareProfile]:
+        """Tente de détecter un GPU NVIDIA via nvidia-smi."""
         try:
             nvidia_out = subprocess.check_output(
                 ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
                 text=True,
                 stderr=subprocess.DEVNULL
             ).strip()
-            if nvidia_out:
-                has_nvidia = True
-                first_gpu = nvidia_out.splitlines()[0]
-                parts = first_gpu.split(",")
-                gpu_name = parts[0].strip()
-                if len(parts) > 1 and "MiB" in parts[1]:
-                    vram_mib = float(parts[1].replace("MiB", "").strip())
-                    gpu_vram_gb = float(vram_mib / 1024.0)
-        except Exception:
-            has_nvidia = False
+            if not nvidia_out:
+                return None
+            first_gpu = nvidia_out.splitlines()[0]
+            parts = first_gpu.split(",")
+            gpu_name = parts[0].strip()
+            gpu_vram_gb = 8.0
+            if len(parts) > 1 and "MiB" in parts[1]:
+                vram_mib = float(parts[1].replace("MiB", "").strip())
+                gpu_vram_gb = float(vram_mib / 1024.0)
 
-        if has_nvidia:
             is_5090 = "5090" in gpu_name or "Blackwell" in gpu_name
             is_rtx_pro = "RTX" in gpu_name and ("Pro" in gpu_name or "A6000" in gpu_name or "5000" in gpu_name or "6000" in gpu_name)
 
@@ -131,8 +121,12 @@ class HardwareAcceleratorManager:
                 max_recommended_assembly_parts=max_parts,
                 max_recommended_fem_nodes=max_nodes
             )
+        except Exception:
+            return None
 
-        # 3. Profil Standard / Fallback CPU
+    @staticmethod
+    def _detect_cpu_fallback_profile() -> HardwareProfile:
+        """Retourne le profil matériel générique de repli basé sur le CPU."""
         return HardwareProfile(
             architecture=GPUArchitecture.CPU_FALLBACK,
             device_name=f"{platform.processor()} (CPU Standard)",
@@ -145,6 +139,18 @@ class HardwareAcceleratorManager:
             max_recommended_assembly_parts=10000,
             max_recommended_fem_nodes=100000
         )
+
+    @classmethod
+    def detect_hardware(cls) -> HardwareProfile:
+        """Détecte le matériel graphique disponible et configure le profil optimal."""
+        if platform.system() == "Darwin":
+            return cls._detect_darwin_profile()
+
+        nvidia_prof = cls._detect_nvidia_profile()
+        if nvidia_prof is not None:
+            return nvidia_prof
+
+        return cls._detect_cpu_fallback_profile()
 
     @staticmethod
     def get_render_pipeline_strategy(profile: HardwareProfile) -> Dict[str, str]:

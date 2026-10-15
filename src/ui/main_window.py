@@ -1173,8 +1173,19 @@ class CADMainWindow(QMainWindow):
             self.viewport.fit_view()
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Ferme proprement le serveur IA et libère les ressources réseau et threads."""
+        """Ferme proprement le serveur IA, le viewport, le document et purge les instances Manifold3D."""
         if self.ai_server is not None:
             self.ai_server.stop()
             self.ai_server = None
+        if hasattr(self, "viewport") and self.viewport is not None:
+            self.viewport.cleanup()
+        if hasattr(self, "document") and self.document is not None:
+            self.document.dispose()
+        try:
+            from src.core.fasteners import clear_fastener_cache
+            clear_fastener_cache()
+        except Exception:
+            pass
         super().closeEvent(event)
+        import gc
+        gc.collect()

@@ -316,3 +316,10 @@ class CADViewportWidget(QOpenGLWidget):
             self._toggle_gizmo()
         else:
             super().keyPressEvent(event)
+
+    def cleanup(self) -> None:
+        """Libère les tampons de maillage OpenGL et les sélections pour éviter les fuites mémoire."""
+        self.cached_buffers.clear()
+        self.selected_pick = None
+        self.current_snap = None
+

@@ -14,6 +14,7 @@ import inspect
 import sys
 import textwrap
 import time
+import types
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 # Imports des sous-systèmes du noyau géométrique
@@ -24,6 +25,8 @@ import src.specialized.robot_kinematics as rkin
 import src.core.assembly_kinematics as akin
 
 MutantCallable = Callable[..., Union[float, int, bool, str, None, np.ndarray, geom.Solid, Point2D, Vector3D, Tuple[bool, List[Point2D]]]]
+MutantNamespaceValue = Union[MutantCallable, int, float, str, bool, type]
+MutantContainer = Union[types.ModuleType, type]
 
 
 class MutationFamily(str, Enum):
@@ -188,7 +191,7 @@ class BytecodeHotPatcher:
     """
 
     @staticmethod
-    def compile_from_ast(tree: ast.AST, identifier: str, module_dict: Dict[str, Union[Callable, int, float, str, bool, type]], callable_name: str) -> MutantCallable:
+    def compile_from_ast(tree: ast.AST, identifier: str, module_dict: Dict[str, MutantNamespaceValue], callable_name: str) -> MutantCallable:
         """
         Compile un AST modifié en objet code en mémoire vive et retourne la fonction exécutable.
         
@@ -203,7 +206,7 @@ class BytecodeHotPatcher:
         """
         ast.fix_missing_locations(tree)
         code_obj = compile(tree, filename=f"<in_ram_mutant_{identifier}>", mode="exec")
-        exec_namespace: Dict[str, Union[Callable, int, float, str, bool]] = {}
+        exec_namespace: Dict[str, MutantNamespaceValue] = {}
         _run_bytecode = getattr(sys.modules['builtins'], 'exec')
         _run_bytecode(code_obj, module_dict, exec_namespace)
         compiled_callable = exec_namespace.get(callable_name)
@@ -232,8 +235,8 @@ class BytecodeHotPatcher:
         if module_name not in sys.modules:
             raise KeyError(f"Module '{module_name}' non chargé dans sys.modules.")
         mod = sys.modules[module_name]
-        target_container: object = getattr(mod, class_name) if class_name is not None else mod
-        original_callable: object = getattr(target_container, callable_name)
+        target_container: MutantContainer = getattr(mod, class_name) if class_name is not None else mod
+        original_callable: MutantCallable = getattr(target_container, callable_name)
 
         setattr(target_container, callable_name, mutated_callable)
         try:
@@ -258,8 +261,8 @@ class BytecodeHotPatcher:
         if module_name not in sys.modules:
             raise KeyError(f"Module '{module_name}' non chargé dans sys.modules.")
         mod = sys.modules[module_name]
-        target_container: object = getattr(mod, class_name) if class_name is not None else mod
-        original_callable: object = getattr(target_container, callable_name)
+        target_container: MutantContainer = getattr(mod, class_name) if class_name is not None else mod
+        original_callable: MutantCallable = getattr(target_container, callable_name)
 
         source_code = textwrap.dedent(inspect.getsource(original_callable))
         tree = ast.parse(source_code)

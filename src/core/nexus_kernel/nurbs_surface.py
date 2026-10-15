@@ -122,12 +122,18 @@ class NexusNURBSSurface(NexusSurface):
         """
         Calcule les dérivées partielles d'ordre 1 et 2 au point (u, v) :
         (Su, Sv, Suu, Suv, Svv).
+        Utilise un décalage intérieur borné pour éliminer tout écrasement des différences finies aux frontières.
         """
-        p0 = self.evaluate(u, v)
-        p_u_plus = self.evaluate(u + eps, v)
-        p_u_minus = self.evaluate(u - eps, v)
-        p_v_plus = self.evaluate(u, v + eps)
-        p_v_minus = self.evaluate(u, v - eps)
+        u_min, u_max = float(self.knots_u[0]), float(self.knots_u[-1])
+        v_min, v_max = float(self.knots_v[0]), float(self.knots_v[-1])
+        u_eval = float(np.clip(u, u_min + eps, u_max - eps))
+        v_eval = float(np.clip(v, v_min + eps, v_max - eps))
+
+        p0 = self.evaluate(u_eval, v_eval)
+        p_u_plus = self.evaluate(u_eval + eps, v_eval)
+        p_u_minus = self.evaluate(u_eval - eps, v_eval)
+        p_v_plus = self.evaluate(u_eval, v_eval + eps)
+        p_v_minus = self.evaluate(u_eval, v_eval - eps)
 
         s_u = (p_u_plus - p_u_minus) / (2.0 * eps)
         s_v = (p_v_plus - p_v_minus) / (2.0 * eps)
@@ -135,8 +141,8 @@ class NexusNURBSSurface(NexusSurface):
         s_uu = (p_u_plus - 2.0 * p0 + p_u_minus) / (eps ** 2)
         s_vv = (p_v_plus - 2.0 * p0 + p_v_minus) / (eps ** 2)
 
-        p_diag_plus = self.evaluate(u + eps, v + eps)
-        p_diag_minus = self.evaluate(u - eps, v - eps)
+        p_diag_plus = self.evaluate(u_eval + eps, v_eval + eps)
+        p_diag_minus = self.evaluate(u_eval - eps, v_eval - eps)
         s_uv = (p_diag_plus - p_u_plus - p_v_plus + p0 + p_diag_minus - p_u_minus - p_v_minus + p0) / (2.0 * eps ** 2)
 
         return s_u, s_v, s_uu, s_uv, s_vv

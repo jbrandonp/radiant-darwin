@@ -38,7 +38,6 @@ from src.core.operations_advanced import (
     DynamicDatumPlaneFeature, DatumAttachmentMode, VariableRadiusFilletFeature, MultiRailLoftFeature
 )
 from src.core.fasteners import FastenerFeature
-from src.sheetmetal.sheet_metal import SheetMetalFeature
 
 
 class SketchSerializer:
@@ -525,6 +524,7 @@ class FeatureDeserializerRegistry:
             return BooleanFeature(f_id, f_name, target_id or "", tool_id, op)
 
         if f_cls == "SheetMetalFeature":
+            from src.sheetmetal.sheet_metal import SheetMetalFeature
             bw = float(params.get("base_width", 60.0))
             bl = float(params.get("base_length", 80.0))
             th = float(params.get("thickness", 2.0))

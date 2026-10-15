@@ -246,6 +246,86 @@ class OpenFoamCase:
         )
         return header + body
 
+    def generate_fv_schemes(self) -> str:
+        """Génère le fichier system/fvSchemes pour la discrétisation spatio-temporelle."""
+        header = self._foam_header("fvSchemes", "dictionary", "system")
+        body = (
+            "ddtSchemes\n"
+            "{\n"
+            "    default         steadyState;\n"
+            "}\n\n"
+            "gradSchemes\n"
+            "{\n"
+            "    default         Gauss linear;\n"
+            "}\n\n"
+            "divSchemes\n"
+            "{\n"
+            "    default         none;\n"
+            "    div(phi,U)      bounded Gauss linearUpwind grad(U);\n"
+            "    div((nuEff*dev2(T(grad(U))))) Gauss linear;\n"
+            "}\n\n"
+            "laplacianSchemes\n"
+            "{\n"
+            "    default         Gauss linear corrected;\n"
+            "}\n\n"
+            "interpolationSchemes\n"
+            "{\n"
+            "    default         linear;\n"
+            "}\n\n"
+            "snGradSchemes\n"
+            "{\n"
+            "    default         corrected;\n"
+            "}\n\n"
+            "// ************************************************************************* //\n"
+        )
+        return header + body
+
+    def generate_fv_solution(self) -> str:
+        """Génère le fichier system/fvSolution pour les solveurs d'algèbre linéaire (SIMPLE/PISO)."""
+        header = self._foam_header("fvSolution", "dictionary", "system")
+        body = (
+            "solvers\n"
+            "{\n"
+            "    p\n"
+            "    {\n"
+            "        solver          GAMG;\n"
+            "        tolerance       1e-06;\n"
+            "        relTol          0.01;\n"
+            "        smoother        GaussSeidel;\n"
+            "    }\n"
+            "    U\n"
+            "    {\n"
+            "        solver          smoothSolver;\n"
+            "        smoother        GaussSeidel;\n"
+            "        tolerance       1e-05;\n"
+            "        relTol          0.1;\n"
+            "    }\n"
+            "}\n\n"
+            "SIMPLE\n"
+            "{\n"
+            "    nNonOrthogonalCorrectors 0;\n"
+            "    consistent      yes;\n"
+            "    residualControl\n"
+            "    {\n"
+            "        p               1e-4;\n"
+            "        U               1e-4;\n"
+            "    }\n"
+            "}\n\n"
+            "relaxationFactors\n"
+            "{\n"
+            "    fields\n"
+            "    {\n"
+            "        p               0.3;\n"
+            "    }\n"
+            "    equations\n"
+            "    {\n"
+            "        U               0.7;\n"
+            "    }\n"
+            "}\n\n"
+            "// ************************************************************************* //\n"
+        )
+        return header + body
+
     def write_case_to_directory(self, target_dir: str) -> Dict[str, str]:
         """
         Crée tous les répertoires et écrit l'ensemble des fichiers de configuration OpenFOAM.
@@ -266,6 +346,8 @@ class OpenFoamCase:
             os.path.join(dir_constant, "turbulenceProperties"): self.generate_turbulence_properties(),
             os.path.join(dir_system, "controlDict"): self.generate_control_dict(),
             os.path.join(dir_system, "blockMeshDict"): self.generate_block_mesh_dict(),
+            os.path.join(dir_system, "fvSchemes"): self.generate_fv_schemes(),
+            os.path.join(dir_system, "fvSolution"): self.generate_fv_solution(),
         }
 
         for path, content in files_written.items():

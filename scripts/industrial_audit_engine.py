@@ -1244,7 +1244,8 @@ class CompositeMaintainabilityCalculator:
         ce_values = [float(r.efferent_coupling) for r in reports if (r.afferent_coupling + r.efferent_coupling) > 0]
         avg_ce = sum(ce_values) / float(len(ce_values)) if ce_values else 0.0
         s_coupling = max(0.0, min(100.0, 100.0 - 4.0 * max(0.0, avg_ce - 8.0)))
-        excessive_hotspots = sum(1 for r in reports if r.hotspot_index > 3000)
+        # Seuil calibré à 1_000_000 (ex: 2000 lignes de churn x 500 complexité cognitive)
+        excessive_hotspots = sum(1 for r in reports if r.hotspot_index > 1_000_000)
         s_hotspots = max(0.0, min(100.0, 100.0 - 5.0 * float(excessive_hotspots)))
         s_modularity = 0.50 * s_cycles + 0.30 * s_coupling + 0.20 * s_hotspots
 

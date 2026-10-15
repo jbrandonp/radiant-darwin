@@ -244,11 +244,12 @@ class ArchitecturalClassifier:
         norm = filepath.replace("\\", "/").lower()
 
         # 1. Connecteurs IA & I/O
-        if "/ai/" in norm or norm.endswith("cli.py") or norm.endswith("main.py"):
+        if "/ai/" in norm or "/io/" in norm or norm.endswith("cli.py") or norm.endswith("main.py"):
             return ArchitecturalLayer.AI_IO_CONNECTORS
         if any(io_file in norm for io_file in [
             "serializer.py", "exporter.py", "step_importer.py", "step_exporter.py",
-            "gltf_exporter.py", "iges_exporter.py", "ecosystem_hub.py", "event_bus.py"
+            "gltf_exporter.py", "iges_exporter.py", "ecosystem_hub.py", "event_bus.py",
+            "dxf_importer.py", "svg_importer.py", "threemf_exporter.py", "dxf_exporter.py", "svg_exporter.py"
         ]):
             return ArchitecturalLayer.AI_IO_CONNECTORS
 
@@ -526,19 +527,54 @@ class FormalDecisionEngine:
 
 class _SonarAstCognitiveVisitor(ast.NodeVisitor):
     """
-    Visiteur syntaxique AST pour le calcul de la complexité cognitive SonarSource.
+    Visiteur syntaxique AST pour le calcul de la complexité cognitive SonarSource (Campbell 2018).
     Typage statique strict : toutes les méthodes sont annotées avec rigueur.
     """
 
     def __init__(self) -> None:
         self.score: int = 0
         self.level: int = 0
+        self._handled_elifs: Set[ast.If] = set()
 
     def visit_If(self, n: ast.If) -> None:
-        self.score += (1 + self.level)
-        self.level += 1
-        self.generic_visit(n)
-        self.level -= 1
+        """Traite une chaîne if-elif-else sans surtaxe quadratique conformément au standard SonarQube."""
+        if n in self._handled_elifs:
+            return
+
+        origin_nesting: int = self.level
+        curr_if: Optional[ast.If] = n
+        is_initial: bool = True
+
+        while curr_if is not None:
+            if is_initial:
+                self.score += (1 + origin_nesting)
+                is_initial = False
+            else:
+                self.score += 1
+
+            self.visit(curr_if.test)
+
+            self.level = origin_nesting + 1
+            for stmt in curr_if.body:
+                self.visit(stmt)
+            self.level = origin_nesting
+
+            if curr_if.orelse:
+                if len(curr_if.orelse) == 1 and isinstance(curr_if.orelse[0], ast.If):
+                    next_if: ast.If = curr_if.orelse[0]
+                    self._handled_elifs.add(next_if)
+                    curr_if = next_if
+                else:
+                    self.score += 1
+                    self.level = origin_nesting + 1
+                    for stmt in curr_if.orelse:
+                        self.visit(stmt)
+                    self.level = origin_nesting
+                    curr_if = None
+            else:
+                curr_if = None
+
+        self.level = origin_nesting
 
     def visit_For(self, n: ast.For) -> None:
         self.score += (1 + self.level)

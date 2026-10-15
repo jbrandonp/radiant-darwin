@@ -245,3 +245,14 @@ class CADDocument:
     def check_assembly_collisions(self) -> List[Tuple[str, str, float]]:
         """Détecte les collisions et interférences physiques réelles entre pièces (en mm³)."""
         return AssemblySolver.detect_collisions(self.assembly_instances)
+
+    def dispose(self) -> None:
+        """Libère toutes les références géométriques et callbacks pour éliminer les fuites mémoire."""
+        self.invalidate_cache()
+        self.bodies.clear()
+        self.assembly_instances.clear()
+        self.assembly_mates.clear()
+        self.features.clear()
+        self.sketches.clear()
+        self._on_change_callbacks.clear()
+

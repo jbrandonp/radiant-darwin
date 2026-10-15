@@ -160,7 +160,6 @@ def bootstrap_default_features() -> None:
         SweepFeature, SubtractiveSweepFeature, DynamicDatumPlaneFeature,
         VariableRadiusFilletFeature, MultiRailLoftFeature
     )
-    from src.sheetmetal.sheet_metal import SheetMetalFeature
     from src.core.fasteners import FastenerFeature
 
     # Primitives
@@ -312,10 +311,14 @@ def bootstrap_default_features() -> None:
     )
 
     # Métiers spécialisés
+    def _create_sheetmetal_feature(*args: FeatureArg, **kwargs: FeatureArg) -> Feature:
+        from src.sheetmetal.sheet_metal import SheetMetalFeature
+        return SheetMetalFeature(*args, **kwargs)  # type: ignore[arg-type]
+
     FeatureRegistry.register(
         "SheetMetalFeature", "Tôlerie Pliée", FeatureCategory.SHEET_METAL,
         "Tôle paramétrique avec K-factor et dépliage", "sheetmetal",
-        lambda *args, **kwargs: SheetMetalFeature(*args, **kwargs)  # type: ignore[arg-type]
+        _create_sheetmetal_feature
     )
     FeatureRegistry.register(
         "FastenerFeature", "Visserie Normalisée", FeatureCategory.HARDWARE,

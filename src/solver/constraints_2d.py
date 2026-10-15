@@ -40,6 +40,10 @@ class GeometricConstraint:
     target_value_v: float = 0.0
 
 
+# Alias pour rétrocompatibilité et typage statique
+GeometricConstraint2D = GeometricConstraint
+
+
 class SketchConstraintSolver2D:
     """
     Solveur numérique de contraintes géométriques bidimensionnelles.

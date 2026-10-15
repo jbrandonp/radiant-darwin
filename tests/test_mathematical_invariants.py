@@ -82,10 +82,10 @@ def test_inertia_tensor_symmetry_and_positive_definiteness():
     box = make_box(20.0, 30.0, 40.0)
     inertia = compute_inertia_tensor(box, density_g_cm3=2.7)
 
-    # Symétrie du tenseur
-    assert pytest.approx(inertia.ixy, abs=1e-5) == inertia.ixy
-    assert pytest.approx(inertia.ixz, abs=1e-5) == inertia.ixz
-    assert pytest.approx(inertia.iyz, abs=1e-5) == inertia.iyz
+    # Symétrie et annulation des produits d'inertie sur les axes principaux
+    assert abs(inertia.ixy) < 1e-5
+    assert abs(inertia.ixz) < 1e-5
+    assert abs(inertia.iyz) < 1e-5
 
     # Positivité stricte des moments d'inertie
     assert inertia.ixx > 0.0

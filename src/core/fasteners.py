@@ -53,6 +53,11 @@ ISO_METRIC_TABLE: Dict[str, MetricFastenerSpec] = {
 _FASTENER_CACHE: Dict[Tuple[str, str, float], m.Manifold] = {}
 
 
+def clear_fastener_cache() -> None:
+    """Purge le cache mémoire de quincaillerie pour libérer les instances Manifold3D."""
+    _FASTENER_CACHE.clear()
+
+
 def _make_regular_polygon_cross_section(radius: float, num_sides: int = 6) -> m.CrossSection:
     """Génère un contour 2D de polygone régulier centré."""
     angles = np.linspace(0.0, 2.0 * np.pi, num_sides, endpoint=False)

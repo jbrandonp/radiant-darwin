@@ -278,6 +278,20 @@ class CADSecurityASTVisitor(ast.NodeVisitor):
         "__class__",
         "__mro__",
         "__subclasses__",
+        "eval",
+        "exec",
+        "open",
+        "__import__",
+        "compile",
+        "globals",
+        "locals",
+        "getattr",
+        "setattr",
+        "delattr",
+        "vars",
+        "dir",
+        "breakpoint",
+        "help",
     )
 
     BANNED_CALLS: Tuple[str, ...] = (
@@ -314,6 +328,14 @@ class CADSecurityASTVisitor(ast.NodeVisitor):
         "inspect",
         "threading",
         "multiprocessing",
+        "pathlib",
+        "io",
+        "nt",
+        "posix",
+        "_winapi",
+        "codecs",
+        "platform",
+        "gc",
     )
 
     def __init__(self) -> None:
@@ -376,6 +398,10 @@ class CADSecurityASTVisitor(ast.NodeVisitor):
             if val_clean in self.BANNED_ATTRIBUTES or val_clean in ("sys.modules", "builtins"):
                 self.violations.append(
                     f"Référence littérale interdite vers le symbole '{val_clean}' à la ligne {node.lineno}"
+                )
+            elif "__" in val_clean and any(sub in val_clean for sub in ("globals", "class", "mro", "subclasses", "builtins", "code")):
+                self.violations.append(
+                    f"Format string ou référence d'introspection interdite '{val_clean}' à la ligne {node.lineno}"
                 )
         self.generic_visit(node)
 

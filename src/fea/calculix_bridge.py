@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Tuple, Dict, Optional
 import os
+import math
 
 from src.core.types import Vector3D
 
@@ -189,6 +190,64 @@ class CalculixResultParser:
                         results[n_id] = Vector3D(ux, uy, uz)
                     except ValueError:
                         continue
+        return results
+
+    def parse_nodal_stresses(self, result_text: str) -> Dict[int, float]:
+        """
+        Extrait les contraintes équivalentes de von Mises en MPa par ID de nœud.
+        Gère les blocs STRESS / -4 STRESS avec tenseur complet ou scalaire direct.
+        """
+        results: Dict[int, float] = {}
+        in_stress_block = False
+
+        for line in result_text.splitlines():
+            line_str = line.strip()
+            if "STRESS" in line_str.upper() or line_str.startswith("-4  STRESS"):
+                in_stress_block = True
+                continue
+            if in_stress_block:
+                if line_str.startswith("-3") or line_str.startswith("-1"):
+                    in_stress_block = False
+                    continue
+                parts = line_str.split()
+                if len(parts) >= 2:
+                    try:
+                        n_id = int(parts[0])
+                        if len(parts) >= 7:
+                            sxx = float(parts[1])
+                            syy = float(parts[2])
+                            szz = float(parts[3])
+                            sxy = float(parts[4])
+                            syz = float(parts[5])
+                            szx = float(parts[6])
+                            diff_sq = (sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2
+                            shear_sq = 6.0 * (sxy ** 2 + syz ** 2 + szx ** 2)
+                            vm = math.sqrt(0.5 * (diff_sq + shear_sq))
+                        else:
+                            vm = float(parts[1])
+                        results[n_id] = vm
+                    except ValueError:
+                        continue
+        return results
+
+    def parse_full_results(self, result_text: str) -> Dict[int, FeaNodalResult]:
+        """
+        Extrait simultanément les déplacements et les contraintes nodales
+        et retourne un dictionnaire de FeaNodalResult indexé par ID de nœud.
+        """
+        disps = self.parse_nodal_displacements(result_text)
+        stresses = self.parse_nodal_stresses(result_text)
+        all_ids = set(disps.keys()) | set(stresses.keys())
+
+        results: Dict[int, FeaNodalResult] = {}
+        for nid in sorted(all_ids):
+            disp = disps.get(nid, Vector3D(0.0, 0.0, 0.0))
+            stress = stresses.get(nid, 0.0)
+            results[nid] = FeaNodalResult(
+                node_id=nid,
+                displacement=disp,
+                von_mises_stress_mpa=stress
+            )
         return results
 
 

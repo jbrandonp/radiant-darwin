@@ -55,6 +55,50 @@ class GmshVolumetricMesher:
         self.nodes: Dict[int, GmshNode] = {}
         self.elements: Dict[int, GmshElement] = {}
 
+    def _create_tet_element(
+        self,
+        elem_tag: int,
+        order: int,
+        tet_nodes: Tuple[int, int, int, int],
+        edge_midpoints: Dict[Tuple[int, int], int],
+        next_node_tag: List[int]
+    ) -> GmshElement:
+        """Crée un tétraèdre Gmsh linéaire (Tet4) ou quadratique (Tet10 avec 6 nœuds médians)."""
+        elem_type = GmshElementType.TETRAHEDRON_4 if order == 1 else GmshElementType.TETRAHEDRON_10
+        if order == 1:
+            return GmshElement(
+                tag=elem_tag,
+                element_type=elem_type,
+                physical_tag=1,
+                node_tags=list(tet_nodes)
+            )
+
+        va, vb, vc, vd = tet_nodes
+        edges = [(va, vb), (vb, vc), (vc, va), (va, vd), (vb, vd), (vc, vd)]
+        midpoints: List[int] = []
+        for n_a, n_b in edges:
+            edge_key = (min(n_a, n_b), max(n_a, n_b))
+            if edge_key not in edge_midpoints:
+                tag = next_node_tag[0]
+                p_a = self.nodes[n_a].coords
+                p_b = self.nodes[n_b].coords
+                mid_coords = Vector3D(
+                    (p_a.x + p_b.x) * 0.5,
+                    (p_a.y + p_b.y) * 0.5,
+                    (p_a.z + p_b.z) * 0.5
+                )
+                self.nodes[tag] = GmshNode(tag=tag, coords=mid_coords)
+                edge_midpoints[edge_key] = tag
+                next_node_tag[0] += 1
+            midpoints.append(edge_midpoints[edge_key])
+
+        return GmshElement(
+            tag=elem_tag,
+            element_type=elem_type,
+            physical_tag=1,
+            node_tags=[va, vb, vc, vd] + midpoints
+        )
+
     def mesh_bounding_box_domain(
         self,
         min_pt: Vector3D,
@@ -95,7 +139,8 @@ class GmshVolumetricMesher:
 
         # 2. Décomposition de chaque cellule cubique en 5 tétraèdres
         elem_counter = 1
-        elem_type = GmshElementType.TETRAHEDRON_4 if order == 1 else GmshElementType.TETRAHEDRON_10
+        edge_midpoints: Dict[Tuple[int, int], int] = {}
+        next_node_tag = [node_counter]
 
         for k in range(nz - 1):
             for j in range(ny - 1):
@@ -132,11 +177,8 @@ class GmshVolumetricMesher:
                         ]
 
                     for tet_nodes in tets:
-                        self.elements[elem_counter] = GmshElement(
-                            tag=elem_counter,
-                            element_type=elem_type,
-                            physical_tag=1,  # Domaine volumique
-                            node_tags=list(tet_nodes)
+                        self.elements[elem_counter] = self._create_tet_element(
+                            elem_counter, order, tet_nodes, edge_midpoints, next_node_tag
                         )
                         elem_counter += 1
 

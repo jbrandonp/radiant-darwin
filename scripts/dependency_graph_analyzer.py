@@ -135,6 +135,10 @@ class CanonicalImportResolver:
             clean = clean[len(prefix_with_dot):]
         elif clean == self.package_root_name:
             clean = ""
+        else:
+            top_level: str = clean.split(".")[0]
+            if hasattr(sys, "stdlib_module_names") and top_level in sys.stdlib_module_names:
+                return None
 
         clean_path: str = clean.replace(".", "/") if clean else ""
 

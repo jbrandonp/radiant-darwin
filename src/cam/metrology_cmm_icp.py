@@ -147,12 +147,25 @@ class IterativeClosestPointAligner:
         )
 
     def _find_nearest_neighbors(self, p_arr: np.ndarray, q_arr: np.ndarray) -> np.ndarray:
-        """Trouve l'indice du point nominal le plus proche pour chaque point scanné."""
-        # Calcul matriciel des distances euclidiennes au carré (||p - q||^2)
-        p_norm2 = np.sum(p_arr ** 2, axis=1, keepdims=True)
-        q_norm2 = np.sum(q_arr ** 2, axis=1, keepdims=True)
-        dist_matrix = p_norm2 - 2.0 * (p_arr @ q_arr.T) + q_norm2.T
-        return np.argmin(dist_matrix, axis=1)
+        """Trouve l'indice du point nominal le plus proche pour chaque point scanné via KD-Tree."""
+        try:
+            from scipy.spatial import cKDTree
+            tree = cKDTree(q_arr)
+            _, indices = tree.query(p_arr, k=1)
+            return np.asarray(indices, dtype=np.int64)
+        except Exception:
+            # Fallback par blocs bornés pour éliminer tout risque d'explosion de RAM O(N*M)
+            n_p = len(p_arr)
+            chunk_size = 2000
+            closest = np.zeros(n_p, dtype=np.int64)
+            q_norm2 = np.sum(q_arr ** 2, axis=1, keepdims=True).T
+            for start in range(0, n_p, chunk_size):
+                end = min(start + chunk_size, n_p)
+                p_chunk = p_arr[start:end]
+                p_norm2 = np.sum(p_chunk ** 2, axis=1, keepdims=True)
+                dist_matrix = p_norm2 - 2.0 * (p_chunk @ q_arr.T) + q_norm2
+                closest[start:end] = np.argmin(dist_matrix, axis=1)
+            return closest
 
     def _compute_rigid_step(self, p_pts: np.ndarray, q_pts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Résout le problème de Procruste orthogonal via SVD pour extraire R et t."""

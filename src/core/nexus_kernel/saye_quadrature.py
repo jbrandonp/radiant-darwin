@@ -257,3 +257,32 @@ class SayeImplicitQuadrature:
             w = rule.weights[i]
             total += w * float(func(float(pt[0]), float(pt[1]), float(pt[2])))
         return total
+
+    @classmethod
+    def integrate_domain(
+        cls,
+        phi_func: Callable[[float, float, float], float],
+        box_min: Sequence[float],
+        box_max: Sequence[float],
+        subdivisions: int = 4
+    ) -> float:
+        """
+        Intègre numériquement le volume du domaine implicite {x | phi(x) <= 0}
+        en subdivisant la boîte englobante en une grille cartésienne de cellules de Saye.
+        """
+        bx_min = np.array(box_min, dtype=np.float64)
+        bx_max = np.array(box_max, dtype=np.float64)
+
+        xs = np.linspace(bx_min[0], bx_max[0], subdivisions + 1)
+        ys = np.linspace(bx_min[1], bx_max[1], subdivisions + 1)
+        zs = np.linspace(bx_min[2], bx_max[2], subdivisions + 1)
+
+        total_vol = 0.0
+        for i in range(subdivisions):
+            for j in range(subdivisions):
+                for k in range(subdivisions):
+                    cell_min = [xs[i], ys[j], zs[k]]
+                    cell_max = [xs[i + 1], ys[j + 1], zs[k + 1]]
+                    rule = cls.compute_cut_voxel_quadrature(phi_func, cell_min, cell_max)
+                    total_vol += rule.fractional_volume
+        return float(total_vol)

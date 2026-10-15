@@ -26,7 +26,7 @@
   "zone_of_uselessness_modules": 0.0,
   "mutation_score_percent": 100.0,
   "critical_functions_over_25": 0.0,
-  "cache_hits": 125.0,
-  "cache_hit_ratio_percent": 94.6969696969697,
-  "execution_duration_seconds": 0.5781622000504285
+  "cache_hits": 0.0,
+  "cache_hit_ratio_percent": 0.0,
+  "execution_duration_seconds": 15.702982700022403
 }

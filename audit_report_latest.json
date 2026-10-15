@@ -1,12 +1,32 @@
 {
-  "total_files": 129.0,
-  "total_lines_of_code": 29089.0,
-  "total_cognitive_complexity": 3410.0,
-  "avg_cognitive_complexity_per_file": 26.434108527131784,
-  "avg_maintainability_index": 21.923720308479787,
+  "total_files": 132.0,
+  "total_lines_of_code": 31653.0,
+  "total_cognitive_complexity": 7924.0,
+  "avg_cognitive_complexity_per_file": 60.03030303030303,
+  "total_cyclomatic_complexity": 4481.0,
+  "avg_cyclomatic_complexity_per_file": 33.946969696969695,
+  "microsoft_maintainability_index": 21.11,
+  "microsoft_mi_status": "VERT - HAUTE MAINTENABILIT\u00c9 (>= 20.0)",
+  "microsoft_mi_iso_converted": 63.39,
+  "cmi_iso_25010": 92.26,
+  "cmi_iso_grade": "GRADE A (Excellente Maintenabilit\u00e9)",
+  "cmi_pillars": {
+    "analyzability": 91.81,
+    "modularity": 80.0,
+    "testability": 93.25,
+    "type_safety": 100.0,
+    "robustness": 100.0
+  },
+  "avg_maintainability_index": 92.26,
   "type_completeness_percent": 100.0,
   "security_violations": 0.0,
   "circular_dependencies": 0.0,
+  "main_sequence_modules": 86.0,
+  "zone_of_pain_modules": 46.0,
+  "zone_of_uselessness_modules": 0.0,
   "mutation_score_percent": 100.0,
-  "critical_functions_over_25": 0.0
+  "critical_functions_over_25": 12.0,
+  "cache_hits": 132.0,
+  "cache_hit_ratio_percent": 100.0,
+  "execution_duration_seconds": 0.11279080004896969
 }

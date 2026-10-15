@@ -1,0 +1,35 @@
+# ============================================================================
+# Fichier de Verrouillage Déterministe de Dépendances (OpenSSF Scorecard Hardened)
+# Généré automatiquement par Radiant-Darwin SupplyChainAuditor le 2026-10-15T06:13:17.800077+00:00
+# Règle OpenSSF : Dépendances strictement épinglées avec versions exactes
+# ============================================================================
+
+attrs==26.1.0  # transitive | MIT
+colorama==0.4.6  # transitive | BSD-3-Clause
+coverage==7.16.2  # direct | Apache-2.0
+hypothesis==6.169.3  # direct | MPL-2.0
+iniconfig==2.3.1  # transitive | MIT
+jsonschema==4.26.0  # direct | MIT
+jsonschema-specifications==2025.9.1  # transitive | MIT
+manifold3d==3.5.4  # direct | Apache-2.0
+numpy==2.5.4  # direct | MIT
+packaging==26.3  # transitive | Apache-2.0
+pip==26.2.1  # transitive | MIT
+pluggy==1.6.0  # transitive | MIT
+pygments==2.21.0  # transitive | BSD-2-Clause
+pyopengl==3.1.10  # direct | BSD-3-Clause
+pyopengl-accelerate==3.1.10  # direct | BSD-3-Clause
+pyside6==6.12.0  # direct | LGPL-3.0-only
+pyside6-addons==6.12.0  # transitive | LGPL-3.0-only
+pyside6-essentials==6.12.0  # transitive | LGPL-3.0-only
+pyside6-pdf==6.12.0.140  # transitive | LGPL-3.0-only
+pyside6-webengine==6.12.0.140  # transitive | LGPL-3.0-only
+pytest==9.1.1  # direct | MIT
+pytest-cov==7.1.0  # direct | MIT
+referencing==0.37.0  # transitive | MIT
+rpds-py==2026.9.1  # transitive | MIT
+scipy==1.18.1  # direct | BSD-3-Clause
+shiboken6==6.12.0  # transitive | LGPL-3.0-only
+sortedcontainers==2.4.0  # transitive | Apache-2.0
+trimesh==5.1.1  # direct | MIT
+typing-extensions==4.16.0  # transitive | PSF-2.0

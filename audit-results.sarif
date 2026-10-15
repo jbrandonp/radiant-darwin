@@ -1,0 +1,3622 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CAD Studio Industrial Auditor",
+          "version": "2.4.0",
+          "semanticVersion": "2.4.0",
+          "informationUri": "https://github.com/jbrandonp/radiant-darwin",
+          "rules": [
+            {
+              "id": "ARCH_CIRCULAR_DEPENDENCY",
+              "name": "CircularModuleDependency",
+              "shortDescription": {
+                "text": "Dépendance circulaire directe ou indirecte entre modules d'architecture."
+              },
+              "fullDescription": {
+                "text": "Deux modules s'importent mutuellement, violant le principe d'acyclicité des dépendances (Acyclic Dependencies Principle - Robert C. Martin). Les cycles rendent les modules indissociables, empêchent les tests unitaires isolés et risquent des erreurs d'initialisation."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Dépendance circulaire directe ou indirecte entre modules d'architecture. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Rupture de dépendance circulaire\n\n### Contexte\nUn cycle survient lorsque le module `A` dépend du module `B`, et que `B` dépend directement ou indirectement de `A`.\n\n### Actions Correctives\n1. **Principe d'Inversion de Dépendance (DIP) :** Définir une interface abstraite (`Protocol` ou `ABC`) dans un module abstrait, implémentée par l'un des deux modules.\n2. **Extraction dans un module feuille commun :** Si le cycle est causé par le partage d'une structure de données (ex: `Solid`, `Vector3D`), extraire cette structure dans un module de niveau inférieur (ex: `src.core.types`).\n3. **Gestion par événements / Injection :** Passer les instances de dépendances en paramètres du constructeur ou utiliser un bus d'événements plutôt qu'un import statique.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/1047.html",
+              "properties": {
+                "id": "ARCH_CIRCULAR_DEPENDENCY",
+                "name": "CircularModuleDependency",
+                "precision": "very-high",
+                "security-severity": "7.0",
+                "tags": [
+                  "quality",
+                  "external/cwe/cwe-1047",
+                  "circularmoduledependency"
+                ]
+              }
+            },
+            {
+              "id": "COMPLEXITY_COGNITIVE_EXCESSIVE",
+              "name": "ExcessiveCognitiveComplexity",
+              "shortDescription": {
+                "text": "Complexité cognitive supérieure au plafond industriel de 25 points."
+              },
+              "fullDescription": {
+                "text": "La complexité cognitive selon la spécification SonarSource de G. Ann Campbell mesure l'effort mental nécessaire pour comprendre un bloc de code. Un score > 25 indique une dette technique critique et un risque élevé d'introduction de régressions."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Complexité cognitive supérieure au plafond industriel de 25 points. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Refactorisation de complexité cognitive\n\n### Contexte\nLa complexité cognitive pénalise les ruptures de flux séquentiel (`if`, `for`, `while`, `except`) proportionnellement à leur niveau d'imbrication.\n\n### Actions de Simplification\n1. **Extraction de méthode (Extract Method) :** Découper les sous-traitements complexes en fonctions privées spécialisées respectant le principe de responsabilité unique (SRP).\n2. **Sorties anticipées (Guard Clauses / Early Returns) :** Traiter les cas d'erreur ou conditions limites au début de la méthode pour éliminer les imbrications inutiles de blocs `if / else`.\n3. **Table de correspondances / Polymorphisme :** Remplacer les cascades de `elif` par des dictionnaires de dispatch ou des classes spécialisées.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/1120.html",
+              "properties": {
+                "id": "COMPLEXITY_COGNITIVE_EXCESSIVE",
+                "name": "ExcessiveCognitiveComplexity",
+                "precision": "high",
+                "security-severity": "5.5",
+                "tags": [
+                  "quality",
+                  "external/cwe/cwe-1120",
+                  "excessivecognitivecomplexity"
+                ]
+              }
+            },
+            {
+              "id": "SEC_CODE_EXEC",
+              "name": "ArbitraryCodeExecution",
+              "shortDescription": {
+                "text": "Appel interdit au builtin d'exécution dynamique (eval, exec, compile)."
+              },
+              "fullDescription": {
+                "text": "L'exécution dynamique de chaînes arbitraires via eval() ou exec() permet à un attaquant d'injecter du code Python arbitraire avec les privilèges du processus hôte."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Appel interdit au builtin d'exécution dynamique (eval, exec, compile). Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Élimination d'eval() / exec()\n\n### Contexte de Risque\nL'évaluation dynamique d'expressions via `eval()` ou `exec()` ouvre une brèche critique d'exécution de code arbitraire (RCE). Dans un environnement CAO/FAO, des formules mathématiques ou des scripts de géométrie peuvent être manipulés pour accéder aux fonctions du système hôte (`os`, `subprocess`).\n\n### Actions Correctives Obligatoires\n1. **Élimination formelle :** Supprimer tout appel natif à `eval()`, `exec()`, et `compile()`.\n2. **Utilisation d'un parseur AST blanc :** Remplacer l'évaluation libre par `src.core.parameters.SafeExpressionEvaluator`, qui analyse syntaxiquement l'AST et limite strictement les opérations aux constantes numériques, opérateurs arithmétiques (`+`, `-`, `*`, `/`, `**`) et fonctions trigonométriques autorisées (`sin`, `cos`, `tan`, `sqrt`, etc.).\n\n### Exemple de Remédiation\n```python\n# ❌ VULNÉRABLE :\nresult = eval(user_expression, {\"__builtins__\": None}, local_context)\n\n#  SÉCURISÉ :\nfrom src.core.parameters import SafeExpressionEvaluator\nresult = SafeExpressionEvaluator.evaluate(user_expression, local_context)\n```\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/94.html",
+              "properties": {
+                "id": "SEC_CODE_EXEC",
+                "name": "ArbitraryCodeExecution",
+                "precision": "very-high",
+                "security-severity": "9.8",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-94",
+                  "arbitrarycodeexecution"
+                ]
+              }
+            },
+            {
+              "id": "SEC_CTYPES_RAW_MEMORY",
+              "name": "CtypesRawMemoryHazard",
+              "shortDescription": {
+                "text": "Manipulation de mémoire brute via ctypes sans contrôle de bornes."
+              },
+              "fullDescription": {
+                "text": "L'accès direct aux fonctions memmove, memset ou cast de ctypes peut corrompre la pile ou le tas de la mémoire native."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Manipulation de mémoire brute via ctypes sans contrôle de bornes. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Sécurisation de la mémoire Ctypes\n\n### Actions Correctives\nEncapsuler les interactions mémoire ctypes dans des wrappers typés contrôlant strictement les tailles et bornes d'adresses.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/119.html",
+              "properties": {
+                "id": "SEC_CTYPES_RAW_MEMORY",
+                "name": "CtypesRawMemoryHazard",
+                "precision": "high",
+                "security-severity": "6.5",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-119",
+                  "ctypesrawmemoryhazard"
+                ]
+              }
+            },
+            {
+              "id": "SEC_OPENGL_INVALID_COUNT",
+              "name": "OpenGLBufferOutOfBounds",
+              "shortDescription": {
+                "text": "glDrawElements appelé avec un nombre d'éléments invalide."
+              },
+              "fullDescription": {
+                "text": "L'émission d'ordres de tracé OpenGL avec des dimensions négatives ou supérieures aux tampons VBO/EBO provoque une violation d'accès mémoire natif sur le pilote graphique."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "glDrawElements appelé avec un nombre d'éléments invalide. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Validation des tampons OpenGL\n\n### Actions Correctives\nVérifier que `count > 0` et que le nombre d'éléments n'excède pas la taille allouée dans le buffer d'index GPU avant d'appeler `glDrawElements`.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/119.html",
+              "properties": {
+                "id": "SEC_OPENGL_INVALID_COUNT",
+                "name": "OpenGLBufferOutOfBounds",
+                "precision": "high",
+                "security-severity": "7.0",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-119",
+                  "openglbufferoutofbounds"
+                ]
+              }
+            },
+            {
+              "id": "SEC_SHELL_INJECTION_OS",
+              "name": "OsCommandInjection",
+              "shortDescription": {
+                "text": "Exécution directe de commande système via os.system() ou os.popen()."
+              },
+              "fullDescription": {
+                "text": "L'utilisation d'os.system() passe une commande au shell de l'OS sans validation formelle des arguments, rendant l'application vulnérable à l'injection de commandes arbitraires."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Exécution directe de commande système via os.system() ou os.popen(). Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Remplacement d'os.system()\n\n### Contexte de Risque\n`os.system()` invoque l'interpréteur de commandes sous-jacent (`/bin/sh` ou `cmd.exe`). L'inclusion de métacaractères (`&`, `|`, `;`, `&&`) dans un paramètre d'entrée permet l'exécution de commandes non autorisées.\n\n### Actions Correctives Obligatoires\n1. **Remplacement systématique :** Utiliser `subprocess.run()` avec une liste d'arguments sans shell (`shell=False`).\n2. **Validation des arguments :** Valider rigoureusement le format et l'encodage des paramètres transmis aux exécutables externes (ex: solveur Gmsh, post-processeur G-code).\n\n### Exemple de Remédiation\n```python\n# ❌ VULNÉRABLE :\nos.system(f\"gmsh -3 {mesh_file} -o {output_file}\")\n\n#  SÉCURISÉ :\nimport subprocess\nsubprocess.run([\"gmsh\", \"-3\", mesh_file, \"-o\", output_file], shell=False, check=True)\n```\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/78.html",
+              "properties": {
+                "id": "SEC_SHELL_INJECTION_OS",
+                "name": "OsCommandInjection",
+                "precision": "very-high",
+                "security-severity": "9.8",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-78",
+                  "oscommandinjection"
+                ]
+              }
+            },
+            {
+              "id": "SEC_SHELL_INJECTION_SUBPROCESS",
+              "name": "SubprocessShellInjection",
+              "shortDescription": {
+                "text": "Invocation de subprocess avec shell=True ou argument shell dynamique."
+              },
+              "fullDescription": {
+                "text": "L'activation du paramètre shell=True dans subprocess délègue la découpe des arguments au shell système, créant une vulnérabilité d'injection de commande."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Invocation de subprocess avec shell=True ou argument shell dynamique. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Désactivation de shell=True dans subprocess\n\n### Actions Correctives\n1. Spécifier formellement `shell=False` dans tous les appels `subprocess.Popen`, `subprocess.run`, `subprocess.call`.\n2. Décomposer la commande et ses arguments sous forme de liste explicite de chaînes de caractères.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/78.html",
+              "properties": {
+                "id": "SEC_SHELL_INJECTION_SUBPROCESS",
+                "name": "SubprocessShellInjection",
+                "precision": "very-high",
+                "security-severity": "8.8",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-78",
+                  "subprocessshellinjection"
+                ]
+              }
+            },
+            {
+              "id": "SEC_SYNTAX_ERROR",
+              "name": "PythonSyntaxError",
+              "shortDescription": {
+                "text": "Erreur de syntaxe Python empêchant l'analyse statique formelle."
+              },
+              "fullDescription": {
+                "text": "Le fichier contient une syntaxe invalide empêchant la compilation de l'arbre syntaxique AST."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Erreur de syntaxe Python empêchant l'analyse statique formelle. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Correction d'erreur de syntaxe\n\nCorriger l'erreur de syntaxe signalée par l'interpréteur Python.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/758.html",
+              "properties": {
+                "id": "SEC_SYNTAX_ERROR",
+                "name": "PythonSyntaxError",
+                "precision": "very-high",
+                "security-severity": "7.0",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-758",
+                  "pythonsyntaxerror"
+                ]
+              }
+            },
+            {
+              "id": "SEC_UNBOUNDED_FILE_READ",
+              "name": "UnboundedFileRead",
+              "shortDescription": {
+                "text": "Lecture complète de fichier via read() sans quota maximal d'octets."
+              },
+              "fullDescription": {
+                "text": "La lecture intégrale en mémoire d'un fichier volumineux ou corrompu (fichier bombe CAO) peut entraîner un épuisement de mémoire vive (DDoS géométrique / OOM)."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Lecture complète de fichier via read() sans quota maximal d'octets. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Quotas de lecture de fichiers\n\n### Actions Correctives\nSpécifier une taille maximale lors des lectures de fichiers non vérifiés, par exemple `f.read(MAX_GEOMETRY_BYTES)`.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/400.html",
+              "properties": {
+                "id": "SEC_UNBOUNDED_FILE_READ",
+                "name": "UnboundedFileRead",
+                "precision": "medium",
+                "security-severity": "4.0",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-400",
+                  "unboundedfileread"
+                ]
+              }
+            },
+            {
+              "id": "SEC_UNSAFE_DESERIALIZE_PICKLE",
+              "name": "UnsafePickleDeserialization",
+              "shortDescription": {
+                "text": "Désérialisation non sécurisée d'objets Python via pickle ou shelve."
+              },
+              "fullDescription": {
+                "text": "Le format Pickle est intrinsèquement non sécurisé car sa méthode __reduce__ permet de faire instancier n'importe quel exécutable ou fonction système."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Désérialisation non sécurisée d'objets Python via pickle ou shelve. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Abandon de Pickle au profit de JSON typé\n\n### Actions Correctives\n1. Ne jamais utiliser `pickle.load()` ou `pickle.loads()` sur des documents de projet CAO ou des échanges réseau.\n2. Utiliser le module de sérialisation JSON déterministe `src.core.serializer.CADProjectSerializer` qui enregistre l'arbre de construction géométrique et les paramètres au format JSON validé par typage strict.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/502.html",
+              "properties": {
+                "id": "SEC_UNSAFE_DESERIALIZE_PICKLE",
+                "name": "UnsafePickleDeserialization",
+                "precision": "very-high",
+                "security-severity": "9.8",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-502",
+                  "unsafepickledeserialization"
+                ]
+              }
+            },
+            {
+              "id": "SEC_UNSAFE_DESERIALIZE_YAML",
+              "name": "UnsafeYamlDeserialization",
+              "shortDescription": {
+                "text": "Appel à yaml.load() sans Loader=SafeLoader explicite."
+              },
+              "fullDescription": {
+                "text": "L'appel à yaml.load() sans spécifier de Loader sécurisé permet la création d'objets Python arbitraires via les balises personnalisées YAML !!"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Appel à yaml.load() sans Loader=SafeLoader explicite. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Emploi de yaml.safe_load()\n\n### Actions Correctives\nRemplacer systématiquement `yaml.load(stream)` par `yaml.safe_load(stream)` ou `yaml.load(stream, Loader=yaml.SafeLoader)`.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/502.html",
+              "properties": {
+                "id": "SEC_UNSAFE_DESERIALIZE_YAML",
+                "name": "UnsafeYamlDeserialization",
+                "precision": "high",
+                "security-severity": "7.5",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-502",
+                  "unsafeyamldeserialization"
+                ]
+              }
+            },
+            {
+              "id": "SEC_UNSAFE_DESERIALIZE_YAML_UNSAFE",
+              "name": "ExplicitUnsafeYamlDeserialization",
+              "shortDescription": {
+                "text": "Appel explicite à yaml.unsafe_load() interdit en production."
+              },
+              "fullDescription": {
+                "text": "yaml.unsafe_load() expose délibérément l'interpréteur à l'exécution de code arbitraire."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Appel explicite à yaml.unsafe_load() interdit en production. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Remplacement immédiat de yaml.unsafe_load()\n\nRemplacer `yaml.unsafe_load()` par `yaml.safe_load()`.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/502.html",
+              "properties": {
+                "id": "SEC_UNSAFE_DESERIALIZE_YAML_UNSAFE",
+                "name": "ExplicitUnsafeYamlDeserialization",
+                "precision": "very-high",
+                "security-severity": "9.8",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-502",
+                  "explicitunsafeyamldeserialization"
+                ]
+              }
+            },
+            {
+              "id": "SEC_ZIP_SLIP_HAZARD",
+              "name": "ArchiveZipSlipPathTraversal",
+              "shortDescription": {
+                "text": "Appel direct à extractall() vulnérable aux attaques de type Zip Slip."
+              },
+              "fullDescription": {
+                "text": "L'extraction directe d'une archive sans validation préalable des chemins des membres peut écraser des fichiers en dehors du répertoire de destination via des chemins relatifs contenant '..'."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Appel direct à extractall() vulnérable aux attaques de type Zip Slip. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Protection contre le Zip Slip\n\n### Actions Correctives\n1. Sous Python 3.12+, utiliser `tarfile.extractall(path=target, filter='data')`.\n2. Pour les archives Zip, valider chaque chemin avec `os.path.commonpath([target_dir, resolved_path]) == target_dir`.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/22.html",
+              "properties": {
+                "id": "SEC_ZIP_SLIP_HAZARD",
+                "name": "ArchiveZipSlipPathTraversal",
+                "precision": "high",
+                "security-severity": "7.5",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-22",
+                  "archivezipslippathtraversal"
+                ]
+              }
+            },
+            {
+              "id": "TYPE_ANY_FORBIDDEN",
+              "name": "ForbiddenAnyOrObjectType",
+              "shortDescription": {
+                "text": "Usage interdit du type 'Any' ou 'object' dans la signature."
+              },
+              "fullDescription": {
+                "text": "L'utilisation d'Any ou object désactive la vérification statique formelle de types et peut masquer des confusions de types ou des corruptions d'état à l'exécution."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "help": {
+                "text": "Usage interdit du type 'Any' ou 'object' dans la signature. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Éradication du type Any / object\n\n### Contexte de Qualité Industrielle\nLe standard du projet impose une vérification formelle de 100% des types sans compromis. L'utilisation d'un type passe-partout (`Any`, `object`) masque des erreurs de conception et détruit l'auto-documentation du code.\n\n### Actions Correctives Obligatoires\n1. **Remplacement par type concret :** Identifier la structure exacte manipulée (ex: `Solid`, `Vector3D`, `CADDocument`, `List[float]`).\n2. **Utilisation d'unions typées :** Si plusieurs types sont légitimes, utiliser `Union[TypeA, TypeB]`.\n3. **Définition de Protocole (PEP 544) :** Si des types hétérogènes partagent un comportement commun, déclarer une classe `Protocol` avec les méthodes requises.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/704.html",
+              "properties": {
+                "id": "TYPE_ANY_FORBIDDEN",
+                "name": "ForbiddenAnyOrObjectType",
+                "precision": "very-high",
+                "security-severity": "6.0",
+                "tags": [
+                  "quality",
+                  "external/cwe/cwe-704",
+                  "forbiddenanyorobjecttype"
+                ]
+              }
+            },
+            {
+              "id": "TYPE_MISSING_ANNOTATION",
+              "name": "MissingTypeAnnotation",
+              "shortDescription": {
+                "text": "Annotation de type manquante sur un paramètre ou la valeur de retour."
+              },
+              "fullDescription": {
+                "text": "Toute fonction ou méthode publique/interne doit avoir des annotations de types explicites pour garantir l'intégrité de l'analyse statique et de la documentation."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Annotation de type manquante sur un paramètre ou la valeur de retour. Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "## 🛡️ Guide de Remédiation : Complétion des annotations de types\n\n### Actions Correctives\n1. Ajouter le type de chaque argument : `def compute(val: float, name: str) -> None:`\n2. Spécifier le type de retour pour toute méthode, y compris `-> None` pour les fonctions ne renvoyant rien.\n"
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/843.html",
+              "properties": {
+                "id": "TYPE_MISSING_ANNOTATION",
+                "name": "MissingTypeAnnotation",
+                "precision": "high",
+                "security-severity": "4.0",
+                "tags": [
+                  "quality",
+                  "external/cwe/cwe-843",
+                  "missingtypeannotation"
+                ]
+              }
+            },
+            {
+              "id": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+              "name": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+              "shortDescription": {
+                "text": "Règle personnalisée SEC_CAD_MISSING_EXTENSION_VALIDATION"
+              },
+              "fullDescription": {
+                "text": "Violation de la règle personnalisée SEC_CAD_MISSING_EXTENSION_VALIDATION"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Règle personnalisée SEC_CAD_MISSING_EXTENSION_VALIDATION Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "Corriger l'anomalie signalée."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/710.html",
+              "properties": {
+                "id": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+                "name": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+                "precision": "medium",
+                "security-severity": "5.0",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-710",
+                  "sec_cad_missing_extension_validation"
+                ]
+              }
+            },
+            {
+              "id": "SEC_CAD_PATH_TRAVERSAL_SINK",
+              "name": "SEC_CAD_PATH_TRAVERSAL_SINK",
+              "shortDescription": {
+                "text": "Règle personnalisée SEC_CAD_PATH_TRAVERSAL_SINK"
+              },
+              "fullDescription": {
+                "text": "Violation de la règle personnalisée SEC_CAD_PATH_TRAVERSAL_SINK"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Règle personnalisée SEC_CAD_PATH_TRAVERSAL_SINK Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "Corriger l'anomalie signalée."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/710.html",
+              "properties": {
+                "id": "SEC_CAD_PATH_TRAVERSAL_SINK",
+                "name": "SEC_CAD_PATH_TRAVERSAL_SINK",
+                "precision": "medium",
+                "security-severity": "5.0",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-710",
+                  "sec_cad_path_traversal_sink"
+                ]
+              }
+            },
+            {
+              "id": "SEC_STEP_REDOS_NESTED_QUANTIFIER",
+              "name": "SEC_STEP_REDOS_NESTED_QUANTIFIER",
+              "shortDescription": {
+                "text": "Règle personnalisée SEC_STEP_REDOS_NESTED_QUANTIFIER"
+              },
+              "fullDescription": {
+                "text": "Violation de la règle personnalisée SEC_STEP_REDOS_NESTED_QUANTIFIER"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "help": {
+                "text": "Règle personnalisée SEC_STEP_REDOS_NESTED_QUANTIFIER Pour la remédiation, voir le guide Markdown associé.",
+                "markdown": "Corriger l'anomalie signalée."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/710.html",
+              "properties": {
+                "id": "SEC_STEP_REDOS_NESTED_QUANTIFIER",
+                "name": "SEC_STEP_REDOS_NESTED_QUANTIFIER",
+                "precision": "medium",
+                "security-severity": "5.0",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-710",
+                  "sec_step_redos_nested_quantifier"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "SEC_CODE_EXEC",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Appel interdit au builtin d'exécution dynamique 'compile()'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/ai/cad_script_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 395,
+                  "startColumn": 28
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_stl' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 30,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'os.makedirs' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 30,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_stl' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 31,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'meshes.export' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 31,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_obj' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 44,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'os.makedirs' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 44,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_obj' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 45,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'meshes.export' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 45,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_ply' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 55,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'os.makedirs' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 55,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_ply' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 56,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'meshes.export' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 56,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CODE_EXEC",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Appel interdit au builtin d'exécution dynamique 'compile()'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 208,
+                  "startColumn": 20
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CODE_EXEC",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Appel interdit au builtin d'exécution dynamique 'exec()'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 210,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'compile_from_ast' : usage du type interdit 'Dict[str, object]' sur le paramètre 'module_dict'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 194,
+                  "startColumn": 58
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'compile_from_ast' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 194,
+                  "startColumn": 113
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_callable' : usage du type interdit 'Callable[..., object]' sur le paramètre 'mutated_callable'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 222,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_union' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 363,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_diff' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 377,
+                  "startColumn": 29
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_inter' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 391,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_trans' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 405,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_scale' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 424,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_split' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 436,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_trim' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 452,
+                  "startColumn": 29
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_wedge' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 465,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_extrude_sym' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 478,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_extrude_neg' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 494,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_vol' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 510,
+                  "startColumn": 28
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_empty' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 522,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_manifold' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 534,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_area' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 546,
+                  "startColumn": 29
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_genus' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 558,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_gap' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 570,
+                  "startColumn": 28
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_box_clamp' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 583,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_cyl' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 596,
+                  "startColumn": 28
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_sph' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 609,
+                  "startColumn": 28
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_cone' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 622,
+                  "startColumn": 29
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_torus' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 635,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_extrude_pts' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 649,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_rot_swap' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 668,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_rot_neg' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 684,
+                  "startColumn": 32
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_extrude_xz' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 698,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_extrude_yz' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 716,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_extrude_off' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 734,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_slice' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 749,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_bbox' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 762,
+                  "startColumn": 29
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_faces' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 776,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_verts' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 788,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_edges' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 800,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_watertight' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 812,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_simplify' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 824,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_warp' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 838,
+                  "startColumn": 29
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_box_center' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 852,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_coin_x' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 875,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_coin_y' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 899,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_horiz' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 923,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_vert' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 947,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_dist_dxa' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 969,
+                  "startColumn": 37
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_dist_swap' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 997,
+                  "startColumn": 38
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_parallel' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1025,
+                  "startColumn": 37
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_perp' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1054,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_fixed' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1082,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_equal' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1103,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_angle' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1130,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_tangent' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1154,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_coin' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1175,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_horiz' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1195,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_vert' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1215,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_dist' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1235,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_parallel' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1257,
+                  "startColumn": 37
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_perp' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1283,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_fixed' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1309,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_solve_thresh' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1328,
+                  "startColumn": 37
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_solve_iter' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1346,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_solve_empty' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1365,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_add_dist' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1380,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_add_tangent' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1394,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_ext_ref' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1408,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_pol' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1426,
+                  "startColumn": 32
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_g2' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1446,
+                  "startColumn": 31
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_angle' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1468,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_eq' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1489,
+                  "startColumn": 31
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_tang' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1513,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_solve_blind' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1533,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_shape' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1553,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_pol' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1571,
+                  "startColumn": 32
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_g2' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1593,
+                  "startColumn": 31
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_solve_ftol' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1618,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_res_sign' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1637,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_00' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1664,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_01' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1680,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_10' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1696,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_11' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1712,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_21' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1728,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_22' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1744,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_03' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1760,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_13' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1776,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_23' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1792,
+                  "startColumn": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_fk_order' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1808,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_fk_theta' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1828,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_lin' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1847,
+                  "startColumn": 32
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_rot' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1864,
+                  "startColumn": 32
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_sing_thresh' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1880,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_sing_always' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1893,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_traj_inv' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1905,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_gear_sign' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1919,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_rack_div' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1932,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_screw_sign' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1944,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_ball_cone' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1956,
+                  "startColumn": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_explode_dir' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1969,
+                  "startColumn": 36
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_jac_eps' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1984,
+                  "startColumn": 32
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_fk_pose' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 2009,
+                  "startColumn": 32
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_dh_theta' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 2023,
+                  "startColumn": 33
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'patch_gear_ratio' : type de retour interdit 'Callable[..., object]' (Any ou object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 2040,
+                  "startColumn": 35
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'mut_trans' : usage du type interdit 'object' sur le paramètre 'offset_or_x'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 406,
+                  "startColumn": 45
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'mut_split' : usage du type interdit 'object' sur le paramètre 'normal'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 437,
+                  "startColumn": 45
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'mut_trim' : usage du type interdit 'object' sur le paramètre 'normal'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 453,
+                  "startColumn": 44
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'mut_warp' : usage du type interdit 'object' sur le paramètre 'func'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 839,
+                  "startColumn": 44
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "TYPE_ANY_FORBIDDEN",
+          "ruleIndex": 13,
+          "level": "error",
+          "message": {
+            "text": "Fonction 'mut_add_tangent' : usage du type interdit 'object' sur le paramètre 'c'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/mutation_engine.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1396,
+                  "startColumn": 92
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_nexus_solid' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 242,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'os.makedirs' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 242,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_nexus_solid' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 243,
+                  "startColumn": 14
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'open' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 243,
+                  "startColumn": 14
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_multiple_solids' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 260,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'os.makedirs' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 260,
+                  "startColumn": 9
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_multiple_solids' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 261,
+                  "startColumn": 14
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'open' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 261,
+                  "startColumn": 14
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_STEP_REDOS_NESTED_QUANTIFIER",
+          "ruleIndex": 17,
+          "level": "warning",
+          "message": {
+            "text": "Expression régulière vulnérable au déni de service géométrique (Geometric ReDoS) : Répétition imbriquée à risque de ReDoS exponentiel : '(?:[^']*'[^']*')*'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_importer.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 608,
+                  "startColumn": 40
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD '_resolve_content' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_importer.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 648,
+                  "startColumn": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'open' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_importer.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 648,
+                  "startColumn": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_UNBOUNDED_FILE_READ",
+          "ruleIndex": 8,
+          "level": "warning",
+          "message": {
+            "text": "Lecture complète de fichier via read() sans limite maximale d'octets."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/core/step_importer.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 649,
+                  "startColumn": 24
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_svg' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/drawing/svg_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 86,
+                  "startColumn": 13
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'os.makedirs' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/drawing/svg_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 86,
+                  "startColumn": 13
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_svg' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/drawing/svg_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 87,
+                  "startColumn": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'open' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/drawing/svg_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 87,
+                  "startColumn": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_flat_pattern_dxf' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/sheetmetal/dxf_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 93,
+                  "startColumn": 13
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'os.makedirs' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/sheetmetal/dxf_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 93,
+                  "startColumn": 13
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_MISSING_EXTENSION_VALIDATION",
+          "ruleIndex": 15,
+          "level": "warning",
+          "message": {
+            "text": "Routine d'import/export CAD 'export_flat_pattern_dxf' sans vérification d'extension de fichier autorisée."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/sheetmetal/dxf_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 94,
+                  "startColumn": 18
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC_CAD_PATH_TRAVERSAL_SINK",
+          "ruleIndex": 16,
+          "level": "warning",
+          "message": {
+            "text": "Sink de fichier 'open' dans un importateur/exportateur CAD sans vérification de confinement de répertoire."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/sheetmetal/dxf_exporter.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 94,
+                  "startColumn": 18
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

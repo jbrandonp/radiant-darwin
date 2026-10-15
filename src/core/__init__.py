@@ -43,6 +43,10 @@ from src.core.push_pull import PushPullEngine, PushPullResult
 from src.core.joint_solver import (
     FusionJointType, JointLimit, JointAnchor, AssemblyJoint, JointKinematicSolver
 )
+from src.core.mutation_engine import (
+    KernelAstMutationEngine, MutationFamily, MutantStatus, BytecodeHotPatcher,
+    GAORTransformer, GRORTransformer, GTRTransformer, GSOLVTransformer, KernelMutationRegistry
+)
 
 __all__ = [
     "Vector3D",
@@ -151,4 +155,13 @@ __all__ = [
     "JointAnchor",
     "AssemblyJoint",
     "JointKinematicSolver",
+    "KernelAstMutationEngine",
+    "MutationFamily",
+    "MutantStatus",
+    "BytecodeHotPatcher",
+    "GAORTransformer",
+    "GRORTransformer",
+    "GTRTransformer",
+    "GSOLVTransformer",
+    "KernelMutationRegistry",
 ]

@@ -1,4 +1,5 @@
 [run]
+branch = True
 source =
     src/assembly
     src/cam
@@ -13,3 +14,5 @@ source =
 
 [report]
 show_missing = True
+precision = 2
+

@@ -11,6 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   test-and-audit:
     name: Test & Audit (${{ matrix.os }} - Py${{ matrix.python-version }})
@@ -71,6 +75,28 @@ jobs:
       - name: Run Industrial Audit Engine (Strict Typing & Quality Gate)
         run: |
           python scripts/industrial_audit_engine.py
+
+      - name: Generate and Validate SARIF v2.1.0 Security Report
+        run: |
+          python scripts/sarif_generator.py --output audit-results.sarif --validate
+
+      - name: Upload SARIF to GitHub Security (Code Scanning)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: audit-results.sarif
+          category: audit-${{ matrix.os }}-py${{ matrix.python-version }}
+
+      - name: Upload HTML Audit Report and Badges Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-report-html-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            docs/audit_report.html
+            docs/badges/*.svg
+            docs/audit_summary.md
 
       - name: Run Headless CLI Verification
         run: |

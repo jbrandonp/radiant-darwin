@@ -1,0 +1,1096 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:a09e4b47-d0be-4d60-b722-fe161a5b0361",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-10-15T06:13:17.355614+00:00",
+    "tools": [
+      {
+        "vendor": "Radiant-Darwin",
+        "name": "SupplyChainAuditor",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:pypi/radiant-darwin@2.4.0",
+      "name": "radiant-darwin",
+      "version": "2.4.0",
+      "purl": "pkg:pypi/radiant-darwin@2.4.0",
+      "description": "CAD Studio (Radiant-Darwin) Parametric 3D CAD/CAE/CAM Suite"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/attrs@26.1.0",
+      "name": "attrs",
+      "version": "26.1.0",
+      "purl": "pkg:pypi/attrs@26.1.0",
+      "scope": "optional",
+      "description": "Classes Without Boilerplate",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/colorama@0.4.6",
+      "name": "colorama",
+      "version": "0.4.6",
+      "purl": "pkg:pypi/colorama@0.4.6",
+      "scope": "optional",
+      "description": "Cross-platform colored terminal text.",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/coverage@7.16.2",
+      "name": "coverage",
+      "version": "7.16.2",
+      "purl": "pkg:pypi/coverage@7.16.2",
+      "scope": "required",
+      "description": "Code coverage measurement for Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/hypothesis@6.169.3",
+      "name": "hypothesis",
+      "version": "6.169.3",
+      "purl": "pkg:pypi/hypothesis@6.169.3",
+      "scope": "required",
+      "description": "The property-based testing library for Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "MPL-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "WEAK_COPYLEFT"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "WARNING"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/iniconfig@2.3.1",
+      "name": "iniconfig",
+      "version": "2.3.1",
+      "purl": "pkg:pypi/iniconfig@2.3.1",
+      "scope": "optional",
+      "description": "brain-dead simple config-ini parsing",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/jsonschema@4.26.0",
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "purl": "pkg:pypi/jsonschema@4.26.0",
+      "scope": "required",
+      "description": "An implementation of JSON Schema validation for Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/jsonschema-specifications@2025.9.1",
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "purl": "pkg:pypi/jsonschema-specifications@2025.9.1",
+      "scope": "optional",
+      "description": "The JSON Schema meta-schemas and vocabularies, exposed as a Registry",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/manifold3d@3.5.4",
+      "name": "manifold3d",
+      "version": "3.5.4",
+      "purl": "pkg:pypi/manifold3d@3.5.4",
+      "scope": "required",
+      "description": "Library for geometric robustness",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/numpy@2.5.4",
+      "name": "numpy",
+      "version": "2.5.4",
+      "purl": "pkg:pypi/numpy@2.5.4",
+      "scope": "required",
+      "description": "Fundamental package for array computing in Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/packaging@26.3",
+      "name": "packaging",
+      "version": "26.3",
+      "purl": "pkg:pypi/packaging@26.3",
+      "scope": "optional",
+      "description": "Core utilities for Python packages",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pip@26.2.1",
+      "name": "pip",
+      "version": "26.2.1",
+      "purl": "pkg:pypi/pip@26.2.1",
+      "scope": "optional",
+      "description": "The PyPA recommended tool for installing Python packages.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pluggy@1.6.0",
+      "name": "pluggy",
+      "version": "1.6.0",
+      "purl": "pkg:pypi/pluggy@1.6.0",
+      "scope": "optional",
+      "description": "plugin and hook calling mechanisms for python",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pygments@2.21.0",
+      "name": "pygments",
+      "version": "2.21.0",
+      "purl": "pkg:pypi/pygments@2.21.0",
+      "scope": "optional",
+      "description": "Pygments is a syntax highlighting package written in Python.",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-2-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyopengl@3.1.10",
+      "name": "pyopengl",
+      "version": "3.1.10",
+      "purl": "pkg:pypi/pyopengl@3.1.10",
+      "scope": "required",
+      "description": "Standard OpenGL bindings for Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyopengl-accelerate@3.1.10",
+      "name": "pyopengl-accelerate",
+      "version": "3.1.10",
+      "purl": "pkg:pypi/pyopengl-accelerate@3.1.10",
+      "scope": "required",
+      "description": "Cython-coded accelerators for PyOpenGL",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyside6@6.12.0",
+      "name": "pyside6",
+      "version": "6.12.0",
+      "purl": "pkg:pypi/pyside6@6.12.0",
+      "scope": "required",
+      "description": "Python bindings for the Qt cross-platform application and UI framework",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-only"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "WEAK_COPYLEFT"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "WARNING"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyside6-addons@6.12.0",
+      "name": "pyside6-addons",
+      "version": "6.12.0",
+      "purl": "pkg:pypi/pyside6-addons@6.12.0",
+      "scope": "optional",
+      "description": "Python bindings for the Qt cross-platform application and UI framework (Addons)",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-only"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "WEAK_COPYLEFT"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "WARNING"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyside6-essentials@6.12.0",
+      "name": "pyside6-essentials",
+      "version": "6.12.0",
+      "purl": "pkg:pypi/pyside6-essentials@6.12.0",
+      "scope": "optional",
+      "description": "Python bindings for the Qt cross-platform application and UI framework (Essentials)",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-only"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "WEAK_COPYLEFT"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "WARNING"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyside6-pdf@6.12.0.140",
+      "name": "pyside6-pdf",
+      "version": "6.12.0.140",
+      "purl": "pkg:pypi/pyside6-pdf@6.12.0.140",
+      "scope": "optional",
+      "description": "Python bindings for the Qt cross-platform application and UI framework (Pdf)",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-only"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "WEAK_COPYLEFT"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "WARNING"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyside6-webengine@6.12.0.140",
+      "name": "pyside6-webengine",
+      "version": "6.12.0.140",
+      "purl": "pkg:pypi/pyside6-webengine@6.12.0.140",
+      "scope": "optional",
+      "description": "Python bindings for the Qt cross-platform application and UI framework (WebEngine)",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-only"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "WEAK_COPYLEFT"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "WARNING"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pytest@9.1.1",
+      "name": "pytest",
+      "version": "9.1.1",
+      "purl": "pkg:pypi/pytest@9.1.1",
+      "scope": "required",
+      "description": "pytest: simple powerful testing with Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pytest-cov@7.1.0",
+      "name": "pytest-cov",
+      "version": "7.1.0",
+      "purl": "pkg:pypi/pytest-cov@7.1.0",
+      "scope": "required",
+      "description": "Pytest plugin for measuring coverage.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/referencing@0.37.0",
+      "name": "referencing",
+      "version": "0.37.0",
+      "purl": "pkg:pypi/referencing@0.37.0",
+      "scope": "optional",
+      "description": "JSON Referencing + Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/rpds-py@2026.9.1",
+      "name": "rpds-py",
+      "version": "2026.9.1",
+      "purl": "pkg:pypi/rpds-py@2026.9.1",
+      "scope": "optional",
+      "description": "Python bindings to Rust's persistent data structures (rpds)",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/scipy@1.18.1",
+      "name": "scipy",
+      "version": "1.18.1",
+      "purl": "pkg:pypi/scipy@1.18.1",
+      "scope": "required",
+      "description": "Fundamental algorithms for scientific computing in Python",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/shiboken6@6.12.0",
+      "name": "shiboken6",
+      "version": "6.12.0",
+      "purl": "pkg:pypi/shiboken6@6.12.0",
+      "scope": "optional",
+      "description": "Python/C++ bindings helper module",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-only"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "WEAK_COPYLEFT"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "WARNING"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/sortedcontainers@2.4.0",
+      "name": "sortedcontainers",
+      "version": "2.4.0",
+      "purl": "pkg:pypi/sortedcontainers@2.4.0",
+      "scope": "optional",
+      "description": "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/trimesh@5.1.1",
+      "name": "trimesh",
+      "version": "5.1.1",
+      "purl": "pkg:pypi/trimesh@5.1.1",
+      "scope": "required",
+      "description": "Import, export, process, analyze and view triangular meshes.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "direct"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/typing-extensions@4.16.0",
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "purl": "pkg:pypi/typing-extensions@4.16.0",
+      "scope": "optional",
+      "description": "Backported and Experimental Type Hints for Python 3.9+",
+      "licenses": [
+        {
+          "license": {
+            "id": "PSF-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "radiant:dependency:type",
+          "value": "transitive"
+        },
+        {
+          "name": "radiant:license:category",
+          "value": "PERMISSIVE"
+        },
+        {
+          "name": "radiant:license:compatibility",
+          "value": "COMPLIANT"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:pypi/radiant-darwin@2.4.0",
+      "dependsOn": [
+        "pkg:pypi/coverage@7.16.2",
+        "pkg:pypi/hypothesis@6.169.3",
+        "pkg:pypi/jsonschema@4.26.0",
+        "pkg:pypi/manifold3d@3.5.4",
+        "pkg:pypi/numpy@2.5.4",
+        "pkg:pypi/pyopengl-accelerate@3.1.10",
+        "pkg:pypi/pyopengl@3.1.10",
+        "pkg:pypi/pyside6@6.12.0",
+        "pkg:pypi/pytest-cov@7.1.0",
+        "pkg:pypi/pytest@9.1.1",
+        "pkg:pypi/scipy@1.18.1",
+        "pkg:pypi/trimesh@5.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/attrs@26.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/colorama@0.4.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/coverage@7.16.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/hypothesis@6.169.3",
+      "dependsOn": [
+        "pkg:pypi/numpy@2.5.4",
+        "pkg:pypi/numpy@2.5.4",
+        "pkg:pypi/pytest@9.1.1",
+        "pkg:pypi/pytest@9.1.1",
+        "pkg:pypi/sortedcontainers@2.4.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/iniconfig@2.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/jsonschema@4.26.0",
+      "dependsOn": [
+        "pkg:pypi/attrs@26.1.0",
+        "pkg:pypi/jsonschema-specifications@2025.9.1",
+        "pkg:pypi/referencing@0.37.0",
+        "pkg:pypi/rpds-py@2026.9.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/jsonschema-specifications@2025.9.1",
+      "dependsOn": [
+        "pkg:pypi/referencing@0.37.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/manifold3d@3.5.4",
+      "dependsOn": [
+        "pkg:pypi/numpy@2.5.4",
+        "pkg:pypi/numpy@2.5.4"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/numpy@2.5.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/packaging@26.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pip@26.2.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pluggy@1.6.0",
+      "dependsOn": [
+        "pkg:pypi/coverage@7.16.2",
+        "pkg:pypi/pytest@9.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pygments@2.21.0",
+      "dependsOn": [
+        "pkg:pypi/colorama@0.4.6"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyopengl@3.1.10",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pyopengl-accelerate@3.1.10",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pyside6@6.12.0",
+      "dependsOn": [
+        "pkg:pypi/pyside6-addons@6.12.0",
+        "pkg:pypi/pyside6-essentials@6.12.0",
+        "pkg:pypi/pyside6-pdf@6.12.0.140",
+        "pkg:pypi/pyside6-webengine@6.12.0.140"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyside6-addons@6.12.0",
+      "dependsOn": [
+        "pkg:pypi/pyside6-essentials@6.12.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyside6-essentials@6.12.0",
+      "dependsOn": [
+        "pkg:pypi/shiboken6@6.12.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyside6-pdf@6.12.0.140",
+      "dependsOn": [
+        "pkg:pypi/pyside6-essentials@6.12.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyside6-webengine@6.12.0.140",
+      "dependsOn": [
+        "pkg:pypi/pyside6-addons@6.12.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pytest@9.1.1",
+      "dependsOn": [
+        "pkg:pypi/attrs@26.1.0",
+        "pkg:pypi/colorama@0.4.6",
+        "pkg:pypi/hypothesis@6.169.3",
+        "pkg:pypi/iniconfig@2.3.1",
+        "pkg:pypi/packaging@26.3",
+        "pkg:pypi/pluggy@1.6.0",
+        "pkg:pypi/pygments@2.21.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pytest-cov@7.1.0",
+      "dependsOn": [
+        "pkg:pypi/coverage@7.16.2",
+        "pkg:pypi/pluggy@1.6.0",
+        "pkg:pypi/pytest@9.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/referencing@0.37.0",
+      "dependsOn": [
+        "pkg:pypi/attrs@26.1.0",
+        "pkg:pypi/rpds-py@2026.9.1",
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/rpds-py@2026.9.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/scipy@1.18.1",
+      "dependsOn": [
+        "pkg:pypi/hypothesis@6.169.3",
+        "pkg:pypi/numpy@2.5.4",
+        "pkg:pypi/pytest-cov@7.1.0",
+        "pkg:pypi/pytest@9.1.1",
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/shiboken6@6.12.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/sortedcontainers@2.4.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/trimesh@5.1.1",
+      "dependsOn": [
+        "pkg:pypi/jsonschema@4.26.0",
+        "pkg:pypi/manifold3d@3.5.4",
+        "pkg:pypi/numpy@2.5.4",
+        "pkg:pypi/pytest-cov@7.1.0",
+        "pkg:pypi/pytest@9.1.1",
+        "pkg:pypi/scipy@1.18.1",
+        "pkg:pypi/trimesh@5.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/typing-extensions@4.16.0",
+      "dependsOn": []
+    }
+  ]
+}

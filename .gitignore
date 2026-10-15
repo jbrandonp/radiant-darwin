@@ -50,6 +50,7 @@ coverage.xml
 .hypothesis/
 htmlcov/
 audit_report_latest.json
+.audit_cache/
 
 # Logs and runtime artifacts
 *.log

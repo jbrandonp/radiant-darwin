@@ -1,0 +1,485 @@
+{
+  "any_veto_triggered": false,
+  "composite_score": 92.64324594171495,
+  "composite_threshold": 65.0,
+  "gate_passed": true,
+  "layers": {
+    "AI_IO_CONNECTORS": {
+      "afferent_coupling": 17,
+      "avg_cognitive_complexity": 37.68,
+      "complex_functions_violations": [
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 15,
+          "file_path": "src\\cli.py",
+          "function_name": "main",
+          "line_number": 138
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 21,
+          "file_path": "src\\ai\\cad_ai_bridge.py",
+          "function_name": "execute_natural_language_prompt",
+          "line_number": 176
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 13,
+          "file_path": "src\\ai\\cad_ai_compatibility.py",
+          "function_name": "parse_raw_arguments",
+          "line_number": 108
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 18,
+          "file_path": "src\\ai\\cad_ai_compatibility.py",
+          "function_name": "get_sub_dict",
+          "line_number": 216
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 15,
+          "file_path": "src\\ai\\cad_ai_stability.py",
+          "function_name": "diagnose",
+          "line_number": 305
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 18,
+          "file_path": "src\\ai\\cad_validator.py",
+          "function_name": "check_scene_interferences",
+          "line_number": 146
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 21,
+          "file_path": "src\\ai\\mcp_stdio.py",
+          "function_name": "_dispatch_primitive",
+          "line_number": 127
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 13,
+          "file_path": "src\\ai\\mcp_stdio.py",
+          "function_name": "_dispatch_advanced_tool",
+          "line_number": 264
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 13,
+          "file_path": "src\\core\\gltf_exporter.py",
+          "function_name": "export_mesh_to_gltf",
+          "line_number": 34
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 18,
+          "file_path": "src\\core\\serializer.py",
+          "function_name": "_add_entity_to_sketch",
+          "line_number": 95
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 13,
+          "file_path": "src\\core\\serializer.py",
+          "function_name": "_build_patterns_and_transforms",
+          "line_number": 262
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 16,
+          "file_path": "src\\core\\serializer.py",
+          "function_name": "_build_multirail_loft_shape",
+          "line_number": 374
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 13,
+          "file_path": "src\\core\\serializer.py",
+          "function_name": "_serialize_special_attrs",
+          "line_number": 570
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 15,
+          "file_path": "src\\core\\serializer.py",
+          "function_name": "load_project",
+          "line_number": 619
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 21,
+          "file_path": "src\\core\\step_importer.py",
+          "function_name": "import_step",
+          "line_number": 64
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 13,
+          "file_path": "src\\core\\step_importer.py",
+          "function_name": "_reconstruct_vertices",
+          "line_number": 178
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 14,
+          "file_path": "src\\core\\step_importer.py",
+          "function_name": "_build_edge_loop_wire",
+          "line_number": 312
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 21,
+          "file_path": "src\\core\\step_importer.py",
+          "function_name": "_resolve_face_boundaries_and_surface",
+          "line_number": 438
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 22,
+          "file_path": "src\\core\\step_importer.py",
+          "function_name": "_construct_manifold_from_brep",
+          "line_number": 517
+        },
+        {
+          "allowed_threshold": 12,
+          "cognitive_complexity": 17,
+          "file_path": "src\\drawing\\svg_exporter.py",
+          "function_name": "export_svg",
+          "line_number": 15
+        }
+      ],
+      "compliant_functions_count": 246,
+      "coverage_percent": 85.0,
+      "efferent_coupling": 65,
+      "files_count": 25,
+      "instability": 0.7926829268292683,
+      "layer": "AI_IO_CONNECTORS",
+      "layer_name": "Connecteurs IA & I/O",
+      "lines_of_code": 6387,
+      "max_cognitive_complexity": 22,
+      "mutation_exempted": false,
+      "mutation_score_percent": 100.0,
+      "sast_violations_count": 0,
+      "sast_violations_details": [],
+      "status": "PASSED_WITH_WARNINGS",
+      "status_reasons": [
+        "Complexité Cognitive : 20 fonction(s) dépassent le plafond adaptatif de 12"
+      ],
+      "total_functions_count": 266,
+      "type_completeness_percent": 100.0
+    },
+    "CAD_CORE_GEOMETRY": {
+      "afferent_coupling": 124,
+      "avg_cognitive_complexity": 28.395833333333332,
+      "complex_functions_violations": [
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 22,
+          "file_path": "src\\core\\assembly.py",
+          "function_name": "solve_mates",
+          "line_number": 80
+        },
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 25,
+          "file_path": "src\\core\\document.py",
+          "function_name": "rebuild",
+          "line_number": 143
+        },
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 19,
+          "file_path": "src\\core\\fasteners.py",
+          "function_name": "set_parameters",
+          "line_number": 196
+        },
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 21,
+          "file_path": "src\\core\\geometry.py",
+          "function_name": "extrude_polygon",
+          "line_number": 479
+        },
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 23,
+          "file_path": "src\\core\\mutation_engine.py",
+          "function_name": "_get_solver_jacobian_mutants",
+          "line_number": 869
+        },
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 24,
+          "file_path": "src\\core\\mutation_engine.py",
+          "function_name": "_get_solver_residual_mutants",
+          "line_number": 1175
+        },
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 25,
+          "file_path": "src\\core\\sketch.py",
+          "function_name": "add_dimension",
+          "line_number": 656
+        },
+        {
+          "allowed_threshold": 18,
+          "cognitive_complexity": 20,
+          "file_path": "src\\core\\sketch.py",
+          "function_name": "chamfer_2d_lines",
+          "line_number": 815
+        }
+      ],
+      "compliant_functions_count": 950,
+      "coverage_percent": 92.5,
+      "efferent_coupling": 9,
+      "files_count": 48,
+      "instability": 0.06766917293233082,
+      "layer": "CAD_CORE_GEOMETRY",
+      "layer_name": "Noyau CAO & Géométrie",
+      "lines_of_code": 12881,
+      "max_cognitive_complexity": 25,
+      "mutation_exempted": false,
+      "mutation_score_percent": 100.0,
+      "sast_violations_count": 0,
+      "sast_violations_details": [],
+      "status": "PASSED_WITH_WARNINGS",
+      "status_reasons": [
+        "Complexité Cognitive : 8 fonction(s) dépassent le plafond adaptatif de 18"
+      ],
+      "total_functions_count": 958,
+      "type_completeness_percent": 100.0
+    },
+    "INFRASTRUCTURE": {
+      "afferent_coupling": 1,
+      "avg_cognitive_complexity": 10.0,
+      "complex_functions_violations": [],
+      "compliant_functions_count": 4,
+      "coverage_percent": 80.0,
+      "efferent_coupling": 2,
+      "files_count": 2,
+      "instability": 0.6666666666666666,
+      "layer": "INFRASTRUCTURE",
+      "layer_name": "Infrastructure & Racine",
+      "lines_of_code": 131,
+      "max_cognitive_complexity": 0,
+      "mutation_exempted": true,
+      "mutation_score_percent": 100.0,
+      "sast_violations_count": 0,
+      "sast_violations_details": [],
+      "status": "PASSED",
+      "status_reasons": [
+        "Tous les critères adaptatifs de la couche sont pleinement satisfaits."
+      ],
+      "total_functions_count": 4,
+      "type_completeness_percent": 100.0
+    },
+    "NUMERICAL_SOLVERS": {
+      "afferent_coupling": 15,
+      "avg_cognitive_complexity": 17.166666666666668,
+      "complex_functions_violations": [],
+      "compliant_functions_count": 157,
+      "coverage_percent": 88.0,
+      "efferent_coupling": 20,
+      "files_count": 24,
+      "instability": 0.5714285714285714,
+      "layer": "NUMERICAL_SOLVERS",
+      "layer_name": "Solveurs & Calcul Numérique",
+      "lines_of_code": 3767,
+      "max_cognitive_complexity": 0,
+      "mutation_exempted": false,
+      "mutation_score_percent": 100.0,
+      "sast_violations_count": 0,
+      "sast_violations_details": [],
+      "status": "PASSED",
+      "status_reasons": [
+        "Tous les critères adaptatifs de la couche sont pleinement satisfaits."
+      ],
+      "total_functions_count": 157,
+      "type_completeness_percent": 100.0
+    },
+    "UI_VIEWPORT": {
+      "afferent_coupling": 4,
+      "avg_cognitive_complexity": 25.484848484848484,
+      "complex_functions_violations": [
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 16,
+          "file_path": "src\\drawing\\drawing_advanced.py",
+          "function_name": "generate_hatch_lines",
+          "line_number": 167
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 17,
+          "file_path": "src\\drawing\\drawing_generator.py",
+          "function_name": "_project_view",
+          "line_number": 313
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 17,
+          "file_path": "src\\drawing\\drawing_generator.py",
+          "function_name": "_project_isometric_view",
+          "line_number": 388
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 25,
+          "file_path": "src\\drawing\\drawing_generator.py",
+          "function_name": "generate_section_view",
+          "line_number": 468
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 21,
+          "file_path": "src\\render\\hardware_acceleration.py",
+          "function_name": "detect_hardware",
+          "line_number": 54
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 20,
+          "file_path": "src\\render\\raytracer.py",
+          "function_name": "render_solid_to_image",
+          "line_number": 139
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 17,
+          "file_path": "src\\ui\\properties_panel.py",
+          "function_name": "set_feature",
+          "line_number": 135
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 20,
+          "file_path": "src\\viewport\\sketch_mode.py",
+          "function_name": "handle_mouse_click",
+          "line_number": 65
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 19,
+          "file_path": "src\\viewport\\viewport_shading.py",
+          "function_name": "apply_shading_to_buffer",
+          "line_number": 42
+        },
+        {
+          "allowed_threshold": 15,
+          "cognitive_complexity": 21,
+          "file_path": "src\\viewport\\viewport_widget.py",
+          "function_name": "keyPressEvent",
+          "line_number": 302
+        }
+      ],
+      "compliant_functions_count": 345,
+      "coverage_percent": 72.0,
+      "efferent_coupling": 65,
+      "files_count": 33,
+      "instability": 0.9420289855072463,
+      "layer": "UI_VIEWPORT",
+      "layer_name": "UI & Viewport",
+      "lines_of_code": 8487,
+      "max_cognitive_complexity": 25,
+      "mutation_exempted": true,
+      "mutation_score_percent": 100.0,
+      "sast_violations_count": 0,
+      "sast_violations_details": [],
+      "status": "PASSED_WITH_WARNINGS",
+      "status_reasons": [
+        "Complexité Cognitive : 10 fonction(s) dépassent le plafond adaptatif de 15"
+      ],
+      "total_functions_count": 355,
+      "type_completeness_percent": 100.0
+    }
+  },
+  "schema_version": "2.0.0",
+  "score_components": [
+    {
+      "formula_description": "Couverture globale pondérée des lignes et branches exécutées",
+      "name": "Couverture de Code",
+      "raw_score": 84.90277382870502,
+      "weight": 0.3,
+      "weighted_score": 25.470832148611507
+    },
+    {
+      "formula_description": "Pourcentage de tests unitaires et d'intégration validés sans régression",
+      "name": "Taux de Succès des Tests",
+      "raw_score": 100.0,
+      "weight": 0.2,
+      "weighted_score": 20.0
+    },
+    {
+      "formula_description": "Capacité réelle de la suite de tests à détecter les bugs injectés",
+      "name": "Mutation Testing Score",
+      "raw_score": 100.0,
+      "weight": 0.15,
+      "weighted_score": 15.0
+    },
+    {
+      "formula_description": "Ratio de fonctions respectant les plafonds adaptatifs de leur couche",
+      "name": "Conformité Complexité Cognitive",
+      "raw_score": 97.816091954023,
+      "weight": 0.15,
+      "weighted_score": 14.672413793103448
+    },
+    {
+      "formula_description": "Formule polynomiale SEI/Microsoft (Halstead + McCabe + LOC)",
+      "name": "Indice de Maintenabilité SEI",
+      "raw_score": 75.0,
+      "weight": 0.1,
+      "weighted_score": 7.5
+    },
+    {
+      "formula_description": "Respect du principe de stabilité de Martin (I <= 0.20 pour le noyau CAO)",
+      "name": "Intégrité & Stabilité Architecturale",
+      "raw_score": 100.0,
+      "weight": 0.1,
+      "weighted_score": 10.0
+    }
+  ],
+  "status": "PASSED_WITH_WARNINGS",
+  "status_label": "VALIDÉ AVEC ALERTES (QUALITY GATE HYBRIDE RESPECTÉ)",
+  "summary_metrics": {
+    "cad_core_instability": 0.06766917293233082,
+    "circular_dependencies": 0.0,
+    "complexity_compliance_percent": 97.816091954023,
+    "composite_score": 92.64324594171495,
+    "global_coverage_percent": 84.90277382870502,
+    "mutation_score_percent": 100.0,
+    "security_violations": 0.0,
+    "total_files": 132.0,
+    "total_lines_of_code": 31653.0,
+    "type_completeness_percent": 100.0
+  },
+  "timestamp": "2026-10-15T06:33:52.093417+00:00",
+  "total_files": 132,
+  "total_loc": 31653,
+  "vetoes": [
+    {
+      "actual_value": "0 violation(s)",
+      "criterion": "ZERO_SAST_VULNERABILITIES",
+      "explanation": "Toute vulnérabilité de sécurité (injection, désérialisation, path traversal) déclenche un veto immédiat.",
+      "is_vetoed": false,
+      "name": "Vigilance SAST de Sécurité (0 violation absolue)",
+      "threshold_value": "Strictement 0 violation"
+    },
+    {
+      "actual_value": "0 cycle(s)",
+      "criterion": "ZERO_CIRCULAR_DEPENDENCIES",
+      "explanation": "Tout cycle brise la structure en DAG de l'architecture logicielle et déclenche un veto immédiat.",
+      "is_vetoed": false,
+      "name": "Intégrité Modulaire (0 cycle d'interdépendance)",
+      "threshold_value": "Strictement 0 cycle"
+    },
+    {
+      "actual_value": "100.00%",
+      "criterion": "STRICT_STATIC_TYPING_100",
+      "explanation": "L'absence d'annotations ou l'usage de 'Any' ou 'object' déclenche un veto immédiat.",
+      "is_vetoed": false,
+      "name": "Typage Statique Strict (100% sans Any ni object)",
+      "threshold_value": "100.00% obligatoire"
+    }
+  ]
+}

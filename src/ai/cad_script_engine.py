@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import math
 import time
+import types
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Callable, Union
 
@@ -290,7 +291,13 @@ class CADScriptContext:
 
 
 
-SafeContextVal = Union[CADScriptContext, type, Callable, Dict[str, Callable]]
+SafeContextVal = Union[
+    CADScriptContext,
+    types.ModuleType,
+    type,
+    Callable[..., None],
+    Dict[str, Union[type, Callable[..., None], Callable[..., int], Callable[..., float], Callable[..., str], Callable[..., bool]]]
+]
 
 
 class CADScriptEngine:
@@ -386,7 +393,9 @@ class CADScriptEngine:
         with AtomicTransactionScope(document, "Script Code-as-CAD") as scope:
             try:
                 compiled = compile(code_str, "<cad_script>", "exec")
-                invoker: Callable = getattr(__builtins__, "exec") if hasattr(__builtins__, "exec") else __builtins__["exec"]
+                invoker: Callable[[types.CodeType, Dict[str, SafeContextVal]], None] = (
+                    getattr(__builtins__, "exec") if hasattr(__builtins__, "exec") else __builtins__["exec"]
+                )
                 invoker(compiled, safe_globals)
                 t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
 

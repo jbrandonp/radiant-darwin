@@ -4,10 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GUI: PySide6](https://img.shields.io/badge/GUI-Qt6%20PySide6-41CD52.svg?logo=qt&logoColor=white)](https://doc.qt.io/qtforpython/)
 [![Kernel: Manifold3D](https://img.shields.io/badge/Kernel-Manifold3D%20C%2B%2B-FF6F00.svg)](https://github.com/elalish/manifold)
-[![Tests](https://img.shields.io/badge/Tests-412%20Passing-brightgreen.svg)]()
-[![Type Completeness](https://img.shields.io/badge/Strict%20Typing-100%25%20(0%20Any)-blue.svg)]()
+[![Quality Gate](docs/badges/quality-gate.svg)](docs/audit_report.html)
+[![Strict Typing](docs/badges/strict-typing.svg)](docs/audit_report.html)
+[![Maintainability](docs/badges/maintainability.svg)](docs/audit_report.html)
+[![Tests](docs/badges/tests.svg)](docs/audit_report.html)
 [![Protocol: MCP](https://img.shields.io/badge/AI-Model%20Context%20Protocol-8A2BE2.svg)](https://modelcontextprotocol.io)
-[![Quality Gate](https://img.shields.io/badge/Quality%20Gate-PASSED-success.svg)]()
 
 **CAD Studio (Radiant-Darwin)** est une suite logicielle paramétrique industrielle 3D unifiée de nouvelle génération combinant la puissance d'**Autodesk Fusion 360**, l'extensibilité open-source de **FreeCAD**, et l'intégration native d'un **Copilote IA autonome (protocole MCP / Model Context Protocol)**.
 

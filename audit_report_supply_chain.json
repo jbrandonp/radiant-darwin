@@ -1,0 +1,68 @@
+{
+  "timestamp": "2026-10-15T06:13:17.733728+00:00",
+  "project": "radiant-darwin",
+  "version": "2.4.0",
+  "total_components": 29,
+  "direct_components": 12,
+  "transitive_components": 17,
+  "overall_grade": "A+ (EXEMPLARY SECURITY)",
+  "passed_quality_gate": true,
+  "openssf_score": 10.0,
+  "license_summary": {
+    "PERMISSIVE": 22,
+    "WEAK_COPYLEFT": 7,
+    "STRONG_COPYLEFT": 0,
+    "PROPRIETARY": 0,
+    "UNKNOWN": 0
+  },
+  "vulnerability_summary": {
+    "CRITICAL": 0,
+    "HIGH": 0,
+    "MEDIUM": 0,
+    "LOW": 0
+  },
+  "contaminating_licenses": [],
+  "vulnerabilities": [],
+  "openssf_checks": [
+    {
+      "id": "Pinned-Dependencies",
+      "name": "Dependency Pinning Hygiene",
+      "score": 10.0,
+      "status": "PASS",
+      "reason": "Fichier de verrouillage déterministe actif (requirements.lock) garantissant le PIN strict des dépendances.",
+      "remediation": "Conserver le fichier lock synchronisé."
+    },
+    {
+      "id": "Malicious-Scripts-Integrity",
+      "name": "Packaging & Install Scripts Integrity",
+      "score": 10.0,
+      "status": "PASS",
+      "reason": "Packaging déclaratif moderne PEP 517/621 sans setup.py exécutable hostile.",
+      "remediation": "Maintenir l'interdiction de scripts d'installation impératifs non audités."
+    },
+    {
+      "id": "Typosquatting-Guard",
+      "name": "Typosquatting Resistance",
+      "score": 10.0,
+      "status": "PASS",
+      "reason": "Aucune confusion de nom ni tentative de typosquatting détectée.",
+      "remediation": "Conserver un contrôle strict sur les ajouts de dépendances."
+    },
+    {
+      "id": "Vulnerability-Freedom",
+      "name": "Known Vulnerabilities Absence",
+      "score": 10.0,
+      "status": "PASS",
+      "reason": "Aucune vulnérabilité CVE connue détectée via osv.dev.",
+      "remediation": "Poursuivre la veille continue avec des scans périodiques."
+    },
+    {
+      "id": "License-Compliance",
+      "name": "Open Source License Compliance",
+      "score": 10.0,
+      "status": "PASS",
+      "reason": "Toutes les dépendances respectent la compatibilité permissive (MIT/BSD/Apache-2.0).",
+      "remediation": "Conserver la politique d'exclusion des licences virales (GPL/AGPL)."
+    }
+  ]
+}

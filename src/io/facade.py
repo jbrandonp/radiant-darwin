@@ -14,7 +14,7 @@ from src.core.geometry import Solid
 from src.core.sketch import Sketch2D
 from src.core.nexus_kernel.hybrid_solid import NexusSolid
 from src.core.exporter import CADExporter
-from src.core.step_importer import STEPImporter
+from src.core.step_importer import STEPImporter, STEPGeometricContext
 from src.core.step_exporter import STEPExporter
 from src.core.dxf_importer import DXFImporter
 from src.sheetmetal.dxf_exporter import DXFExporter
@@ -31,10 +31,16 @@ class CADIOFacade:
     # --- Imports 3D & 2D ---
 
     @classmethod
-    def import_step(cls, filepath_or_content: str) -> Optional[Solid]:
-        """Importe un solide 3D depuis un fichier ou contenu STEP ISO 10303-21."""
+    def import_step_context(cls, filepath_or_content: str) -> STEPGeometricContext:
+        """Importe et analyse le contexte géométrique complet d'un fichier STEP ISO 10303-21."""
         importer = STEPImporter()
         return importer.import_step(filepath_or_content)
+
+    @classmethod
+    def import_step(cls, filepath_or_content: str, solid_name: Optional[str] = None) -> NexusSolid:
+        """Importe un fichier ou contenu STEP et reconstruit le solide B-Rep complet NexusSolid."""
+        importer = STEPImporter()
+        return importer.import_to_nexus_solid(filepath_or_content, solid_name=solid_name)
 
     @classmethod
     def import_dxf_to_sketch(cls, filepath: str) -> Sketch2D:

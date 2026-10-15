@@ -20,6 +20,7 @@ from src.cli import (
     handle_cam_5axis_command,
     handle_ecad_thermal_command,
     handle_xr_stream_command,
+    handle_connect_ai_command,
     main as cli_main
 )
 
@@ -96,6 +97,13 @@ def test_cli_parser_and_commands(tmp_path):
     args_xr = parser.parse_args(["xr-stream", "--distance", "8.0"])
     code_xr = handle_xr_stream_command(args_xr)
     assert code_xr == 0
+
+    # Test connect-ai
+    args_ai = parser.parse_args(["connect-ai", "--client", "claude"])
+    code_ai = handle_connect_ai_command(args_ai)
+    assert code_ai == 0
+
+    assert cli_main(["connect-ai", "--client", "all"]) == 0
 
     # Test CLI main entry with no args (prints help)
     assert cli_main([]) == 0

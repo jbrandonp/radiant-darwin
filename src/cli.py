@@ -19,6 +19,7 @@ from src.core.exporter import CADExporter
 from src.core.ecosystem_hub import EcosystemMasterHub
 from src.cam.five_axis_cam import MachineKinematics5Axis
 from src.specialized.ecad_thermal_twin import CopperTrace, SMTComponent
+from src.ai.ai_connector_config import AIConnectorConfigGenerator
 
 
 def build_cli_parser() -> argparse.ArgumentParser:
@@ -52,6 +53,11 @@ def build_cli_parser() -> argparse.ArgumentParser:
     # 5. Commande XR LOD streaming
     xr_p = subparsers.add_parser("xr-stream", help="Simule le streaming spatial XR à 90 FPS")
     xr_p.add_argument("--distance", type=float, default=5.0, help="Distance observateur en mètres")
+
+    # 6. Commande de connectivité IA MCP
+    ai_p = subparsers.add_parser("connect-ai", help="Génère ou installe la configuration MCP pour Claude Desktop, Cursor ou Antigravity")
+    ai_p.add_argument("--client", choices=["claude", "cursor", "antigravity", "all"], default="all", help="Client IA cible (défaut : all)")
+    ai_p.add_argument("--install", action="store_true", help="Installe directement la configuration dans Claude Desktop")
 
     return parser
 
@@ -135,6 +141,36 @@ def handle_xr_stream_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_connect_ai_command(args: argparse.Namespace) -> int:
+    """Configure ou affiche les paramètres d'interfaçage MCP pour les assistants IA."""
+    generator = AIConnectorConfigGenerator()
+    if args.install:
+        success, msg = generator.install_to_claude_desktop()
+        print(f"[CAD-STUDIO CLI] {msg}")
+        return 0 if success else 1
+
+    print("[CAD-STUDIO CLI] Configurations de connexion IA MCP disponibles :")
+    if args.client in ("claude", "all"):
+        claude_cfg = generator.generate_claude_desktop_config()
+        print(f"\n--- {claude_cfg.client_name} ({claude_cfg.target_filepath}) ---")
+        print(claude_cfg.config_json)
+        print(f"Instructions : {claude_cfg.instructions}")
+
+    if args.client in ("cursor", "all"):
+        cursor_cfg = generator.generate_cursor_config()
+        print(f"\n--- {cursor_cfg.client_name} ({cursor_cfg.target_filepath}) ---")
+        print(cursor_cfg.config_json)
+        print(f"Instructions : {cursor_cfg.instructions}")
+
+    if args.client in ("antigravity", "all"):
+        agy_cfg = generator.generate_antigravity_config()
+        print(f"\n--- {agy_cfg.client_name} ({agy_cfg.target_filepath}) ---")
+        print(agy_cfg.config_json)
+        print(f"Instructions : {agy_cfg.instructions}")
+
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Point d'entrée principal du CLI."""
     parser = build_cli_parser()
@@ -150,6 +186,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return handle_ecad_thermal_command(args)
     elif args.command == "xr-stream":
         return handle_xr_stream_command(args)
+    elif args.command == "connect-ai":
+        return handle_connect_ai_command(args)
     else:
         parser.print_help()
         return 0

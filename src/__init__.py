@@ -7,3 +7,8 @@ from __future__ import annotations
 
 __version__: str = "2.4.0"
 __author__: str = "Brandon"
+
+__all__ = [
+    "__author__",
+    "__version__",
+]

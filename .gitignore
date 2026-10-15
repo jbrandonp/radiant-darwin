@@ -63,6 +63,12 @@ reports_mcdc_do178c_audit.md
 reports_mutation_engine.json
 sbom.json
 *.sarif
+audit_report_*.json
+reports_*.json
+reports_*.md
+docs/audit_report.html
+docs/badges/*.svg
+docs/index.html
 
 # Logs and runtime artifacts
 *.log

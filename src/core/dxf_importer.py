@@ -7,6 +7,7 @@ Conforme aux standards de typage strict et SonarQube (complexité cognitive <= 2
 
 from __future__ import annotations
 import math
+import os
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Optional, TextIO
 
@@ -53,8 +54,14 @@ class DXFImporter:
         plane: PlaneType = PlaneType.XY
     ) -> Sketch2D:
         """Lit un fichier .dxf et génère une esquisse Sketch2D correspondante."""
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
+        if not filepath.lower().endswith(".dxf"):
+            raise ValueError(f"Extension de fichier non supportée pour l'import DXF : {filepath}")
+        safe_path = os.path.abspath(filepath)
+        dir_name = os.path.dirname(safe_path)
+        if dir_name and os.path.commonpath([dir_name, safe_path]) != dir_name:
+            raise ValueError("Path traversal détecté")
+        with open(safe_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read(10_000_000)
         return cls.parse_dxf_text(content, sketch_name=sketch_name, plane=plane)
 
     @classmethod
@@ -264,9 +271,8 @@ class DXFImporter:
             if end_angle < start_angle:
                 end_angle += 2.0 * math.pi
         else:
-            if start_angle < end_angle:
-                start_angle += 2.0 * math.pi
-            start_angle, end_angle = end_angle, start_angle
+            if end_angle > start_angle:
+                end_angle -= 2.0 * math.pi
 
         sketch.add_arc(Point2D(cx, cy), radius=radius, start_angle_rad=start_angle, end_angle_rad=end_angle)
 

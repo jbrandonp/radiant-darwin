@@ -29,9 +29,7 @@ class CADPythonConsole(QPlainTextEdit):
         self.document: Optional[CADDocument] = document
         self._history: List[str] = []
         self._history_index: int = 0
-        self._execution_context: Dict[str, object] = {}
         self._init_ui()
-        self._init_context()
         self._insert_prompt()
 
     def _init_ui(self) -> None:
@@ -49,20 +47,9 @@ class CADPythonConsole(QPlainTextEdit):
         )
         self.appendPlainText("# CAD Studio Python Interactive Console (v2.4)\n# Tapez 'help()' ou utilisez 'doc' pour manipuler le modèle 3D.\n")
 
-    def _init_context(self) -> None:
-        """Initialise le dictionnaire d'exécution local."""
-        import math
-        import numpy as np
-        self._execution_context = {
-            "math": math,
-            "np": np,
-            "doc": self.document,
-        }
-
     def set_document(self, doc: CADDocument) -> None:
         """Associe un nouveau document actif à la console."""
         self.document = doc
-        self._execution_context["doc"] = doc
 
     def _insert_prompt(self) -> None:
         """Insère l'invite de commande interactive."""
@@ -135,7 +122,7 @@ class CADPythonConsole(QPlainTextEdit):
         from src.ai.cad_script_engine import CADScriptEngine
         from src.core.document import CADDocument
 
-        doc = self._doc if self._doc is not None else CADDocument(name="ConsoleSession")
+        doc = self.document if self.document is not None else CADDocument(name="ConsoleSession")
         res = CADScriptEngine.execute_script(doc, clean_cmd)
 
         if res.success:

@@ -213,3 +213,71 @@ f = (lambda: None).__globals__
 b = getattr(__builtins__, 'eval')
 """
     assert CADValidator.validate_script_security(unsafe_builtins) is not None
+
+
+def test_threemf_export_to_file_with_lattice_balls(tmp_path) -> None:
+    """Vérifie l'écriture sur disque d'une archive .3mf avec treillis de poutres et rotules."""
+    lattice = BeamLatticeTopology()
+    n0 = lattice.add_node(0.0, 0.0, 0.0)
+    n1 = lattice.add_node(20.0, 0.0, 0.0)
+    lattice.add_beam(n0, n1, radius=1.0, cap_mode=BeamCapMode.SPHERE)
+    lattice.balls.append(LatticeBall(node_idx=n0, radius=2.0))
+    lattice.balls.append(LatticeBall(node_idx=n1, radius=2.0))
+
+    out_file = str(tmp_path / "lattice_balls.3mf")
+    success = ThreeMFExporter.export_to_file(out_file, lattices={"Lattice1": lattice})
+    assert success is True
+    assert os.path.exists(out_file)
+    assert os.path.getsize(out_file) > 100
+
+    # Vérification du rejet sur mauvaise extension
+    with pytest.raises(ValueError):
+        ThreeMFExporter.export_to_file(str(tmp_path / "bad.txt"), lattices={"Lattice1": lattice})
+
+
+def test_ui_console_and_event_log_panel() -> None:
+    """Vérifie la console interactive et le filtrage multi-niveaux du journal d'événements."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.python_console import CADPythonConsole
+    from src.ui.event_log_panel import CADEventLogPanel, LogSeverity
+    from src.core.document import CADDocument
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+
+    # 1. Console interactive
+    doc = CADDocument(name="TestConsoleDoc")
+    console = CADPythonConsole(document=doc)
+    assert console.document is doc
+    console._execute_line("x = 42")
+    assert len(console._history) == 1
+    assert console._history[0] == "x = 42"
+
+    # 2. Journal d'événements et filtrage
+    log_panel = CADEventLogPanel()
+    log_panel.append_log(LogSeverity.INFO, "Opération initiale terminée.")
+    log_panel.append_log(LogSeverity.WARNING, "Attention : mémoire faible.")
+    log_panel.append_log(LogSeverity.ERROR, "Erreur critique : fichier introuvable.")
+    log_panel.append_log(LogSeverity.DEBUG, "Trace détaillée interne.")
+
+    assert len(log_panel._records) == 4
+
+    # Filtrage par sévérité
+    log_panel.combo_level.setCurrentText("ERROR")
+    log_panel._on_filter_changed()
+    assert "Erreur critique" in log_panel.log_display.toPlainText()
+    assert "Opération initiale" not in log_panel.log_display.toPlainText()
+
+    # Filtrage par recherche textuelle
+    log_panel.combo_level.setCurrentText("TOUS")
+    log_panel.txt_filter.setText("mémoire")
+    log_panel._on_filter_changed()
+    assert "Attention : mémoire faible." in log_panel.log_display.toPlainText()
+    assert "Erreur critique" not in log_panel.log_display.toPlainText()
+
+    # Effacement
+    log_panel.clear_logs()
+    assert len(log_panel._records) == 0
+    assert log_panel.log_display.toPlainText() == ""
+

@@ -316,6 +316,8 @@ class SVGImporter:
                     tokens, idx, cmd, curr_x, curr_y, height, invert_y, sketch
                 )
             elif cmd in ("C", "c"):
+                if idx + 6 > total:
+                    break
                 curr_x, curr_y, idx = cls._handle_cubic_to(
                     tokens, idx, cmd, curr_x, curr_y, height, invert_y, sketch
                 )

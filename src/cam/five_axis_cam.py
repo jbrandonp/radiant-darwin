@@ -209,7 +209,12 @@ class FiveAxisGougeChecker:
     def generate_5axis_gcode_block(self, point: FiveAxisToolPoint, kinematics: MachineKinematics5Axis) -> str:
         """Génère le bloc ISO G-code normalisé avec cinématique 5-axes RTCP (G43.4)."""
         rot1, rot2 = self.convert_vector_to_rotary_angles(point.tool_vector, kinematics)
-        axis_names = ("A", "C") if kinematics == MachineKinematics5Axis.TABLE_TABLE_AC else ("B", "C")
+        if kinematics == MachineKinematics5Axis.TABLE_TABLE_AC:
+            axis_names = ("A", "C")
+        elif kinematics == MachineKinematics5Axis.HEAD_TABLE_BC:
+            axis_names = ("B", "C")
+        else:
+            axis_names = ("A", "B")
         return (
             f"G01 X{point.position.x:.4f} Y{point.position.y:.4f} Z{point.position.z:.4f} "
             f"{axis_names[0]}{rot1:.3f} {axis_names[1]}{rot2:.3f} F{point.feed_rate_mm_min:.1f}"

@@ -59,6 +59,8 @@ class ThreeMFExporter:
             raise ValueError(f"Extension de fichier non supportée pour l'export 3MF : '{filepath}'")
         safe_path = os.path.abspath(filepath)
         dir_name = os.path.dirname(safe_path)
+        if dir_name and os.path.commonpath([dir_name, safe_path]) != dir_name:
+            raise ValueError("Path traversal détecté pour l'export 3MF")
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
         try:

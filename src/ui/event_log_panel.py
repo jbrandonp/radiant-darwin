@@ -8,15 +8,15 @@ Conforme aux standards de typage strict et SonarQube (complexité cognitive <= 2
 from __future__ import annotations
 import datetime
 from enum import Enum
-from typing import List, Dict, Optional
+from typing import List, Tuple, Optional, Callable
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
     QPushButton, QComboBox, QLineEdit, QLabel
 )
-from PySide6.QtGui import QFont, QColor, QTextCharFormat, QTextCursor
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QFont, QColor, QTextCharFormat, QTextCursor, QCloseEvent
+from PySide6.QtCore import Qt
 
-from src.core.event_bus import global_event_bus, CADEvent
+from src.core.event_bus import global_event_bus, CADEvent, TimelineRollbackEvent
 
 
 class LogSeverity(str, Enum):
@@ -32,6 +32,8 @@ class CADEventLogPanel(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._records: List[Tuple[LogSeverity, str]] = []
+        self._unsubscribe_token: Optional[Callable[[], None]] = None
         self._init_ui()
         self._connect_event_bus()
 
@@ -75,18 +77,47 @@ class CADEventLogPanel(QWidget):
 
     def _connect_event_bus(self) -> None:
         """S'abonne au bus d'événements global."""
-        global_event_bus.subscribe(CADEvent, self._on_event_received)
+        self._unsubscribe_token = global_event_bus.subscribe(CADEvent, self._on_event_received)
 
-    @Slot(object)
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Désabonne le panneau lors de la fermeture de la fenêtre."""
+        if self._unsubscribe_token is not None:
+            self._unsubscribe_token()
+            self._unsubscribe_token = None
+        super().closeEvent(event)
+
     def _on_event_received(self, event: CADEvent) -> None:
         """Réceptionne un événement du bus et l'ajoute au journal."""
         evt_name = type(event).__name__
         now = datetime.datetime.now().strftime("%H:%M:%S")
         msg = f"[{now}] [{evt_name}] {str(event)}"
-        self.append_log(LogSeverity.INFO, msg)
+
+        severity = LogSeverity.INFO
+        if getattr(event, "is_success", True) is False:
+            severity = LogSeverity.ERROR
+        elif isinstance(event, TimelineRollbackEvent):
+            severity = LogSeverity.WARNING
+
+        self.append_log(severity, msg)
 
     def append_log(self, severity: LogSeverity, message: str) -> None:
-        """Ajoute une ligne de log avec coloration adaptée."""
+        """Ajoute une ligne de log avec coloration adaptée et mise en mémoire."""
+        self._records.append((severity, message))
+        if self._matches_filter(severity, message):
+            self._render_log_line(severity, message)
+
+    def _matches_filter(self, severity: LogSeverity, message: str) -> bool:
+        """Vérifie si une entrée de log satisfait les critères actuels."""
+        target_lvl = self.combo_level.currentText()
+        if target_lvl != "TOUS" and severity.value != target_lvl:
+            return False
+        search_query = self.txt_filter.text().strip().lower()
+        if search_query and search_query not in message.lower():
+            return False
+        return True
+
+    def _render_log_line(self, severity: LogSeverity, message: str) -> None:
+        """Formate et insère une ligne de log colorée dans le widget."""
         cursor = self.log_display.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
 
@@ -104,9 +135,13 @@ class CADEventLogPanel(QWidget):
         self.log_display.moveCursor(QTextCursor.MoveOperation.End)
 
     def clear_logs(self) -> None:
-        """Efface l'historique affiché."""
+        """Efface l'historique affiché et le tampon d'enregistrements."""
+        self._records.clear()
         self.log_display.clear()
 
     def _on_filter_changed(self) -> None:
-        """Applique les filtres de niveau et de recherche."""
-        pass
+        """Réapplique les filtres de niveau et de recherche sur l'historique."""
+        self.log_display.clear()
+        for severity, message in self._records:
+            if self._matches_filter(severity, message):
+                self._render_log_line(severity, message)

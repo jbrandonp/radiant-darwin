@@ -189,5 +189,8 @@ class CalculixResultParser:
                         results[n_id] = Vector3D(ux, uy, uz)
                     except ValueError:
                         continue
-
         return results
+
+
+# Alias de compatibilité pour l'API FEA
+CalculixBridge = CalculixSimulationDeck

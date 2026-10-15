@@ -49,8 +49,20 @@ coverage.xml
 *.py,cover
 .hypothesis/
 htmlcov/
-audit_report_latest.json
 .audit_cache/
+
+# Audit, Compliance, Security & Quality Gate Artifacts
+reports/
+artifacts/
+audit-results.sarif
+audit_report_latest.json
+audit_report_supply_chain.json
+quality_gate_verdict.json
+reports_mcdc_do178c_audit.json
+reports_mcdc_do178c_audit.md
+reports_mutation_engine.json
+sbom.json
+*.sarif
 
 # Logs and runtime artifacts
 *.log

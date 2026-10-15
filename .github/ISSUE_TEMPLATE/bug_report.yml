@@ -1,0 +1,177 @@
+name: "🐛 Bug Report / Geometric Failure"
+description: "Report a bug, geometric kernel failure, solver crash, or rendering issue."
+title: "[Bug]: "
+labels: ["bug", "triage", "cad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🛠️ Open-Source CAD Diagnostics
+        Thank you for reporting an issue in **Radiant-Darwin (CAD Studio)**.
+        Because CAD/CAE/CAM applications rely heavily on GPU OpenGL drivers, floating-point tolerances, and topological manifolds, please provide detailed hardware and reproduction steps.
+        
+        *Please make sure no confidential or proprietary CAD models are included in your attachments.*
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System & Architecture
+      description: What operating system and architecture are you running Radiant-Darwin on?
+      options:
+        - "Windows 11 x64"
+        - "Windows 10 x64"
+        - "Ubuntu 24.04 LTS (Noble Numbat)"
+        - "Ubuntu 22.04 LTS (Jammy Jellyfish)"
+        - "Debian GNU/Linux (Bookworm / Testing)"
+        - "Fedora / RHEL (RPM based)"
+        - "Arch Linux / Manjaro"
+        - "macOS 14+ Sonoma / 15+ Sequoia (Apple Silicon M1/M2/M3/M4)"
+        - "macOS 13+ Ventura (Intel x86_64)"
+        - "Other (specify below)"
+    validations:
+      required: true
+
+  - type: input
+    id: env_versions
+    attributes:
+      label: Python & Package Versions
+      description: Output of `python --version` and CAD Studio version (`cad-cli --version` or git commit hash).
+      placeholder: "e.g., Python 3.12.3, radiant-darwin v2.4.0 (commit ece2f83), PySide6 6.7.2, manifold3d 3.0.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: gpu_driver
+    attributes:
+      label: GPU Hardware & Display Driver
+      description: |
+        Graphics card and driver details (crucial for PySide6 + PyOpenGL Viewport issues).
+        Include GPU vendor (NVIDIA/AMD/Intel), driver version, display server (X11 / Wayland / Win32), and DPI scaling (e.g., 100%, 125%, 150%).
+      placeholder: "e.g., NVIDIA GeForce RTX 4070, Driver 560.81, Windows 11 4K at 150% scaling"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Affected CAD Subsystem / Workbench
+      description: Select the primary module where the failure occurs.
+      options:
+        - "Core Geometric Kernel (Manifold3D CSG / Nexus B-Rep / DAG Timeline)"
+        - "2D Sketcher & TRF Constraint Solver (SciPy)"
+        - "Kinematics & Assembly Workstation"
+        - "CAM & Toolpaths (2.5D / 5-Axis RTCP / G-Code Post-processor)"
+        - "FEA Multi-Physics (Meshing / CalculiX / von Mises Stress)"
+        - "Sheet Metal Fabrication (K-Factor / Flat Pattern Unfold / DXF)"
+        - "Technical Drafting ISO 128 (Orthographic Views / SVG)"
+        - "PBR Render Studio & Shaders (Fresnel / Raytracing)"
+        - "3D Interactive Viewport (OpenGL 3.3 Core / Camera / Selection Gizmo)"
+        - "AI Generative Copilot & MCP Stdio Server"
+        - "Import / Export (STEP, IGES, DXF, STL, OBJ, G-code)"
+        - "CLI / Industrial Quality Gate Engine"
+    validations:
+      required: true
+
+  - type: input
+    id: operation
+    attributes:
+      label: CAD Operation / Tool Invoked
+      description: Name of the exact operation triggered (e.g., Boolean Difference, Chamfer, Revolve, Flat Pattern, 5-Axis Contour).
+      placeholder: "e.g., Boolean Cut with rolling-ball fillet on cylindrical face"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topology_context
+    attributes:
+      label: Topological & Geometric Context
+      description: Were any non-manifold edges, zero-thickness walls, or custom tolerances involved?
+      options:
+        - "Watertight 2-manifold geometry (standard solids)"
+        - "Self-intersecting or complex mesh"
+        - "Thin-walled / zero-thickness boundary"
+        - "High-curvature or micro-radius fillet"
+        - "Large coordinate values (far from origin)"
+        - "Imported external geometry (STEP / IGES / STL)"
+        - "Not applicable / UI only"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the geometric failure, crash, or unexpected behavior is.
+      placeholder: "Describe the bug in detail..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the bug.
+      placeholder: |
+        1. Launch CAD Studio: `python launch_app.py`
+        2. Create a Box (100x50x20 mm)
+        3. Create a Cylinder (radius=15, height=30)
+        4. Select Boolean Difference
+        5. Observe crash or topological degeneracy...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro_script
+    attributes:
+      label: Minimal Reproduction Script / CLI Command
+      description: Minimal Python code using `src.core` or CLI command to reproduce the issue programmatically.
+      render: python
+      placeholder: |
+        from src.core.kernel import create_box, create_cylinder, boolean_difference
+        b = create_box(100.0, 50.0, 20.0)
+        c = create_cylinder(15.0, 30.0)
+        result = boolean_difference(b, c)
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened geometrically or visually?
+      placeholder: "The difference operation should produce an airtight 2-manifold solid with cylindrical hole."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Traceback & Application Logs
+      description: Paste the console traceback, terminal error output, or contents of `app_launch.log`.
+      render: shell
+      placeholder: "Paste logs or traceback here..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots & Sample CAD Files
+      description: Drag & drop screenshots, video recordings, minimal reproduction STEP/STL files, or `.json` DAG files.
+      placeholder: "Drag and drop images, STEP, or log files here..."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-Submission Verification Checklist
+      options:
+        - label: "I have verified this issue occurs on the latest `master` branch."
+          required: true
+        - label: "I searched the GitHub Issues and Discussions to ensure this is not a duplicate."
+          required: true
+        - label: "I confirmed that any attached CAD geometries do not contain confidential or proprietary data."
+          required: true
+        - label: "If reporting a headless/CI issue, I confirmed running with `QT_QPA_PLATFORM=offscreen`."
+          required: false

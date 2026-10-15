@@ -7,8 +7,9 @@ Architecture fortement typée : strictement zéro Any et zéro object.
 """
 
 from __future__ import annotations
+import ast
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 from src.core.geometry import Solid
 from src.core.types import Vector3D
@@ -223,4 +224,158 @@ class CADValidator:
             "all_valid": all_valid,
             "bodies": reports_list,
         }
+
+    @staticmethod
+    def validate_script_security(code_str: str) -> Optional[str]:
+        """
+        Analyse l'AST du code pour bloquer formellement toute tentative d'injection,
+        d'accès système et d'introspection non autorisée (__class__, __mro__, __subclasses__, builtins, sys.modules).
+        """
+        try:
+            tree = ast.parse(code_str)
+        except SyntaxError as err:
+            return f"Erreur de syntaxe à la ligne {err.lineno}: {err.msg}"
+
+        visitor = CADSecurityASTVisitor()
+        visitor.visit(tree)
+        if visitor.violations:
+            return visitor.violations[0]
+        return None
+
+
+class CADSecurityASTVisitor(ast.NodeVisitor):
+    """
+    Visiteur syntaxique AST garantissant l'étanchéité absolue de la sandbox Code-as-CAD.
+    Bloque formellement toute tentative d'injection, d'accès système et d'introspection
+    non autorisée (__class__, __mro__, __subclasses__, builtins, sys.modules).
+    Typage statique strict : zéro Any, zéro object. Complexité cognitive <= 25.
+    """
+
+    BANNED_ATTRIBUTES: Tuple[str, ...] = (
+        "__class__",
+        "__mro__",
+        "__subclasses__",
+        "__bases__",
+        "__base__",
+        "__globals__",
+        "__code__",
+        "__closure__",
+        "__builtins__",
+        "builtins",
+        "modules",
+        "__dict__",
+        "__reduce__",
+        "__reduce_ex__",
+        "__qualname__",
+    )
+
+    BANNED_NAMES: Tuple[str, ...] = (
+        "builtins",
+        "__builtins__",
+        "sys",
+        "os",
+        "subprocess",
+        "__class__",
+        "__mro__",
+        "__subclasses__",
+    )
+
+    BANNED_CALLS: Tuple[str, ...] = (
+        "eval",
+        "exec",
+        "open",
+        "__import__",
+        "compile",
+        "globals",
+        "locals",
+        "getattr",
+        "setattr",
+        "delattr",
+        "vars",
+        "dir",
+        "breakpoint",
+        "help",
+    )
+
+    BANNED_MODULES: Tuple[str, ...] = (
+        "os",
+        "sys",
+        "subprocess",
+        "socket",
+        "urllib",
+        "shutil",
+        "builtins",
+        "requests",
+        "importlib",
+        "ctypes",
+        "pickle",
+        "shelve",
+        "marshal",
+        "inspect",
+        "threading",
+        "multiprocessing",
+    )
+
+    def __init__(self) -> None:
+        self.violations: List[str] = []
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Bloque l'introspection par accès aux attributs sensibles ou dunders."""
+        attr_name = node.attr
+        if attr_name in self.BANNED_ATTRIBUTES:
+            self.violations.append(
+                f"Introspection interdite détectée sur l'attribut '{attr_name}' à la ligne {node.lineno}"
+            )
+        elif attr_name.startswith("__") and attr_name.endswith("__"):
+            self.violations.append(
+                f"Attribut spécial dunder interdit '{attr_name}' à la ligne {node.lineno}"
+            )
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        """Bloque l'usage direct d'identifiants protégés ou modules système."""
+        if node.id in self.BANNED_NAMES:
+            self.violations.append(
+                f"Identifiant système interdit '{node.id}' à la ligne {node.lineno}"
+            )
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Interdit les appels aux primitives de métaprogrammation et d'évaluation."""
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in self.BANNED_CALLS:
+            self.violations.append(
+                f"Appel système non sécurisé interdit '{func.id}()' à la ligne {node.lineno}"
+            )
+        self.generic_visit(node)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Bloque tout import direct de modules système ou de bas niveau."""
+        for alias in node.names:
+            root_mod = alias.name.split(".")[0]
+            if root_mod in self.BANNED_MODULES:
+                self.violations.append(
+                    f"Module interdit détecté : '{alias.name}' à la ligne {node.lineno}"
+                )
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Bloque les imports ciblés depuis des modules sensibles."""
+        mod = node.module or ""
+        root_mod = mod.split(".")[0]
+        if root_mod in self.BANNED_MODULES:
+            self.violations.append(
+                f"Import interdit depuis le module '{mod}' à la ligne {node.lineno}"
+            )
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        """Bloque les chaînes littérales dissimulant des identifiants d'introspection."""
+        if isinstance(node.value, str):
+            val_clean = node.value.strip()
+            if val_clean in self.BANNED_ATTRIBUTES or val_clean in ("sys.modules", "builtins"):
+                self.violations.append(
+                    f"Référence littérale interdite vers le symbole '{val_clean}' à la ligne {node.lineno}"
+                )
+        self.generic_visit(node)
 

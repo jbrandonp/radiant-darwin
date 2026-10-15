@@ -1,0 +1,90 @@
+name: "💡 Feature Request / Engineering Proposal"
+description: "Propose a new CAD/CAE/CAM feature, geometric operator, solver enhancement, or industrial standard."
+title: "[Feature]: "
+labels: ["enhancement", "cad"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 📐 Engineering Feature Proposal
+        Thank you for helping evolve **Radiant-Darwin** into the next-generation open-source CAD/CAE/CAM suite!
+        Please describe your proposal with engineering precision, citing relevant standards (ISO, DIN, ASME) or mathematical formulations where applicable.
+
+  - type: dropdown
+    id: engineering_domain
+    attributes:
+      label: CAD Engineering Domain
+      description: Which area does this feature enhance?
+      options:
+        - "Parametric Solid Modeling & B-Rep Operators"
+        - "2D Sketching & Geometric Constraint Solvers"
+        - "Assembly, Joints & Kinematic Simulation"
+        - "CAM Machining (Toolpaths, 5-Axis RTCP, G-Code Post-processors)"
+        - "CAE / Multi-Physics Simulation (FEA, Stress, Thermal, CFD Bridges)"
+        - "Sheet Metal Unfolding & Flat Pattern Calculation"
+        - "2D Technical Drawings (ISO 128 / ASME Y14 / SVG Export)"
+        - "PBR Optical Materials & Raytracing Studio"
+        - "3D Interactive Viewport & OpenGL Shading"
+        - "AI Generative Copilot & MCP Tools"
+        - "Data Interoperability (STEP AP242, IGES, IFC, DXF, 3MF, glTF)"
+        - "Industrial Quality Gate & Performance Auditing"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: Problem Statement & Engineering Need
+      description: What manufacturing, mechanical design, or workflow bottleneck does this feature address?
+      placeholder: "Describe the engineering challenge or workflow limitation..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution & Mathematical / Algorithmic Approach
+      description: |
+        How should this feature work? Include mathematical formulations, Euler operators, scientific papers, or industry standards (e.g., DIN 6935 for K-factor, ISO 10303 for STEP, Fanuc/Siemens G-code cycles).
+      placeholder: "Detail the mathematical formulation, geometric algorithm, or standard specification..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: ui_ux_api
+    attributes:
+      label: Proposed UI / CLI / MCP Interface
+      description: How should end-users or AI agents interact with this new capability?
+      placeholder: "Describe ribbon buttons, property dialogs, CLI arguments, or MCP tool schema additions..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Existing Alternatives & Prior Art
+      description: How is this problem currently handled in FreeCAD, Fusion 360, SolidWorks, CadQuery, or Blender?
+      placeholder: "Compare with existing CAD software solutions..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: references_and_models
+    attributes:
+      label: Test Geometries & References
+      description: Provide links to papers, standard docs, public datasets, or sample geometries (STEP/DXF/STL).
+      placeholder: "Links to academic papers, ISO/DIN specs, sample datasets..."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution_intent
+    attributes:
+      label: Willingness to Contribute
+      options:
+        - label: "I am willing to submit a Pull Request implementing this feature."
+          required: false
+        - label: "I can provide CAD test files, benchmark validation datasets, or standard documentation."
+          required: false
+        - label: "I am available to test alpha/beta implementations on my hardware."
+          required: false

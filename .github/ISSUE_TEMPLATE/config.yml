@@ -1,0 +1,17 @@
+# ==============================================================================
+# Radiant-Darwin — Issue Template Configuration
+# ==============================================================================
+blank_issues_enabled: false
+
+contact_links:
+  - name: "🔒 Security Vulnerability Disclosure"
+    url: "https://github.com/jbrandonp/radiant-darwin/security/advisories"
+    about: "Report security vulnerabilities privately in accordance with our SECURITY.md policy."
+
+  - name: "💬 Community Q&A & Discussions"
+    url: "https://github.com/jbrandonp/radiant-darwin/discussions"
+    about: "Ask questions, share CAD models, and discuss workflows with the community."
+
+  - name: "📖 Technical Documentation & Architecture"
+    url: "https://github.com/jbrandonp/radiant-darwin/tree/master/docs"
+    about: "Read architectural guides, audit reports, and user manuals."

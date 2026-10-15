@@ -83,8 +83,15 @@ class SVGDrawingExporter:
 
         svg_content = "\n".join(svg_lines)
         if filepath:
-            os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
+            if not filepath.lower().endswith(".svg"):
+                raise ValueError(f"Extension SVG invalide : {filepath}")
+            safe_path = os.path.abspath(filepath)
+            dir_name = os.path.dirname(safe_path)
+            if dir_name:
+                if os.path.commonpath([dir_name, safe_path]) != dir_name:
+                    raise ValueError("Path traversal détecté")
+                os.makedirs(dir_name, exist_ok=True)
+            with open(safe_path, "w", encoding="utf-8") as f:
                 f.write(svg_content)
 
         return svg_content

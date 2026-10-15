@@ -63,6 +63,12 @@ class CADExporter:
         return STEPExporter.export_multiple_solids(bodies, filepath)
 
     @staticmethod
+    def export_3mf(bodies: Dict[str, Solid], filepath: str) -> bool:
+        """Exporte les corps solides au format de fabrication additive 3MF (ISO/IEC 25422)."""
+        from src.core.threemf_exporter import ThreeMFExporter
+        return ThreeMFExporter.export_to_file(filepath, solids=bodies)
+
+    @staticmethod
     def _combine_solids_to_trimesh(bodies: Dict[str, Solid]) -> Optional[trimesh.Trimesh]:
         """Combine tous les solides du dictionnaire en une seule structure trimesh."""
         sub_meshes: List[trimesh.Trimesh] = []

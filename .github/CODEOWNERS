@@ -1,0 +1,58 @@
+# ==============================================================================
+# Radiant-Darwin — Code Owners
+# Automated Pull Request Review Assignments & Domain Responsibilities
+# ==============================================================================
+
+# Global fallback maintainer for all repository assets
+* @jbrandonp
+
+# ------------------------------------------------------------------------------
+# Governance, Build & CI/CD Pipelines
+# ------------------------------------------------------------------------------
+/.github/                  @jbrandonp
+/scripts/                  @jbrandonp
+/pyproject.toml            @jbrandonp
+/requirements*.txt         @jbrandonp
+/requirements.lock         @jbrandonp
+/uv.lock                   @jbrandonp
+/LICENSE                   @jbrandonp
+/SECURITY.md               @jbrandonp
+/CONTRIBUTING.md           @jbrandonp
+/.gitattributes            @jbrandonp
+/.gitignore                @jbrandonp
+
+# ------------------------------------------------------------------------------
+# Core Geometry Kernel & Mathematical Solvers
+# ------------------------------------------------------------------------------
+/src/core/                 @jbrandonp
+/src/solver/               @jbrandonp
+
+# ------------------------------------------------------------------------------
+# Engineering Workbenches & Multi-Physics
+# ------------------------------------------------------------------------------
+/src/cam/                  @jbrandonp
+/src/fea/                  @jbrandonp
+/src/sheetmetal/           @jbrandonp
+/src/assembly/             @jbrandonp
+/src/drawing/              @jbrandonp
+/src/materials/            @jbrandonp
+/src/specialized/          @jbrandonp
+
+# ------------------------------------------------------------------------------
+# Visualization, OpenGL Viewport & UI
+# ------------------------------------------------------------------------------
+/src/viewport/             @jbrandonp
+/src/render/               @jbrandonp
+/src/ui/                   @jbrandonp
+
+# ------------------------------------------------------------------------------
+# AI Copilot & Autonomous Model Context Protocol (MCP) Server
+# ------------------------------------------------------------------------------
+/src/ai/                   @jbrandonp
+
+# ------------------------------------------------------------------------------
+# Tests, Schemas & Technical Documentation
+# ------------------------------------------------------------------------------
+/tests/                    @jbrandonp
+/schemas/                  @jbrandonp
+/docs/                     @jbrandonp

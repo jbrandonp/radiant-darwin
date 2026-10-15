@@ -334,7 +334,13 @@ class CADScriptEngine:
     def validate_ast(cls, code_str: str) -> Optional[str]:
         """
         Analyse l'AST du code pour détecter toute tentative d'injection ou d'importation malveillante.
+        Délègue l'audit au validateur de sécurité renforcé CADValidator (bloque introspection dunder).
         """
+        from src.ai.cad_validator import CADValidator
+        sec_err = CADValidator.validate_script_security(code_str)
+        if sec_err is not None:
+            return sec_err
+
         try:
             tree = ast.parse(code_str)
         except SyntaxError as e:

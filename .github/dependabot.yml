@@ -1,0 +1,73 @@
+# ==============================================================================
+# Radiant-Darwin — Dependabot Configuration
+# Automated Dependency Security & Version Monitoring
+# ==============================================================================
+version: 2
+
+updates:
+  # ----------------------------------------------------------------------------
+  # Python Dependencies (pip / pyproject.toml / requirements)
+  # ----------------------------------------------------------------------------
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    target-branch: "master"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "jbrandonp"
+    labels:
+      - "dependencies"
+      - "python"
+      - "security"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    rebase-strategy: "auto"
+    groups:
+      cad-geometry-math:
+        patterns:
+          - "manifold3d"
+          - "trimesh"
+          - "numpy"
+          - "scipy"
+      gui-graphics:
+        patterns:
+          - "PySide6*"
+          - "PyOpenGL*"
+      testing-and-audit:
+        patterns:
+          - "pytest*"
+          - "coverage*"
+          - "hypothesis*"
+          - "jsonschema*"
+
+  # ----------------------------------------------------------------------------
+  # GitHub Actions Workflows
+  # ----------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    target-branch: "master"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "jbrandonp"
+    labels:
+      - "dependencies"
+      - "ci/cd"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    rebase-strategy: "auto"
+    groups:
+      actions:
+        patterns:
+          - "*"

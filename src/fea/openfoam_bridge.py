@@ -273,3 +273,7 @@ class OpenFoamCase:
                 f.write(content)
 
         return files_written
+
+
+# Alias de rétro-compatibilité
+OpenFoamCaseGenerator = OpenFoamCase

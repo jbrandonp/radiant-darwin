@@ -94,3 +94,27 @@ def test_fea_facade_reexports() -> None:
         assert hasattr(fea, sym), f"Le symbole {sym} doit être exposé par src.fea"
         assert getattr(fea, sym) is not None
 
+
+def test_calculix_stress_parsing_helpers() -> None:
+    """Vérifie le calcul de von Mises tensoriel et le parsing de ligne CalculiX."""
+    from src.fea.calculix_bridge import CalculixResultParser
+
+    # Test avec tenseur complet à 6 composantes : sxx=100, syy=0, szz=0, cisaillements nuls -> VM = 100
+    parts_tensor = ["101", "100.0", "0.0", "0.0", "0.0", "0.0", "0.0"]
+    vm = CalculixResultParser._compute_von_mises_from_tensor(parts_tensor)
+    assert abs(vm - 100.0) < 1e-4
+
+    # Test parsing de ligne complète
+    res_tensor = CalculixResultParser._parse_single_stress_line("101 100.0 0.0 0.0 0.0 0.0 0.0")
+    assert res_tensor is not None
+    nid, val = res_tensor
+    assert nid == 101
+    assert abs(val - 100.0) < 1e-4
+
+    # Test parsing scalaire direct
+    res_scalar = CalculixResultParser._parse_single_stress_line("202 54.321")
+    assert res_scalar == (202, 54.321)
+
+    # Ligne corrompue
+    assert CalculixResultParser._parse_single_stress_line("invalid") is None
+

@@ -89,35 +89,16 @@ class STEPImporter:
         directions: Dict[int, np.ndarray] = self._parse_directions(records)
 
         # 5. Placements d'axes et repères
-        axis_placements: Dict[int, str] = {}
-        for r in records.values():
-            if "AXIS2_PLACEMENT" in r.entity_type:
-                axis_placements[r.entity_id] = " ".join(r.args)
+        axis_placements = self._extract_axis_placements(records)
 
         # 6. Faces B-Rep
-        faces: Dict[int, str] = {}
-        for r in records.values():
-            if ("FACE" in r.entity_type and "BOUND" not in r.entity_type) or r.entity_type == "ADVANCED_FACE":
-                faces[r.entity_id] = " ".join(r.args)
+        faces = self._extract_faces(records)
 
         # 7. Solides volumiques
-        solids: Dict[str, str] = {}
-        for r in records.values():
-            if "SOLID" in r.entity_type:
-                name_match = re.search(r"'([^']+)'", " ".join(r.args))
-                solid_name = name_match.group(1) if name_match else f"SOLID_{r.entity_id}"
-                solids[solid_name] = r.entity_type
+        solids = self._extract_solids(records)
 
         # 8. PMI (Product & Manufacturing Information pour AP242)
-        pmi_notes: List[str] = []
-        for r in records.values():
-            is_pmi = False
-            for k in ("TOLERANCE", "DATUM", "DIMENSIONAL"):
-                if k in r.entity_type:
-                    is_pmi = True
-                    break
-            if is_pmi:
-                pmi_notes.append(f"{r.entity_type}: {' '.join(r.args)}")
+        pmi_notes = self._extract_pmi_annotations(records)
 
         return STEPGeometricContext(
             schema_name=schema_name,
@@ -128,6 +109,44 @@ class STEPImporter:
             solids=solids,
             pmi_annotations=pmi_notes
         )
+
+    @staticmethod
+    def _extract_axis_placements(records: Dict[int, STEPRecord]) -> Dict[int, str]:
+        """Extrait les définitions de repères AXIS2_PLACEMENT."""
+        placements: Dict[int, str] = {}
+        for r in records.values():
+            if "AXIS2_PLACEMENT" in r.entity_type:
+                placements[r.entity_id] = " ".join(r.args)
+        return placements
+
+    @staticmethod
+    def _extract_faces(records: Dict[int, STEPRecord]) -> Dict[int, str]:
+        """Extrait les définitions de faces analytiques et B-Rep."""
+        faces: Dict[int, str] = {}
+        for r in records.values():
+            if ("FACE" in r.entity_type and "BOUND" not in r.entity_type) or r.entity_type == "ADVANCED_FACE":
+                faces[r.entity_id] = " ".join(r.args)
+        return faces
+
+    @staticmethod
+    def _extract_solids(records: Dict[int, STEPRecord]) -> Dict[str, str]:
+        """Extrait les entités solides identifiées dans le flux STEP."""
+        solids: Dict[str, str] = {}
+        for r in records.values():
+            if "SOLID" in r.entity_type:
+                name_match = re.search(r"'([^']+)'", " ".join(r.args))
+                solid_name = name_match.group(1) if name_match else f"SOLID_{r.entity_id}"
+                solids[solid_name] = r.entity_type
+        return solids
+
+    @staticmethod
+    def _extract_pmi_annotations(records: Dict[int, STEPRecord]) -> List[str]:
+        """Extrait les annotations PMI (tolérances géométriques, datums, dimensions)."""
+        pmi_notes: List[str] = []
+        for r in records.values():
+            if any(k in r.entity_type for k in ("TOLERANCE", "DATUM", "DIMENSIONAL")):
+                pmi_notes.append(f"{r.entity_type}: {' '.join(r.args)}")
+        return pmi_notes
 
     def import_to_nexus_solid(self, filepath_or_content: str, solid_name: Optional[str] = None) -> NexusSolid:
         """

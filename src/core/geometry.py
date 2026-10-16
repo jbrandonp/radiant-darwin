@@ -270,6 +270,10 @@ class Solid:
         """Accès direct au tampon de maillage (MeshBuffer) du solide."""
         return self.to_mesh_buffer()
 
+    def clear_cache(self) -> None:
+        """Libère le cache MeshBuffer pour forcer une régénération ou libérer la mémoire."""
+        self._cached_buffer = None
+
     def to_mesh_buffer(self) -> MeshBuffer:
         """
         Convertit le solide en MeshBuffer optimisé pour le rendu OpenGL.

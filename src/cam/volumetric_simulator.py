@@ -185,6 +185,66 @@ class VolumetricStockSimulator:
 class CNCPostProcessorRegistry:
     """Générateur de code G spécialisé pour les différents contrôleurs industriels."""
 
+    @staticmethod
+    def _generate_fanuc_program(points: List[ToolpathPoint], program_name: str) -> List[str]:
+        rpm = points[0].spindle_rpm if points else 8000
+        lines: List[str] = [
+            "%",
+            f"O{program_name}",
+            "G21 G90 G54 G40 G80 (METRIQUE, ABSOLU)",
+            "T1 M06",
+            f"M03 S{rpm}",
+            "G43 H1 Z50.0 M08"
+        ]
+        for pt in points:
+            lines.append(f"G01 X{pt.x:.3f} Y{pt.y:.3f} Z{pt.z:.3f} F{pt.feed_rate:.1f}")
+        lines.extend(["M09", "M05", "G28 G91 Z0.", "M30", "%"])
+        return lines
+
+    @staticmethod
+    def _generate_siemens_program(points: List[ToolpathPoint], program_name: str) -> List[str]:
+        rpm = points[0].spindle_rpm if points else 8000
+        lines: List[str] = [
+            f"; PROGRAMME SIEMENS 840D - {program_name}",
+            "G710 G90 G94",
+            "T=\"FRAISE_CARBURE\" M6",
+            f"S{rpm} M3",
+            "TRAORI ; ACTIVATION CINEMATIQUE 5 AXES"
+        ]
+        for pt in points:
+            lines.append(f"G1 X={pt.x:.3f} Y={pt.y:.3f} Z={pt.z:.3f} A={pt.a_deg:.2f} C={pt.c_deg:.2f} F={pt.feed_rate:.1f}")
+        lines.extend(["TRAFOOF ; FIN 5 AXES", "M17", "M30"])
+        return lines
+
+    @staticmethod
+    def _generate_heidenhain_program(points: List[ToolpathPoint], program_name: str) -> List[str]:
+        rpm = points[0].spindle_rpm if points else 8000
+        lines: List[str] = [
+            f"0  BEGIN PGM {program_name} MM",
+            f"1  TOOL CALL 1 Z S{rpm}",
+            "2  L Z+50 R0 FMAX M3"
+        ]
+        l_num = 3
+        for pt in points:
+            lines.append(f"{l_num}  L X+{pt.x:.3f} Y+{pt.y:.3f} Z+{pt.z:.3f} R0 F{pt.feed_rate:.0f}")
+            l_num += 1
+        lines.append(f"{l_num}  L Z+50 R0 FMAX M30")
+        lines.append(f"{l_num + 1}  END PGM {program_name} MM")
+        return lines
+
+    @staticmethod
+    def _generate_generic_program(points: List[ToolpathPoint], program_name: str) -> List[str]:
+        rpm = points[0].spindle_rpm if points else 8000
+        lines: List[str] = [
+            f"(HAAS/GENERIC ISO PROGRAM {program_name})",
+            "G21 G90 G54",
+            f"S{rpm} M03"
+        ]
+        for pt in points:
+            lines.append(f"G01 X{pt.x:.3f} Y{pt.y:.3f} Z{pt.z:.3f} F{pt.feed_rate:.1f}")
+        lines.extend(["M05", "M30"])
+        return lines
+
     @classmethod
     def generate_program(
         cls,
@@ -194,59 +254,15 @@ class CNCPostProcessorRegistry:
     ) -> str:
         """Génère le programme ISO complet à partir d'une liste de ToolpathPoint."""
         dialect_upper = dialect_name.upper()
-        lines: List[str] = []
 
         if "FANUC" in dialect_upper:
-            rpm = points[0].spindle_rpm if points else 8000
-            lines.extend([
-                "%",
-                f"O{program_name}",
-                "G21 G90 G54 G40 G80 (METRIQUE, ABSOLU)",
-                "T1 M06",
-                f"M03 S{rpm}",
-                "G43 H1 Z50.0 M08"
-            ])
-            for pt in points:
-                lines.append(f"G01 X{pt.x:.3f} Y{pt.y:.3f} Z{pt.z:.3f} F{pt.feed_rate:.1f}")
-            lines.extend(["M09", "M05", "G28 G91 Z0.", "M30", "%"])
-
+            lines = cls._generate_fanuc_program(points, program_name)
         elif "SIEMENS" in dialect_upper or "840D" in dialect_upper:
-            rpm = points[0].spindle_rpm if points else 8000
-            lines.extend([
-                f"; PROGRAMME SIEMENS 840D - {program_name}",
-                "G710 G90 G94",
-                "T=\"FRAISE_CARBURE\" M6",
-                f"S{rpm} M3",
-                "TRAORI ; ACTIVATION CINEMATIQUE 5 AXES"
-            ])
-            for pt in points:
-                lines.append(f"G1 X={pt.x:.3f} Y={pt.y:.3f} Z={pt.z:.3f} A={pt.a_deg:.2f} C={pt.c_deg:.2f} F={pt.feed_rate:.1f}")
-            lines.extend(["TRAFOOF ; FIN 5 AXES", "M17", "M30"])
-
+            lines = cls._generate_siemens_program(points, program_name)
         elif "HEIDENHAIN" in dialect_upper:
-            rpm = points[0].spindle_rpm if points else 8000
-            lines.extend([
-                f"0  BEGIN PGM {program_name} MM",
-                f"1  TOOL CALL 1 Z S{rpm}",
-                "2  L Z+50 R0 FMAX M3"
-            ])
-            l_num = 3
-            for pt in points:
-                lines.append(f"{l_num}  L X+{pt.x:.3f} Y+{pt.y:.3f} Z+{pt.z:.3f} R0 F{pt.feed_rate:.0f}")
-                l_num += 1
-            lines.append(f"{l_num}  L Z+50 R0 FMAX M30")
-            lines.append(f"{l_num + 1}  END PGM {program_name} MM")
-
+            lines = cls._generate_heidenhain_program(points, program_name)
         else:
-            rpm = points[0].spindle_rpm if points else 8000
-            lines.extend([
-                f"(HAAS/GENERIC ISO PROGRAM {program_name})",
-                "G21 G90 G54",
-                f"S{rpm} M03"
-            ])
-            for pt in points:
-                lines.append(f"G01 X{pt.x:.3f} Y{pt.y:.3f} Z{pt.z:.3f} F{pt.feed_rate:.1f}")
-            lines.extend(["M05", "M30"])
+            lines = cls._generate_generic_program(points, program_name)
 
         return "\n".join(lines)
 

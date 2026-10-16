@@ -139,3 +139,26 @@ def test_partdesign_features_in_registry() -> None:
     desc_loft_rails = FeatureRegistry.get("MultiRailLoftFeature")
     assert desc_loft_rails is not None
     assert desc_loft_rails.category == FeatureCategory.SKETCH_BASED
+
+
+def test_fidget_interval_tree_evaluation_helpers() -> None:
+    """Vérifie l'évaluation modulaire scalaire et par intervalle des primitives Fidget."""
+    from src.core.nexus_kernel.fidget_interval_tree import SDFIntervalTreeNode, CSGOpType, SDFInterval
+
+    sphere_node = SDFIntervalTreeNode(op=CSGOpType.SPHERE, params=(10.0, 0.0, 0.0, 0.0))
+    # Centre (0,0,0) -> distance = -10.0
+    assert sphere_node.eval_scalar(0.0, 0.0, 0.0) == pytest.approx(-10.0)
+    # Surface (10,0,0) -> distance = 0.0
+    assert sphere_node.eval_scalar(10.0, 0.0, 0.0) == pytest.approx(0.0)
+
+    # Boîte demi-dimensions (5, 5, 5)
+    box_node = SDFIntervalTreeNode(op=CSGOpType.BOX, params=(5.0, 5.0, 5.0))
+    assert box_node.eval_scalar(0.0, 0.0, 0.0) <= 0.0
+    assert box_node.eval_scalar(10.0, 0.0, 0.0) == pytest.approx(5.0)
+
+    # Intervalle sphère
+    ix = SDFInterval(-2.0, 2.0)
+    iy = SDFInterval(-2.0, 2.0)
+    iz = SDFInterval(-2.0, 2.0)
+    res_int = sphere_node.eval_interval(ix, iy, iz)
+    assert res_int.min_val < 0.0

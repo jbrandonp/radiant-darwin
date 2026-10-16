@@ -653,6 +653,33 @@ class Sketch2D:
         self.entities.append(ref_entity)
         return ref_entity
 
+    @staticmethod
+    def _calculate_linear_dim(pts: List[Point2D], dim_type: DimensionType) -> float:
+        """Calcule la composante linéaire (distance, horizontale, verticale) entre deux points."""
+        u0 = pts[0].u if hasattr(pts[0], 'u') else float(pts[0][0])
+        v0 = pts[0].v if hasattr(pts[0], 'v') else float(pts[0][1])
+        u1 = pts[1].u if hasattr(pts[1], 'u') else float(pts[1][0])
+        v1 = pts[1].v if hasattr(pts[1], 'v') else float(pts[1][1])
+        if dim_type == DimensionType.DISTANCE:
+            return float(np.hypot(u1 - u0, v1 - v0))
+        if dim_type == DimensionType.HORIZONTAL:
+            return float(abs(u1 - u0))
+        if dim_type == DimensionType.VERTICAL:
+            return float(abs(v1 - v0))
+        return 0.0
+
+    def _calculate_default_dimension_value(self, dim_type: DimensionType, entity1_id: str) -> float:
+        """Calcule la valeur par défaut d'une cote à partir des entités référencées."""
+        ent1 = next((e for e in self.entities if e.entity_id == entity1_id), None)
+        if ent1 is None:
+            return 0.0
+        pts1 = ent1.get_points()
+        if len(pts1) >= 2 and dim_type in (DimensionType.DISTANCE, DimensionType.HORIZONTAL, DimensionType.VERTICAL):
+            return self._calculate_linear_dim(pts1, dim_type)
+        if dim_type in (DimensionType.RADIUS, DimensionType.DIAMETER) and isinstance(ent1, SketchCircle):
+            return ent1.radius if dim_type == DimensionType.RADIUS else ent1.radius * 2.0
+        return 0.0
+
     def add_dimension(
         self,
         dim_type: DimensionType,
@@ -668,19 +695,7 @@ class Sketch2D:
         self._counter += 1
         dim_id = f"dim_{self._counter}"
 
-        calculated_val = float(value) if value is not None else 0.0
-        if value is None:
-            ent1 = next((e for e in self.entities if e.entity_id == entity1_id), None)
-            if ent1:
-                pts1 = ent1.get_points()
-                if dim_type == DimensionType.DISTANCE and len(pts1) >= 2:
-                    calculated_val = float(np.hypot(pts1[1].u - pts1[0].u, pts1[1].v - pts1[0].v))
-                elif dim_type == DimensionType.HORIZONTAL and len(pts1) >= 2:
-                    calculated_val = float(abs(pts1[1].u - pts1[0].u))
-                elif dim_type == DimensionType.VERTICAL and len(pts1) >= 2:
-                    calculated_val = float(abs(pts1[1].v - pts1[0].v))
-                elif dim_type in (DimensionType.RADIUS, DimensionType.DIAMETER) and isinstance(ent1, SketchCircle):
-                    calculated_val = ent1.radius if dim_type == DimensionType.RADIUS else ent1.radius * 2.0
+        calculated_val = float(value) if value is not None else self._calculate_default_dimension_value(dim_type, entity1_id)
 
         dim = SketchDimension(
             dimension_id=dim_id,

@@ -113,3 +113,25 @@ def test_step_importer_import_model_with_metadata() -> None:
     assert model.solid is not None
     assert len(model.pmi_annotations) == 2
     assert "DATUM_PRIMARY" in model.pmi_annotations[0]
+
+
+def test_step_importer_modular_extractors() -> None:
+    """Vérifie les extracteurs modulaires de repères, faces, solides et annotations PMI."""
+    from src.core.step_importer import STEPRecord
+
+    records = {
+        10: STEPRecord(10, "AXIS2_PLACEMENT_3D", ["'Origin'", "#11", "#12"]),
+        20: STEPRecord(20, "ADVANCED_FACE", ["'F1'", "#21", "#22"]),
+        30: STEPRecord(30, "MANIFOLD_SOLID_BREP", ["'MainBody'", "#31"]),
+        40: STEPRecord(40, "GEOMETRIC_TOLERANCE", ["'Tol1'", "0.05"]),
+    }
+    placements = STEPImporter._extract_axis_placements(records)
+    faces = STEPImporter._extract_faces(records)
+    solids = STEPImporter._extract_solids(records)
+    pmi = STEPImporter._extract_pmi_annotations(records)
+
+    assert 10 in placements
+    assert 20 in faces
+    assert "MainBody" in solids
+    assert len(pmi) == 1
+    assert "GEOMETRIC_TOLERANCE" in pmi[0]

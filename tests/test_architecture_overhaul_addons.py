@@ -282,3 +282,33 @@ def test_ui_console_and_event_log_panel() -> None:
     assert len(log_panel._records) == 0
     assert log_panel.log_display.toPlainText() == ""
 
+
+def test_viewport_widget_lifecycle_and_solid_cache_cleanup() -> None:
+    """Vérifie la libération propre des caches de maillage et le closeEvent du Viewport."""
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QCloseEvent
+    from src.core.geometry import make_box
+    from src.core.document import CADDocument
+    from src.viewport.viewport_widget import CADViewportWidget
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+
+    box = make_box(20.0, 10.0, 5.0)
+    buf = box.to_mesh_buffer()
+    assert box._cached_buffer is not None
+    assert len(buf.vertices) > 0
+    box.clear_cache()
+    assert box._cached_buffer is None
+
+    doc = CADDocument(name="LifecycleDoc")
+    widget = CADViewportWidget(document=doc)
+    widget.cached_buffers = [buf]
+    assert len(widget.cached_buffers) == 1
+
+    close_evt = QCloseEvent()
+    widget.closeEvent(close_evt)
+    assert len(widget.cached_buffers) == 0
+    assert widget.selected_pick is None
+

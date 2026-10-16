@@ -132,3 +132,29 @@ def test_sketch_porcupine_comb_2d() -> None:
         # La pointe du peigne est distante de la racine en fonction de la courbure
         dist = np.hypot(tip.u - root.u, tip.v - root.v)
         assert dist > 0.0
+
+
+def test_sketch_dimension_default_value_calculation() -> None:
+    """Vérifie le calcul par défaut de la cote d'esquisse sans valeur explicite."""
+    from src.core.types import Point2D
+    from src.core.sketch import Sketch2D, DimensionType
+
+    sk = Sketch2D(sketch_id="sk_dim_test", name="DimTest")
+    l1 = sk.add_line(Point2D(0.0, 0.0), Point2D(30.0, 40.0))
+    c1 = sk.add_circle(Point2D(10.0, 10.0), 12.5)
+
+    # Dimension distance automatique sur segment (30, 40 -> hypot = 50.0)
+    dim_dist = sk.add_dimension(DimensionType.DISTANCE, l1.entity_id)
+    assert dim_dist.value == pytest.approx(50.0)
+
+    # Dimension rayon automatique sur cercle
+    dim_radius = sk.add_dimension(DimensionType.RADIUS, c1.entity_id)
+    assert dim_radius.value == pytest.approx(12.5)
+
+    # Dimension diamètre automatique sur cercle
+    dim_dia = sk.add_dimension(DimensionType.DIAMETER, c1.entity_id)
+    assert dim_dia.value == pytest.approx(25.0)
+
+    # Entité inconnue
+    dim_none = sk.add_dimension(DimensionType.DISTANCE, "unknown_ent")
+    assert dim_none.value == 0.0

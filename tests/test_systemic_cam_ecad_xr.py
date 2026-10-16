@@ -242,3 +242,32 @@ def test_spatial_xr_lod_streaming_at_90fps() -> None:
     assert report.is_frame_budget_respected is False
     # Le biais adaptatif doit augmenter pour réduire la charge
     assert decimator.lod_bias > 1.0
+
+
+def test_cnc_post_processor_registry_dialects() -> None:
+    """Vérifie la génération de code G spécialisé Fanuc, Siemens, Heidenhain et Haas."""
+    from src.cam.volumetric_simulator import CNCPostProcessorRegistry, ToolpathPoint
+
+    pts = [
+        ToolpathPoint(x=10.0, y=20.0, z=-5.0, feed_rate=1200.0, spindle_rpm=10000, a_deg=15.0, c_deg=45.0),
+        ToolpathPoint(x=30.0, y=40.0, z=-5.0, feed_rate=1500.0, spindle_rpm=10000, a_deg=20.0, c_deg=90.0)
+    ]
+
+    prog_fanuc = CNCPostProcessorRegistry.generate_program("FANUC", pts, "1234")
+    assert "O1234" in prog_fanuc
+    assert "G01 X10.000 Y20.000 Z-5.000 F1200.0" in prog_fanuc
+    assert "M30" in prog_fanuc
+
+    prog_siemens = CNCPostProcessorRegistry.generate_program("SIEMENS_840D", pts, "PROG1")
+    assert "TRAORI" in prog_siemens
+    assert "A=15.00 C=45.00" in prog_siemens
+    assert "TRAFOOF" in prog_siemens
+
+    prog_heidenhain = CNCPostProcessorRegistry.generate_program("HEIDENHAIN", pts, "HEID_01")
+    assert "BEGIN PGM HEID_01 MM" in prog_heidenhain
+    assert "TOOL CALL 1 Z S10000" in prog_heidenhain
+    assert "END PGM HEID_01 MM" in prog_heidenhain
+
+    prog_generic = CNCPostProcessorRegistry.generate_program("GENERIC_HAAS", pts, "HAAS_01")
+    assert "(HAAS/GENERIC ISO PROGRAM HAAS_01)" in prog_generic
+    assert "G21 G90 G54" in prog_generic

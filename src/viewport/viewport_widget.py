@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Optional, List, Callable
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtCore import Qt, QPoint, QPointF
-from PySide6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent, QSurfaceFormat
+from PySide6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent, QSurfaceFormat, QCloseEvent
 
 from src.core.document import CADDocument
 from src.core.types import MeshBuffer, Vector3D
@@ -322,4 +322,9 @@ class CADViewportWidget(QOpenGLWidget):
         self.cached_buffers.clear()
         self.selected_pick = None
         self.current_snap = None
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Garantit la libération propre des ressources OpenGL lors de la fermeture de la vue."""
+        self.cleanup()
+        super().closeEvent(event)
 

@@ -192,6 +192,35 @@ class CalculixResultParser:
                         continue
         return results
 
+    @staticmethod
+    def _compute_von_mises_from_tensor(parts: List[str]) -> float:
+        """Calcule la contrainte équivalente de von Mises à partir des 6 composantes du tenseur."""
+        sxx = float(parts[1])
+        syy = float(parts[2])
+        szz = float(parts[3])
+        sxy = float(parts[4])
+        syz = float(parts[5])
+        szx = float(parts[6])
+        diff_sq = (sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2
+        shear_sq = 6.0 * (sxy ** 2 + syz ** 2 + szx ** 2)
+        return math.sqrt(0.5 * (diff_sq + shear_sq))
+
+    @classmethod
+    def _parse_single_stress_line(cls, line_str: str) -> Optional[Tuple[int, float]]:
+        """Parse une ligne unique de résultat de contraintes nodales CalculiX."""
+        parts = line_str.split()
+        if len(parts) < 2:
+            return None
+        try:
+            n_id = int(parts[0])
+            if len(parts) >= 7:
+                vm = cls._compute_von_mises_from_tensor(parts)
+            else:
+                vm = float(parts[1])
+            return n_id, vm
+        except ValueError:
+            return None
+
     def parse_nodal_stresses(self, result_text: str) -> Dict[int, float]:
         """
         Extrait les contraintes équivalentes de von Mises en MPa par ID de nœud.
@@ -205,29 +234,15 @@ class CalculixResultParser:
             if "STRESS" in line_str.upper() or line_str.startswith("-4  STRESS"):
                 in_stress_block = True
                 continue
-            if in_stress_block:
-                if line_str.startswith("-3") or line_str.startswith("-1"):
-                    in_stress_block = False
-                    continue
-                parts = line_str.split()
-                if len(parts) >= 2:
-                    try:
-                        n_id = int(parts[0])
-                        if len(parts) >= 7:
-                            sxx = float(parts[1])
-                            syy = float(parts[2])
-                            szz = float(parts[3])
-                            sxy = float(parts[4])
-                            syz = float(parts[5])
-                            szx = float(parts[6])
-                            diff_sq = (sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2
-                            shear_sq = 6.0 * (sxy ** 2 + syz ** 2 + szx ** 2)
-                            vm = math.sqrt(0.5 * (diff_sq + shear_sq))
-                        else:
-                            vm = float(parts[1])
-                        results[n_id] = vm
-                    except ValueError:
-                        continue
+            if not in_stress_block:
+                continue
+            if line_str.startswith("-3") or line_str.startswith("-1"):
+                in_stress_block = False
+                continue
+            parsed = self._parse_single_stress_line(line_str)
+            if parsed is not None:
+                n_id, vm = parsed
+                results[n_id] = vm
         return results
 
     def parse_full_results(self, result_text: str) -> Dict[int, FeaNodalResult]:

@@ -18,10 +18,10 @@
 | **Sécurité SAST (Injections/eval)** | **0 violation** | 0 tolérée | ✅ SÉCURISÉ |
 | **Dépendances Circulaires** | **0 cycle** | 0 cycle | ✅ PARFAIT |
 | **Plafond Complexité par Fonction** | **0 fonction > 25** | ≤ 25 (SonarSource) | ✅ CONFORME |
-| **Tests Unitaires & Intégration** | **678 / 678 Validés** | 100% | ✅ SUCCÈS |
+| **Tests Unitaires & Intégration** | **684 / 684 Validés** | 100% | ✅ SUCCÈS |
 | **Score de Mutation Testing** | **100.0%** (4/4 tués) | ≥ 80.0% | ✅ SOTA |
-| **Périmètre du Code Source** | **2 fichiers** (650 SLOC) | - | ℹ️ INFO |
-| **Complexité Cognitive Globale** | **145 points** (Moy: 72.5) | - | ℹ️ INFO |
+| **Périmètre du Code Source** | **144 fichiers** (36,529 SLOC) | - | ℹ️ INFO |
+| **Complexité Cognitive Globale** | **9,223 points** (Moy: 64.0) | - | ℹ️ INFO |
 
 ---
 
@@ -29,7 +29,7 @@
 | Critère Qualité | Valeur Mesurée | Statut |
 | :--- | :---: | :---: |
 | Strict Static Typing (100% sans Any ni object) | 100.0% | ✅ PASS |
-| SAST Security Vulnerabilities (0 violation) | 0 violation(s) | ✅ PASS |
+| SAST Security Vulnerabilities (0 violation tolérée) | 0 violation(s) | ✅ PASS |
 | Architecture Cycles (0 dépendance circulaire) | 0 cycle(s) | ✅ PASS |
 | Function Cognitive Complexity Ceiling (<= 25) | 0 fonction(s) > 25 | ✅ PASS |
 | Test Statement Coverage (>= 80.0%) | 85.0% | ✅ PASS |
@@ -40,8 +40,11 @@
 ### 🔥 Top 5 Architectural Hotspots (CodeScene Churn × Complexité)
 | Fichier Source | Churn | Complexité Cog | Hotspot Index | SLOC |
 | :--- | :---: | :---: | :---: | :---: |
-| `src/cam/toolpath.py` | 15 | 120 | 1800 | 400 |
-| `src/core/geometry.py` | 12 | 25 | 300 | 250 |
+| `src/core/operations_advanced.py` | 2415 | 514 | 1241061 | 1,691 |
+| `src/core/mutation_engine.py` | 2315 | 358 | 828736 | 1,727 |
+| `src/core/serializer.py` | 2337 | 346 | 808497 | 593 |
+| `src/core/step_importer.py` | 1202 | 414 | 497625 | 598 |
+| `src/ui/main_window.py` | 1502 | 304 | 456670 | 1,029 |
 
 ---
 

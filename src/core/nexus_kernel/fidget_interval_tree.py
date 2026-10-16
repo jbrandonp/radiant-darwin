@@ -75,26 +75,34 @@ class SDFIntervalTreeNode:
         self.right: Optional[SDFIntervalTreeNode] = right
         self.params: Tuple[float, ...] = params if params is not None else ()
 
+    def _eval_sphere_scalar(self, x: float, y: float, z: float) -> float:
+        """Distance signée ponctuelle à une sphère."""
+        radius = self.params[0] if self.params else 10.0
+        cx = self.params[1] if len(self.params) > 1 else 0.0
+        cy = self.params[2] if len(self.params) > 2 else 0.0
+        cz = self.params[3] if len(self.params) > 3 else 0.0
+        dist_center = float(np.sqrt((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2))
+        return dist_center - radius
+
+    def _eval_box_scalar(self, x: float, y: float, z: float) -> float:
+        """Distance signée ponctuelle à une boîte alignée."""
+        hx = self.params[0] if self.params else 10.0
+        hy = self.params[1] if len(self.params) > 1 else 10.0
+        hz = self.params[2] if len(self.params) > 2 else 10.0
+        dx = abs(x) - hx
+        dy = abs(y) - hy
+        dz = abs(z) - hz
+        outside_dist = float(np.linalg.norm(np.maximum([dx, dy, dz], 0.0)))
+        inside_dist = min(max(dx, max(dy, dz)), 0.0)
+        return outside_dist + inside_dist
+
     def eval_scalar(self, x: float, y: float, z: float) -> float:
         """Évaluation ponctuelle scalaire directe de la distance signée."""
         if self.op == CSGOpType.SPHERE:
-            radius = self.params[0] if self.params else 10.0
-            cx = self.params[1] if len(self.params) > 1 else 0.0
-            cy = self.params[2] if len(self.params) > 2 else 0.0
-            cz = self.params[3] if len(self.params) > 3 else 0.0
-            dist_center = float(np.sqrt((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2))
-            return dist_center - radius
+            return self._eval_sphere_scalar(x, y, z)
 
         if self.op == CSGOpType.BOX:
-            hx = self.params[0] if self.params else 10.0
-            hy = self.params[1] if len(self.params) > 1 else 10.0
-            hz = self.params[2] if len(self.params) > 2 else 10.0
-            dx = abs(x) - hx
-            dy = abs(y) - hy
-            dz = abs(z) - hz
-            outside_dist = float(np.linalg.norm(np.maximum([dx, dy, dz], 0.0)))
-            inside_dist = min(max(dx, max(dy, dz)), 0.0)
-            return outside_dist + inside_dist
+            return self._eval_box_scalar(x, y, z)
 
         if self.op == CSGOpType.CONSTANT:
             return self.params[0] if self.params else 0.0
@@ -111,6 +119,28 @@ class SDFIntervalTreeNode:
 
         return 0.0
 
+    def _eval_sphere_interval(
+        self,
+        ix: SDFInterval,
+        iy: SDFInterval,
+        iz: SDFInterval
+    ) -> SDFInterval:
+        """Intervalle de distance signée à une sphère."""
+        radius = self.params[0] if self.params else 10.0
+        cx = self.params[1] if len(self.params) > 1 else 0.0
+        cy = self.params[2] if len(self.params) > 2 else 0.0
+        cz = self.params[3] if len(self.params) > 3 else 0.0
+        dx_min = max(0.0, max(cx - ix.max_val, ix.min_val - cx))
+        dy_min = max(0.0, max(cy - iy.max_val, iy.min_val - cy))
+        dz_min = max(0.0, max(cz - iz.max_val, iz.min_val - cz))
+        min_dist = float(np.sqrt(dx_min ** 2 + dy_min ** 2 + dz_min ** 2)) - radius
+
+        dx_max = max(abs(ix.min_val - cx), abs(ix.max_val - cx))
+        dy_max = max(abs(iy.min_val - cy), abs(iy.max_val - cy))
+        dz_max = max(abs(iz.min_val - cz), abs(iz.max_val - cz))
+        max_dist = float(np.sqrt(dx_max ** 2 + dy_max ** 2 + dz_max ** 2)) - radius
+        return SDFInterval(min_dist, max_dist)
+
     def eval_interval(
         self,
         ix: SDFInterval,
@@ -119,21 +149,7 @@ class SDFIntervalTreeNode:
     ) -> SDFInterval:
         """Évalue l'intervalle de distance signée sur une boîte 3D [ix, iy, iz]."""
         if self.op == CSGOpType.SPHERE:
-            radius = self.params[0] if self.params else 10.0
-            cx = self.params[1] if len(self.params) > 1 else 0.0
-            cy = self.params[2] if len(self.params) > 2 else 0.0
-            cz = self.params[3] if len(self.params) > 3 else 0.0
-            # Distance minimale et maximale au centre
-            dx_min = max(0.0, max(cx - ix.max_val, ix.min_val - cx))
-            dy_min = max(0.0, max(cy - iy.max_val, iy.min_val - cy))
-            dz_min = max(0.0, max(cz - iz.max_val, iz.min_val - cz))
-            min_dist = float(np.sqrt(dx_min ** 2 + dy_min ** 2 + dz_min ** 2)) - radius
-
-            dx_max = max(abs(ix.min_val - cx), abs(ix.max_val - cx))
-            dy_max = max(abs(iy.min_val - cy), abs(iy.max_val - cy))
-            dz_max = max(abs(iz.min_val - cz), abs(iz.max_val - cz))
-            max_dist = float(np.sqrt(dx_max ** 2 + dy_max ** 2 + dz_max ** 2)) - radius
-            return SDFInterval(min_dist, max_dist)
+            return self._eval_sphere_interval(ix, iy, iz)
 
         if self.op == CSGOpType.CONSTANT:
             c = self.params[0] if self.params else 0.0

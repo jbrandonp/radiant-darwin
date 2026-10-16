@@ -40,3 +40,24 @@ def test_svg_export() -> None:
         assert "<svg" in svg_content
         assert "</svg>" in svg_content
         assert "TITRE : Pièce Test" in svg_content
+
+
+def test_drawing_facade_reexports() -> None:
+    """Vérifie que le package src.drawing ré-exporte tous les types et générateurs ISO."""
+    import src.drawing as drw
+
+    expected_symbols = [
+        "ViewType",
+        "DrawingLine2D",
+        "DimensionLabel",
+        "LeaderLine",
+        "GDTFrame",
+        "SurfaceFinishSymbol",
+        "TitleBlock",
+        "TechnicalSheet",
+        "TechnicalDrawingGenerator",
+        "SVGDrawingExporter",
+    ]
+    for sym in expected_symbols:
+        assert hasattr(drw, sym), f"Le symbole {sym} doit être exposé par src.drawing"
+        assert getattr(drw, sym) is not None

@@ -36,7 +36,7 @@ from scripts.security_sast_visitor import (
 # 1. Tests Zip Slip sur archives .cadz et commonpath
 # ==============================================================================
 
-def test_zip_slip_cadz_unsafe_extraction():
+def test_zip_slip_cadz_unsafe_extraction() -> None:
     """Vérifie que l'extraction directe d'une archive .cadz via extractall() est détectée comme CRITICAL."""
     code_cadz_unsafe = """
 import zipfile
@@ -55,7 +55,7 @@ def unpack_cadz_project(cadz_archive_path: str, destination_dir: str) -> None:
     assert crit_findings[0].category == SecurityCategory.PATH_TRAVERSAL
 
 
-def test_zip_slip_manual_loop_without_commonpath():
+def test_zip_slip_manual_loop_without_commonpath() -> None:
     """Vérifie qu'une boucle manuelle d'extraction d'archive sans commonpath est détectée."""
     code_manual = """
 import os
@@ -73,7 +73,7 @@ def extract_archive_members(archive_path: str, target_folder: str) -> None:
     assert "SEC_ZIP_SLIP_MANUAL_EXTRACTION" in rule_ids
 
 
-def test_zip_slip_safe_extraction_with_commonpath():
+def test_zip_slip_safe_extraction_with_commonpath() -> None:
     """Vérifie qu'une routine d'extraction utilisant os.path.commonpath n'est pas faussement signalée."""
     code_safe = """
 import os
@@ -96,7 +96,7 @@ def safe_extract_cadz(archive_path: str, dest_dir: str) -> None:
     assert "SEC_ZIP_SLIP_MANUAL_EXTRACTION" not in rule_ids
 
 
-def test_runtime_validate_safe_cadz_path():
+def test_runtime_validate_safe_cadz_path() -> None:
     """Vérifie la fonction utilitaire d'assainissement runtime validate_safe_cadz_path."""
     target_dir = os.path.abspath("temp_projects")
 
@@ -118,7 +118,7 @@ def test_runtime_validate_safe_cadz_path():
 # 2. Tests Path Traversal dans Exportateurs/Importateurs STL, STEP, DXF
 # ==============================================================================
 
-def test_cad_path_traversal_unsafe_exporter():
+def test_cad_path_traversal_unsafe_exporter() -> None:
     """Vérifie la détection de Path Traversal et de manque de validation d'extension dans export_stl."""
     code_exporter = """
 import os
@@ -138,7 +138,7 @@ class CADExporter:
     assert "SEC_CAD_PATH_TRAVERSAL_SINK" in rule_ids
 
 
-def test_cad_path_traversal_unsafe_step_importer():
+def test_cad_path_traversal_unsafe_step_importer() -> None:
     """Vérifie la détection de Path Traversal dans une routine d'import STEP."""
     code_importer = """
 import os
@@ -154,7 +154,7 @@ class STEPImporter:
     assert "SEC_CAD_PATH_TRAVERSAL_SINK" in rule_ids
 
 
-def test_cad_exporter_safe_with_validation():
+def test_cad_exporter_safe_with_validation() -> None:
     """Vérifie qu'un exportateur sécurisé avec vérification d'extension et commonpath ne produit pas de fausses alertes."""
     code_safe = """
 import os
@@ -176,7 +176,7 @@ def export_dxf(entities: list, filepath: str, allowed_base_dir: str) -> bool:
     assert "SEC_CAD_PATH_TRAVERSAL_SINK" not in rule_ids
 
 
-def test_runtime_validate_cad_filepath():
+def test_runtime_validate_cad_filepath() -> None:
     """Vérifie l'utilitaire d'assainissement runtime validate_cad_filepath."""
     base_dir = os.path.abspath("exports")
 
@@ -197,7 +197,7 @@ def test_runtime_validate_cad_filepath():
 # 3. Tests Geometric ReDoS, Slivers et Parsing STEP
 # ==============================================================================
 
-def test_step_regex_nested_quantifier_redos():
+def test_step_regex_nested_quantifier_redos() -> None:
     """Vérifie la détection formelle de l'expression régulière ReDoS de split STEP (nested quantifiers)."""
     code_step_redos = """
 import re
@@ -216,7 +216,7 @@ def parse_step_records(raw_args: str) -> list:
     assert f.category == SecurityCategory.REGEX_DOS
 
 
-def test_step_regex_dotall_unbounded():
+def test_step_regex_dotall_unbounded() -> None:
     """Vérifie la détection d'expressions re.DOTALL avec joker glouton .* sans limite."""
     code_dotall = r"""
 import re
@@ -230,7 +230,7 @@ def extract_step_data_section(content: str) -> str:
     assert "SEC_STEP_REDOS_DOTALL_UNBOUNDED" in rule_ids
 
 
-def test_geometric_division_by_zero_sliver_detection():
+def test_geometric_division_by_zero_sliver_detection() -> None:
     """Vérifie la détection des divisions géométriques non protégées par un seuil epsilon."""
     code_sliver_div = """
 def compute_triangle_face_normal(cross_product, norm):
@@ -242,7 +242,7 @@ def compute_triangle_face_normal(cross_product, norm):
     assert "SEC_GEOMETRIC_SLIVER_DIVISION_BY_ZERO" in rule_ids
 
 
-def test_geometric_division_with_epsilon_is_safe():
+def test_geometric_division_with_epsilon_is_safe() -> None:
     """Vérifie qu'une division géométrique protégée par un seuil epsilon ne déclenche pas d'alerte."""
     code_safe_div = """
 def compute_triangle_face_normal_safe(cross_product, norm):
@@ -255,7 +255,7 @@ def compute_triangle_face_normal_safe(cross_product, norm):
     assert "SEC_GEOMETRIC_SLIVER_DIVISION_BY_ZERO" not in rule_ids
 
 
-def test_geometric_unbounded_subdivision_while_loop():
+def test_geometric_unbounded_subdivision_while_loop() -> None:
     """Vérifie la détection des boucles de raffinement de maillage infinies sans compteur max."""
     code_unbounded_subdiv = """
 def refine_sliver_triangles(mesh_faces):
@@ -267,7 +267,7 @@ def refine_sliver_triangles(mesh_faces):
     assert "SEC_GEOMETRIC_UNBOUNDED_SUBDIVISION" in rule_ids
 
 
-def test_runtime_analyze_regex_redos_risk():
+def test_runtime_analyze_regex_redos_risk() -> None:
     """Vérifie l'analyseur déterministe runtime de regex ReDoS."""
     # Motifs vulnérables
     assert analyze_regex_redos_risk(r",(?=(?:[^']*'[^']*')*[^']*$)")[0] is True
@@ -281,7 +281,7 @@ def test_runtime_analyze_regex_redos_risk():
     assert analyze_regex_redos_risk(r"#(\d+)\s*=\s*([A-Za-z0-9_]+)\s*\((.*?)\)\s*;")[0] is False
 
 
-def test_runtime_is_sliver_triangle():
+def test_runtime_is_sliver_triangle() -> None:
     """Vérifie le calcul géométrique runtime du ratio d'aspect des triangles effilés."""
     # Triangle équilatéral parfait : ratio d'aspect idéal ~ 1.0
     eq_p0 = (0.0, 0.0, 0.0)
@@ -306,7 +306,7 @@ def test_runtime_is_sliver_triangle():
 # 4. Tests OpenGL natif (glDrawElements count vs buffer size) et ctypes
 # ==============================================================================
 
-def test_opengl_invalid_count_detection():
+def test_opengl_invalid_count_detection() -> None:
     """Vérifie la détection d'appels glDrawElements ou glDrawArrays avec count invalide (<= 0)."""
     code_gl_invalid = """
 import OpenGL.GL as GL
@@ -320,7 +320,7 @@ def draw_wireframe(indices, vertices):
     assert "SEC_OPENGL_INVALID_COUNT" in rule_ids
 
 
-def test_opengl_buffer_overflow_detection():
+def test_opengl_buffer_overflow_detection() -> None:
     """Vérifie la détection d'appels glDrawElements sans vérification de taille du tampon d'indices."""
     code_gl_overflow = """
 import OpenGL.GL as GL
@@ -334,7 +334,7 @@ def render_unverified_buffer(indices, count):
     assert "SEC_OPENGL_BUFFER_OVERFLOW" in rule_ids
 
 
-def test_opengl_safe_call_with_bounds_check():
+def test_opengl_safe_call_with_bounds_check() -> None:
     """Vérifie qu'un tracé OpenGL avec vérification de non-vacuité et taille ne déclenche pas d'alerte."""
     code_gl_safe = """
 import OpenGL.GL as GL
@@ -351,7 +351,7 @@ def render_safe_mesh(buffer):
     assert "SEC_OPENGL_INVALID_COUNT" not in rule_ids
 
 
-def test_ctypes_raw_memory_and_arbitrary_address():
+def test_ctypes_raw_memory_and_arbitrary_address() -> None:
     """Vérifie la détection de manipulations de mémoire brute et de pointeurs bruts ctypes."""
     code_ctypes = """
 import ctypes
@@ -366,7 +366,7 @@ def copy_raw_buffer(src, dst):
     assert "SEC_CTYPES_ARBITRARY_ADDRESS" in rule_ids
 
 
-def test_runtime_validate_opengl_draw_elements_bounds():
+def test_runtime_validate_opengl_draw_elements_bounds() -> None:
     """Vérifie l'utilitaire de validation de bornes OpenGL validate_opengl_draw_elements_bounds."""
     # Bornes valides
     assert validate_opengl_draw_elements_bounds(count=300, buffer_element_count=300) is True
@@ -384,7 +384,7 @@ def test_runtime_validate_opengl_draw_elements_bounds():
 # 5. Validation 100% Autonome, Zéro Any et Zéro object
 # ==============================================================================
 
-def test_sast_scanner_strict_typing_zero_any_zero_object():
+def test_sast_scanner_strict_typing_zero_any_zero_object() -> None:
     """
     Examine formellement l'AST de scripts/security_sast_visitor.py pour certifier :
     - Zéro import de Any ou object
@@ -421,7 +421,7 @@ def test_sast_scanner_strict_typing_zero_any_zero_object():
     assert len(forbidden_annotations) == 0, f"Annotations interdites détectées : {forbidden_annotations}"
 
 
-def test_sast_scanner_zero_external_dependencies():
+def test_sast_scanner_zero_external_dependencies() -> None:
     """Vérifie que scripts/security_sast_visitor.py n'importe aucune dépendance externe à Python."""
     script_path = os.path.join("scripts", "security_sast_visitor.py")
     with open(script_path, "r", encoding="utf-8") as f:
@@ -446,7 +446,7 @@ def test_sast_scanner_zero_external_dependencies():
         assert mod in allowed_stdlib, f"Module externe non autorisé importé dans le scanner SAST : '{mod}'"
 
 
-def test_report_formatting_and_cli():
+def test_report_formatting_and_cli() -> None:
     """Vérifie la mise en forme du rapport SAST et l'exécution du point d'entrée CLI main()."""
     findings_map = {
         "test_file.py": [

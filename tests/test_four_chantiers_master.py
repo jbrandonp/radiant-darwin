@@ -34,7 +34,7 @@ from src.cam.volumetric_simulator import VoxelRoughingPreview, VolumetricStockSi
 # CHANTIER 1 : PICKING 3D INTERACTIF DANS LE VIEWPORT
 # ==============================================================================
 
-def test_chantier_1_interactive_3d_ray_picking_on_box():
+def test_chantier_1_interactive_3d_ray_picking_on_box() -> None:
     """Vérifie la sélection précise à la souris d'une face et d'une arête d'un solide 3D."""
     # Création d'un cube 40x40x40 mm centré en (0, 0, 0) -> X, Y, Z dans [-20, 20]
     solid_box = make_box(40.0, 40.0, 40.0, center=True)
@@ -74,7 +74,7 @@ def test_chantier_1_interactive_3d_ray_picking_on_box():
 # CHANTIER 2 : ATELIER TECHDRAW (MISE EN PLAN 2D AVEC CARTOUCHE ISO 7200)
 # ==============================================================================
 
-def test_chantier_2_techdraw_iso_sheet_generation():
+def test_chantier_2_techdraw_iso_sheet_generation() -> None:
     """Vérifie la génération d'une planche complète TechDraw avec cartouche et 4 vues."""
     title_data = TitleBlockData(
         title="SUPPORT PALIER 40X40",
@@ -123,7 +123,7 @@ def test_chantier_2_techdraw_iso_sheet_generation():
 # CHANTIER 3 : SOLVEUR D'ASSEMBLAGE MULTI-PIÈCES DANS CADDOCUMENT
 # ==============================================================================
 
-def test_chantier_3_assembly_multi_parts_and_collision_detection():
+def test_chantier_3_assembly_multi_parts_and_collision_detection() -> None:
     """Vérifie l'instanciation de pièces, la résolution de mates et la détection de collision."""
     doc = CADDocument("AssemblyDoc")
 
@@ -182,7 +182,7 @@ def test_chantier_3_assembly_multi_parts_and_collision_detection():
 # CHANTIER 4 : MAILLEUR VOLUMIQUE GMSH ET CLARIFICATION TECHNIQUE
 # ==============================================================================
 
-def test_chantier_4_gmsh_volumetric_mesher_and_calculix_export():
+def test_chantier_4_gmsh_volumetric_mesher_and_calculix_export() -> None:
     """Vérifie la génération de maillage tétraédrique volumique Gmsh et sa conversion ccx."""
     mesher = GmshVolumetricMesher(target_element_size=10.0)
     # Domaine parallélépipédique 20 x 20 x 10 mm
@@ -213,7 +213,7 @@ def test_chantier_4_gmsh_volumetric_mesher_and_calculix_export():
     assert "*SOLID SECTION" in inp_text
 
 
-def test_chantier_4_solver_clarifications_and_aliases():
+def test_chantier_4_solver_clarifications_and_aliases() -> None:
     """Vérifie la présence et l'équivalence des alias techniques honnêtes."""
     assert LinearTetraDemoSolver is NonlinearFEASolver
     assert NacaAnalyticPolar is AerodynamicsSolver

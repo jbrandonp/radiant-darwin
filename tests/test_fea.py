@@ -60,3 +60,37 @@ def test_nonlinear_fem_sparse_assembly_and_solve() -> None:
     # Le déplacement selon Z au point d'application doit être négatif
     assert disp[3 * 3 + 2] < 0.0
 
+
+def test_fea_facade_reexports() -> None:
+    """Vérifie que la façade src.fea expose l'ensemble des solveurs et passerelles FEA/CFD."""
+    import src.fea as fea
+
+    expected_symbols = [
+        "BilinearPlasticMaterial",
+        "CalculixBridge",
+        "CalculixResultParser",
+        "CalculixSimulationDeck",
+        "CfdBoundaryCondition",
+        "CfdFluidType",
+        "CfdTurbulenceModel",
+        "FEAResult",
+        "FEASimulator",
+        "FeaElementType",
+        "FeaMaterial",
+        "FeaNodalResult",
+        "FrictionalContactPair",
+        "GmshElement",
+        "GmshElementType",
+        "GmshNode",
+        "GmshVolumetricMesher",
+        "LinearTetraDemoSolver",
+        "NodalForce",
+        "NonlinearFEASolver",
+        "OpenFoamCase",
+        "OpenFoamCaseGenerator",
+        "Tet10Element",
+    ]
+    for sym in expected_symbols:
+        assert hasattr(fea, sym), f"Le symbole {sym} doit être exposé par src.fea"
+        assert getattr(fea, sym) is not None
+

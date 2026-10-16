@@ -18,7 +18,7 @@ from src.core.operations_advanced import (
 from src.core.registry import FeatureRegistry, FeatureCategory
 
 
-def test_variable_radius_fillet_evaluation():
+def test_variable_radius_fillet_evaluation() -> None:
     """Vérifie l'application d'un congé à rayon variable sur un pavé droit."""
     box = make_box(40.0, 40.0, 40.0, name="BaseCube")
     bodies = {"body_cube": box}
@@ -41,7 +41,7 @@ def test_variable_radius_fillet_evaluation():
     assert res_solid.is_watertight() is True
 
 
-def test_multi_rail_loft_with_guide_curves():
+def test_multi_rail_loft_with_guide_curves() -> None:
     """Vérifie le lissage 3D peau tendue le long de rails directeurs."""
     # Création des deux profils d'esquisse
     s1 = Sketch2D("sketch_base", plane=PlaneType.XY, offset_distance=0.0)
@@ -78,7 +78,7 @@ def test_multi_rail_loft_with_guide_curves():
     assert b_max.z >= 45.0
 
 
-def test_dynamic_datum_plane_three_points():
+def test_dynamic_datum_plane_three_points() -> None:
     """Vérifie la création d'un plan de référence passant par 3 points non alignés."""
     p1 = (0.0, 0.0, 0.0)
     p2 = (10.0, 0.0, 0.0)
@@ -108,7 +108,7 @@ def test_dynamic_datum_plane_three_points():
     assert mat[3, 3] == 1.0
 
 
-def test_dynamic_datum_plane_normal_to_curve():
+def test_dynamic_datum_plane_normal_to_curve() -> None:
     """Vérifie la création d'un plan de référence normal à une tangente de courbe."""
     tangent = (0.0, 0.0, 1.0)
     p_curve = (15.0, 25.0, 30.0)
@@ -126,7 +126,7 @@ def test_dynamic_datum_plane_normal_to_curve():
     assert plane_feat.normal.z == pytest.approx(1.0, abs=1e-3)
 
 
-def test_partdesign_features_in_registry():
+def test_partdesign_features_in_registry() -> None:
     """Vérifie que les nouvelles features sont bien référencées dans le FeatureRegistry."""
     assert FeatureRegistry.is_registered("VariableRadiusFilletFeature") is True
     assert FeatureRegistry.is_registered("MultiRailLoftFeature") is True

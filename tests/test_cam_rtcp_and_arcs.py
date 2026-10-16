@@ -17,7 +17,7 @@ from src.cam.five_axis_cam import (
 )
 
 
-def test_rtcp_forward_and_inverse_kinematics():
+def test_rtcp_forward_and_inverse_kinematics() -> None:
     """Vérifie la cohérence géométrique bidirectionnelle de la cinématique RTCP."""
     engine = RTCPKinematicsEngine(
         kinematics_type=MachineKinematics5Axis.TABLE_TABLE_AC,
@@ -45,7 +45,7 @@ def test_rtcp_forward_and_inverse_kinematics():
     assert reconstructed_vec.z == pytest.approx(tool_vec.z, abs=1e-2)
 
 
-def test_arc_interpolator_chordal_tolerance():
+def test_arc_interpolator_chordal_tolerance() -> None:
     """Vérifie la discrétisation d'un arc de cercle sous contrainte de flèche géométrique."""
     interpolator = GCodeArcInterpolator(chordal_tolerance_mm=0.005)
 
@@ -64,7 +64,7 @@ def test_arc_interpolator_chordal_tolerance():
         assert dist == pytest.approx(100.0, abs=1e-3)
 
 
-def test_helical_gcode_generation():
+def test_helical_gcode_generation() -> None:
     """Vérifie la génération de blocs G-code hélicoïdaux G02."""
     interpolator = GCodeArcInterpolator()
     p0 = Vector3D(50.0, 0.0, 10.0)

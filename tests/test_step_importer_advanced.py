@@ -59,7 +59,7 @@ END-ISO-10303-21;
 """
 
 
-def test_step_importer_records_and_context():
+def test_step_importer_records_and_context() -> None:
     """Vérifie l'analyse syntaxique des entités STEP et du schéma AP214."""
     importer = STEPImporter()
     context = importer.import_step(SAMPLE_STEP_CUBE)
@@ -72,7 +72,7 @@ def test_step_importer_records_and_context():
     assert len(context.pmi_annotations) == 2
 
 
-def test_step_importer_to_nexus_solid_topology():
+def test_step_importer_to_nexus_solid_topology() -> None:
     """Vérifie la reconstitution de la topologie B-Rep et la création de NexusSolid."""
     importer = STEPImporter()
     nexus_solid = importer.import_to_nexus_solid(SAMPLE_STEP_CUBE, solid_name="TestCube")
@@ -90,7 +90,7 @@ def test_step_importer_to_nexus_solid_topology():
     assert nexus_solid.is_watertight() is True
 
 
-def test_step_importer_to_cad_solid():
+def test_step_importer_to_cad_solid() -> None:
     """Vérifie la conversion directe en Solid éditable CAD Studio."""
     importer = STEPImporter()
     cad_solid = importer.import_to_cad_solid(SAMPLE_STEP_CUBE)
@@ -104,7 +104,7 @@ def test_step_importer_to_cad_solid():
     assert b_max.z >= 20.0
 
 
-def test_step_importer_import_model_with_metadata():
+def test_step_importer_import_model_with_metadata() -> None:
     """Vérifie le conteneur STEPModel avec métadonnées et PMI."""
     importer = STEPImporter()
     model: STEPModel = importer.import_model(SAMPLE_STEP_CUBE)

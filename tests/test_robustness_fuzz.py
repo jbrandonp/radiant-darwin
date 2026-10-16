@@ -17,7 +17,7 @@ from src.fea.fea_solver import FEASimulator
 from src.cam.cam_engine import CAMEngine
 
 
-def test_micro_and_macro_dimensions():
+def test_micro_and_macro_dimensions() -> None:
     """Vérifie la robustesse face à des dimensions microscopiques (1e-4 mm) et colossales (1e5 mm)."""
     # Micro-solide
     micro_box = make_box(0.001, 0.001, 0.001)
@@ -34,7 +34,7 @@ def test_micro_and_macro_dimensions():
     assert not res.is_empty()
 
 
-def test_linear_pattern_dos_protection():
+def test_linear_pattern_dos_protection() -> None:
     """Vérifie que la répétition linéaire plafonne le nombre d'occurrences pour éviter le DoS mémoire."""
     doc = CADDocument("PatternTest")
     f_box = BoxFeature("b1", "Base", width=10, height=10, depth=10)
@@ -47,7 +47,7 @@ def test_linear_pattern_dos_protection():
     assert doc.bodies["body_b1"] is not None
 
 
-def test_safe_expression_evaluator_adversarial_inputs():
+def test_safe_expression_evaluator_adversarial_inputs() -> None:
     """Vérifie la protection face aux expressions malveillantes ou erronées."""
     ctx = {"x": 10.0}
 
@@ -76,7 +76,7 @@ def test_safe_expression_evaluator_adversarial_inputs():
         SafeExpressionEvaluator.evaluate("((10 + 2)", ctx)
 
 
-def test_extrude_polygon_degenerate_cases():
+def test_extrude_polygon_degenerate_cases() -> None:
     """Vérifie la levée d'exceptions propres sur polygones dégénérés."""
     # Moins de 3 points
     with pytest.raises(ValueError, match="au moins 3 points"):
@@ -89,7 +89,7 @@ def test_extrude_polygon_degenerate_cases():
     assert neg_extrude.volume() > 0.0
 
 
-def test_timeline_rollback_fuzzing():
+def test_timeline_rollback_fuzzing() -> None:
     """Vérifie que des oscillations rapides et extrêmes du curseur temporel ne désynchronisent pas le modèle."""
     doc = CADDocument("RollbackFuzz")
     for i in range(5):
@@ -104,7 +104,7 @@ def test_timeline_rollback_fuzzing():
         assert len(b_ids) >= 1
 
 
-def test_fea_zero_force_resilience():
+def test_fea_zero_force_resilience() -> None:
     """Vérifie que le simulateur FEA gère l'absence de force ou force nulle sans division par zéro."""
     box = make_box(20, 20, 40)
     sim = FEASimulator()
@@ -115,7 +115,7 @@ def test_fea_zero_force_resilience():
     assert res.is_safe
 
 
-def test_cam_engine_zero_depth_and_inverted_stock():
+def test_cam_engine_zero_depth_and_inverted_stock() -> None:
     """Vérifie que le moteur CAM gère des profondeurs nulles ou des bornes inversées sans boucle infinie."""
     cam = CAMEngine()
     # Bornes inversées x0 > x1, y0 > y1

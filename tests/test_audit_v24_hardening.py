@@ -20,7 +20,7 @@ from src.solver.constraints_2d import SketchConstraintSolver2D
 from src.fea.fea_solver import FEASimulator, _vectorized_colormap_jet
 
 
-def test_expression_units_and_constants():
+def test_expression_units_and_constants() -> None:
     """Vérifie l'évaluation des unités d'ingénierie et des constantes mathématiques."""
     ctx = {"length": 50.0}
     # Unités transparentes
@@ -36,7 +36,7 @@ def test_expression_units_and_constants():
     assert pytest.approx(SafeExpressionEvaluator.evaluate("sin(90deg)", ctx), rel=1e-5) == 1.0
 
 
-def test_camera_pan_in_zenith_view():
+def test_camera_pan_in_zenith_view() -> None:
     """Vérifie que la caméra effectue un panoramique fluide même en vue de dessus / TOP."""
     cam = CADCamera()
     cam.set_preset_view("TOP")
@@ -49,7 +49,7 @@ def test_camera_pan_in_zenith_view():
     assert cam.target != initial_target
 
 
-def test_fea_vectorized_colormap():
+def test_fea_vectorized_colormap() -> None:
     """Vérifie le dégradé cartographique vectorisé sur des tableaux NumPy."""
     vals = np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0], dtype=np.float32)
     rgba = _vectorized_colormap_jet(vals)
@@ -69,7 +69,7 @@ def test_fea_vectorized_colormap():
     assert len(heatmap.vertex_colors) == len(heatmap.vertices)
 
 
-def test_assembly_joint_limits_and_cylindrical():
+def test_assembly_joint_limits_and_cylindrical() -> None:
     """Vérifie le bridage des butées de course (min/max) et les liaisons pivot-glissant."""
     mgr = AssemblyManager()
     b1 = make_box(20, 20, 20)
@@ -98,7 +98,7 @@ def test_assembly_joint_limits_and_cylindrical():
     assert j_cyl.current_value == 30.0
 
 
-def test_document_feature_suppression_invalidation():
+def test_document_feature_suppression_invalidation() -> None:
     """Vérifie que la désactivation d'une feature invalide le cache et reconstruit le modèle."""
     doc = CADDocument("TestDoc")
     f1 = BoxFeature("f1", "Box 1", width=20.0, height=20.0, depth=20.0)
@@ -117,7 +117,7 @@ def test_document_feature_suppression_invalidation():
     assert len(doc.bodies) == 2
 
 
-def test_solver_2d_diagnostics():
+def test_solver_2d_diagnostics() -> None:
     """Vérifie le calcul des degrés de liberté et la détection des sur-contraintes."""
     solver = SketchConstraintSolver2D()
     p0 = solver.add_point(Point2D(0.0, 0.0))
@@ -139,7 +139,7 @@ def test_solver_2d_diagnostics():
     assert "Entièrement contrainte" in msg3
 
 
-def test_inertia_tensor_robustness():
+def test_inertia_tensor_robustness() -> None:
     """Vérifie que le tenseur d'inertie gère les maillages et fournit des moments positifs."""
     box = make_box(20.0, 30.0, 40.0)
     inertia = compute_inertia_tensor(box, density_g_cm3=2.7)

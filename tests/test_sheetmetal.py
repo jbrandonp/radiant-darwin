@@ -112,3 +112,20 @@ def test_dxf_laser_exporter() -> None:
         assert "BEND" in content
         assert "EOF" in content
         assert os.path.getsize(dxf_path) > 100
+
+
+def test_sheetmetal_facade_reexports() -> None:
+    """Vérifie que le package src.sheetmetal ré-exporte toutes les entités de tôlerie et DXF."""
+    import src.sheetmetal as sm
+
+    expected_symbols = [
+        "SheetMetalRule",
+        "BendInfo",
+        "FlatPattern",
+        "SheetMetalPart",
+        "SheetMetalFeature",
+        "DXFExporter",
+    ]
+    for sym in expected_symbols:
+        assert hasattr(sm, sym), f"Le symbole {sym} doit être exposé par src.sheetmetal"
+        assert getattr(sm, sym) is not None

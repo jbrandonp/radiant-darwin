@@ -13,10 +13,26 @@ from src.solver.constraints_2d import (
     GeometricConstraint2D,
     SketchConstraintSolver2D,
 )
+from src.core.live_sketch_solver import (
+    DragConstraintType,
+    DofDiagnosticStatus,
+    DofDiagnosticResult,
+    DragConstraint,
+    diagnose_degrees_of_freedom,
+    LiveDragSolver,
+)
 
 __all__ = [
+    # Solveur non linéaire Levenberg-Marquardt
     "ConstraintType",
     "GeometricConstraint",
     "GeometricConstraint2D",
     "SketchConstraintSolver2D",
+    # Solveur dynamique temps réel & Diagnostic DoF
+    "DragConstraintType",
+    "DofDiagnosticStatus",
+    "DofDiagnosticResult",
+    "DragConstraint",
+    "diagnose_degrees_of_freedom",
+    "LiveDragSolver",
 ]

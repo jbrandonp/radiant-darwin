@@ -18,7 +18,7 @@ from src.core.sketch import (
 from src.core.types import Point2D, PlaneType
 
 
-def test_sketch_add_external_reference():
+def test_sketch_add_external_reference() -> None:
     """Vérifie la projection d'une arête 3D en trait de référence passif violet."""
     sketch = Sketch2D("sketch_test", "MainSketch", plane=PlaneType.XY, offset_distance=10.0)
 
@@ -43,7 +43,7 @@ def test_sketch_add_external_reference():
     assert len(sketch.get_construction_entities()) == 1
 
 
-def test_sketch_driven_vs_driving_dimensions():
+def test_sketch_driven_vs_driving_dimensions() -> None:
     """Vérifie l'enregistrement et le calcul des cotes pilotées (driven) et actives (driving)."""
     sketch = Sketch2D("sketch_dims", plane=PlaneType.XY)
     l1 = sketch.add_line(Point2D(0.0, 0.0), Point2D(30.0, 40.0))
@@ -63,7 +63,7 @@ def test_sketch_driven_vs_driving_dimensions():
     assert len(sketch.get_driven_dimensions()) == 1
 
 
-def test_sketch_trim_segment():
+def test_sketch_trim_segment() -> None:
     """Vérifie la découpe d'un segment de ligne par un trait sécant."""
     sketch = Sketch2D("sketch_trim", plane=PlaneType.XY)
     target = sketch.add_line(Point2D(0.0, 10.0), Point2D(50.0, 10.0))
@@ -77,7 +77,7 @@ def test_sketch_trim_segment():
     assert trimmed.p2.v == pytest.approx(10.0)
 
 
-def test_sketch_extend_segment():
+def test_sketch_extend_segment() -> None:
     """Vérifie le prolongement d'un segment jusqu'à une droite frontière."""
     sketch = Sketch2D("sketch_extend", plane=PlaneType.XY)
     target = sketch.add_line(Point2D(0.0, 10.0), Point2D(15.0, 10.0))
@@ -90,7 +90,7 @@ def test_sketch_extend_segment():
     assert extended.p2.v == pytest.approx(10.0)
 
 
-def test_sketch_fillet_and_chamfer_2d():
+def test_sketch_fillet_and_chamfer_2d() -> None:
     """Vérifie la création de congés et chanfreins 2D entre deux lignes orthogonales."""
     # Test Fillet
     sketch_f = Sketch2D("sketch_fillet", plane=PlaneType.XY)
@@ -118,7 +118,7 @@ def test_sketch_fillet_and_chamfer_2d():
     assert bevel.p2.v == pytest.approx(4.0, abs=1e-2)
 
 
-def test_sketch_porcupine_comb_2d():
+def test_sketch_porcupine_comb_2d() -> None:
     """Vérifie la génération du peigne de courbure (porcupine comb) sur une courbe de Bézier."""
     sketch = Sketch2D("sketch_comb", plane=PlaneType.XY)
     ctrl_pts = [Point2D(0.0, 0.0), Point2D(10.0, 20.0), Point2D(20.0, 0.0)]

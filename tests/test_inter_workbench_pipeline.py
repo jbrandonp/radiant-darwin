@@ -25,7 +25,7 @@ from src.drawing.drawing_generator import TechnicalDrawingGenerator
 from src.drawing.svg_exporter import SVGDrawingExporter
 
 
-def test_full_inter_workbench_industrial_pipeline():
+def test_full_inter_workbench_industrial_pipeline() -> None:
     """Vérifie la traversée continue des 5 ateliers métiers sans rupture de données."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         # 1. Esquisse 2D fermée (Plaque rectangulaire 80x50 avec perçage)

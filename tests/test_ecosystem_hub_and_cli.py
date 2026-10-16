@@ -5,6 +5,7 @@ Vérifie la coordination de tous les modules industriels et l'exécution headles
 
 from __future__ import annotations
 import os
+from pathlib import Path
 import pytest
 import numpy as np
 
@@ -25,7 +26,7 @@ from src.cli import (
 )
 
 
-def test_ecosystem_hub_full_orchestration():
+def test_ecosystem_hub_full_orchestration() -> None:
     """Vérifie l'orchestration complète des ateliers via le Master Hub."""
     doc = CADDocument("MasterOrchestrationDoc")
     box = make_box(60.0, 40.0, 20.0, center=True)
@@ -70,7 +71,7 @@ def test_ecosystem_hub_full_orchestration():
     assert summary.ecad_thermal_max_c > 25.0
 
 
-def test_cli_parser_and_commands(tmp_path):
+def test_cli_parser_and_commands(tmp_path: Path) -> None:
     """Vérifie le fonctionnement de l'interface en ligne de commande industrielle."""
     parser = build_cli_parser()
 

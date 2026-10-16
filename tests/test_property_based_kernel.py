@@ -14,7 +14,7 @@ from hypothesis import given, settings, HealthCheck, strategies as st
 from src.core.types import Vector3D
 from src.core.geometry import Solid, make_box, make_cylinder, make_sphere
 from src.core.inspector import compute_center_of_mass, compute_inertia_tensor
-from src.core.nexus_kernel.euler_operators import NexusEulerOperators
+from src.core.nexus_kernel.euler_operators import NexusEulerOperators, NexusBRep
 from src.core.nexus_kernel.property_strategies import (
     bounded_dimension,
     bounded_translation_vector,
@@ -61,7 +61,7 @@ def test_prop_euler_poincare_polyhedra(poly: PolyhedralTopology) -> None:
 
 @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(brep=bounded_euler_brep_sequence())
-def test_prop_euler_poincare_atomic_operators(brep) -> None:
+def test_prop_euler_poincare_atomic_operators(brep: NexusBRep) -> None:
     """
     Vérifie que chaque solide B-Rep construit par une chaîne d'opérateurs
     d'Euler atomiques (MVFS, MEV, MEF) préserve strictement l'invariant d'Euler-Poincaré.

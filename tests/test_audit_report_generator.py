@@ -6,6 +6,7 @@ et la validité des visualisations SVG (CodeScene, Complexité Cognitive, Coupla
 
 from __future__ import annotations
 import os
+from pathlib import Path
 import xml.etree.ElementTree as ET
 import pytest
 from typing import Dict, List, Set, Tuple
@@ -25,9 +26,11 @@ from scripts.industrial_audit_engine import (
     QualityGateVerdict
 )
 
+AuditDataTuple = Tuple[List[FileAuditReport], List[FunctionQualityMetrics], Dict[str, Set[str]], Dict[str, Dict[str, float]], QualityGateVerdict]
+
 
 @pytest.fixture
-def dummy_audit_data() -> Tuple[List[FileAuditReport], List[FunctionQualityMetrics], Dict[str, Set[str]], Dict[str, Dict[str, float]], QualityGateVerdict]:
+def dummy_audit_data() -> AuditDataTuple:
     """Jeu de données de test représentatif d'une suite d'audit."""
     fn1 = FunctionQualityMetrics(
         file_path="src/core/geometry.py",
@@ -137,7 +140,7 @@ def test_shields_badge_svg_xml_validity() -> None:
     assert "#555" in svg_str
 
 
-def test_shields_badge_standard_set_generation(tmp_path) -> None:
+def test_shields_badge_standard_set_generation(tmp_path: Path) -> None:
     """Vérifie la génération complète des 4 badges requis sur disque."""
     badges_dir = str(tmp_path / "badges")
     badges = ShieldsBadgeGenerator.generate_standard_badges(
@@ -169,7 +172,7 @@ def test_shields_badge_standard_set_generation(tmp_path) -> None:
 # Tests pour les Visualisations SVG Interactives
 # ==============================================================================
 
-def test_codescene_quadrant_svg_generation(dummy_audit_data) -> None:
+def test_codescene_quadrant_svg_generation(dummy_audit_data: AuditDataTuple) -> None:
     """Vérifie la structure et les éléments du quadrant CodeScene."""
     reports, _, _, _, _ = dummy_audit_data
     svg = CodeSceneQuadrantSvgGenerator.generate_svg(reports)
@@ -183,7 +186,7 @@ def test_codescene_quadrant_svg_generation(dummy_audit_data) -> None:
     assert 'data-file="src/cam/toolpath.py"' in svg
 
 
-def test_cognitive_distribution_svg_generation(dummy_audit_data) -> None:
+def test_cognitive_distribution_svg_generation(dummy_audit_data: AuditDataTuple) -> None:
     """Vérifie le graphique de distribution de la complexité cognitive."""
     reports, all_funcs, _, _, _ = dummy_audit_data
     svg = CognitiveDistributionSvgGenerator.generate_svg(reports, all_funcs)
@@ -195,7 +198,7 @@ def test_cognitive_distribution_svg_generation(dummy_audit_data) -> None:
     assert "tier-bar-group" in svg
 
 
-def test_architecture_coupling_svg_generation(dummy_audit_data) -> None:
+def test_architecture_coupling_svg_generation(dummy_audit_data: AuditDataTuple) -> None:
     """Vérifie le graphe de couplage architectural en SVG."""
     _, _, deps, coupling, _ = dummy_audit_data
     svg = ArchitectureCouplingSvgGenerator.generate_svg(deps, coupling)
@@ -211,7 +214,7 @@ def test_architecture_coupling_svg_generation(dummy_audit_data) -> None:
 # Tests pour le Tableau Interactif et le Rapport HTML Global
 # ==============================================================================
 
-def test_html_audit_table_generation(dummy_audit_data) -> None:
+def test_html_audit_table_generation(dummy_audit_data: AuditDataTuple) -> None:
     """Vérifie les composants du tableau d'audit dynamique."""
     reports, _, _, _, _ = dummy_audit_data
     tbl_html = HtmlAuditTableGenerator.generate_table_html(reports)
@@ -225,7 +228,7 @@ def test_html_audit_table_generation(dummy_audit_data) -> None:
     assert "btnNextPage" in tbl_html
 
 
-def test_html_audit_report_end_to_end(dummy_audit_data, tmp_path) -> None:
+def test_html_audit_report_end_to_end(dummy_audit_data: AuditDataTuple, tmp_path: Path) -> None:
     """Vérifie la génération complète de docs/audit_report.html sans dépendance externe bloquante."""
     reports, all_funcs, deps, coupling, qg_verdict = dummy_audit_data
     html_path = str(tmp_path / "docs" / "audit_report.html")
@@ -273,7 +276,7 @@ def test_html_audit_report_end_to_end(dummy_audit_data, tmp_path) -> None:
     assert "fonts.googleapis.com" not in report_content.lower()
 
 
-def test_github_step_summary_injection(dummy_audit_data, tmp_path) -> None:
+def test_github_step_summary_injection(dummy_audit_data: AuditDataTuple, tmp_path: Path) -> None:
     """Vérifie l'écriture et l'injection dans $GITHUB_STEP_SUMMARY."""
     reports, _, _, _, qg_verdict = dummy_audit_data
     summary_md_path = str(tmp_path / "docs" / "audit_summary.md")

@@ -17,7 +17,7 @@ from src.fea.fea_solver import FEASimulator, _vectorized_colormap_jet
 from src.solver.constraints_2d import SketchConstraintSolver2D
 
 
-def test_benchmark_csg_boolean_speed():
+def test_benchmark_csg_boolean_speed() -> None:
     """Vérifie que l'union et la soustraction booléenne Manifold3D s'exécutent en moins de 50 ms."""
     b = make_box(30.0, 30.0, 30.0)
     c = make_cylinder(8.0, 40.0, center=True)
@@ -31,7 +31,7 @@ def test_benchmark_csg_boolean_speed():
     assert duration_ms < 50.0  # Doit être quasi-instantané (< 50 ms)
 
 
-def test_benchmark_solver_2d_convergence_speed():
+def test_benchmark_solver_2d_convergence_speed() -> None:
     """Vérifie que la résolution d'une esquisse à 6 contraintes prend moins de 30 ms."""
     solver = SketchConstraintSolver2D()
     p0 = solver.add_point(Point2D(0.0, 0.0))
@@ -55,7 +55,7 @@ def test_benchmark_solver_2d_convergence_speed():
     assert duration_ms < 30.0
 
 
-def test_benchmark_vectorized_fea_colormap_speed():
+def test_benchmark_vectorized_fea_colormap_speed() -> None:
     """Vérifie que la colormap vectorisée traite 20 000 sommets en moins de 10 ms."""
     vals = np.linspace(0.0, 1.0, 20000, dtype=np.float32)
 
@@ -68,7 +68,7 @@ def test_benchmark_vectorized_fea_colormap_speed():
     assert duration_ms < 10.0
 
 
-def test_benchmark_extract_sharp_edges_speed():
+def test_benchmark_extract_sharp_edges_speed() -> None:
     """Vérifie que l'extraction dièdre vectorisée des arêtes vives s'exécute en moins de 15 ms."""
     box = make_box(20.0, 20.0, 20.0)
     mesh = box.manifold.to_mesh()
@@ -85,7 +85,7 @@ def test_benchmark_extract_sharp_edges_speed():
     assert duration_ms < 15.0
 
 
-def test_benchmark_expression_evaluator_throughput():
+def test_benchmark_expression_evaluator_throughput() -> None:
     """Vérifie que l'évaluateur d'expressions mathématiques dépasse 5 000 évaluations / seconde."""
     ctx = {"length": 50.0, "width": 20.0}
     expr = "sqrt(length ** 2 + width ** 2) + 10mm"
@@ -101,7 +101,7 @@ def test_benchmark_expression_evaluator_throughput():
     assert evals_per_sec > 5000.0
 
 
-def test_benchmark_rollback_cache_instant_restoration():
+def test_benchmark_rollback_cache_instant_restoration() -> None:
     """Vérifie que la restauration d'instantané depuis le cache se fait en O(1) (< 2 ms)."""
     doc = CADDocument("RollbackBench")
     for i in range(10):

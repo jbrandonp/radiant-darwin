@@ -50,6 +50,11 @@ from src.core.nexus_kernel.closed_loop_kinematics import (
     ClosedLoopKinematicEngine,
 )
 
+# Alias ergonomiques
+ExplodedViewStep = ExplodedStep
+ExplodedViewEngine = ExplodedViewGenerator
+ClosedLoopKinematicSolver = ClosedLoopKinematicEngine
+
 __all__ = [
     # Gestionnaire & Interférences
     "JointType",
@@ -67,6 +72,8 @@ __all__ = [
     "RackPinionMate",
     "ScrewMate",
     "BallJointMate",
+    "ExplodedStep",
+    "ExplodedViewGenerator",
     "ExplodedViewStep",
     "ExplodedViewEngine",
     # Joints Fusion
@@ -76,6 +83,7 @@ __all__ = [
     "AssemblyJoint",
     "JointKinematicSolver",
     # Boucle fermée
-    "KinematicLoop",
+    "ClosedLoopDynamicsResult",
+    "ClosedLoopKinematicEngine",
     "ClosedLoopKinematicSolver",
 ]

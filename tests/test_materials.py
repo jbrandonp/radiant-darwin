@@ -35,3 +35,13 @@ def test_mass_and_center_of_mass_calculation() -> None:
     assert pytest.approx(com.x, 0.1) == 0.0
     assert pytest.approx(com.y, 0.1) == 0.0
     assert pytest.approx(com.z, 0.1) == 0.0
+
+
+def test_materials_facade_reexports() -> None:
+    """Vérifie que la façade src.materials expose tous les symboles attendus."""
+    import src.materials as mat
+
+    expected_symbols = ["PhysicalMaterial", "MATERIAL_LIBRARY", "MaterialCalculator"]
+    for sym in expected_symbols:
+        assert hasattr(mat, sym), f"Le symbole {sym} doit être exposé par src.materials"
+        assert getattr(mat, sym) is not None

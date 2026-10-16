@@ -14,7 +14,7 @@ from src.core.inspector import compute_center_of_mass, compute_inertia_tensor
 from src.solver.constraints_2d import SketchConstraintSolver2D
 
 
-def test_volume_boolean_inclusion_exclusion_principle():
+def test_volume_boolean_inclusion_exclusion_principle() -> None:
     """Vérifie le principe d'inclusion-exclusion volumique : V(A U B) = V(A) + V(B) - V(A inter B)."""
     box_a = make_box(20.0, 20.0, 20.0, center=True)
     # Cylindre partiellement sécant
@@ -38,7 +38,7 @@ def test_volume_boolean_inclusion_exclusion_principle():
     assert pytest.approx(vol_diff, rel=1e-3) == (vol_a - vol_inter)
 
 
-def test_isometry_volume_invariance():
+def test_isometry_volume_invariance() -> None:
     """Vérifie que les transformations rigides (Translation, Rotation) conservent le volume."""
     sphere = make_sphere(12.0)
     base_vol = sphere.volume()
@@ -55,7 +55,7 @@ def test_isometry_volume_invariance():
     assert pytest.approx(rotated.surface_area(), rel=1e-5) == base_area
 
 
-def test_scaling_similarity_invariants():
+def test_scaling_similarity_invariants() -> None:
     """Vérifie que la mise à l'échelle homothétique fait varier le volume en s^3 et l'aire en s^2."""
     box = make_box(10.0, 10.0, 10.0, center=True)
     scale_factor = 2.5
@@ -68,7 +68,7 @@ def test_scaling_similarity_invariants():
     assert pytest.approx(scaled.surface_area(), rel=1e-4) == expected_area
 
 
-def test_center_of_mass_symmetry():
+def test_center_of_mass_symmetry() -> None:
     """Vérifie que le centre de gravité d'une forme symétrique centrée est exactement à l'origine."""
     box = make_box(30.0, 40.0, 50.0, center=True)
     com = compute_center_of_mass(box)
@@ -77,7 +77,7 @@ def test_center_of_mass_symmetry():
     assert abs(com.z) < 1e-4
 
 
-def test_inertia_tensor_symmetry_and_positive_definiteness():
+def test_inertia_tensor_symmetry_and_positive_definiteness() -> None:
     """Vérifie la symétrie du tenseur d'inertie (I_ij = I_ji) et la positivité des valeurs propres."""
     box = make_box(20.0, 30.0, 40.0)
     inertia = compute_inertia_tensor(box, density_g_cm3=2.7)
@@ -101,7 +101,7 @@ def test_inertia_tensor_symmetry_and_positive_definiteness():
     assert all(rg > 0.0 for rg in inertia.radius_of_gyration)
 
 
-def test_solver_2d_convergence_and_idempotence():
+def test_solver_2d_convergence_and_idempotence() -> None:
     """Vérifie l'idempotence du solveur de contraintes 2D : re-résoudre un état équilibré ne déplace pas les points."""
     solver = SketchConstraintSolver2D()
     p0 = solver.add_point(Point2D(0.0, 0.0))

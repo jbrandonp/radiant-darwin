@@ -96,3 +96,61 @@ def test_solve_perpendicular() -> None:
     # Segment 2 perpendiculaire à l'horizontale => vertical => u(p3) == 5.0
     assert pytest.approx(pts[3].u, abs=1e-3) == 5.0
     assert pytest.approx(pts[3].v, abs=1e-3) == 15.0
+
+
+def test_solver_package_facade_reexports() -> None:
+    """Vérifie que le package src.solver expose de manière intègre les solveurs 2D et DDL."""
+    import src.solver as slv
+
+    expected_symbols = [
+        "ConstraintType",
+        "GeometricConstraint",
+        "GeometricConstraint2D",
+        "SketchConstraintSolver2D",
+        "DragConstraintType",
+        "DofDiagnosticStatus",
+        "DofDiagnosticResult",
+        "DragConstraint",
+        "diagnose_degrees_of_freedom",
+        "LiveDragSolver",
+    ]
+    for sym in expected_symbols:
+        assert hasattr(slv, sym), f"Le symbole {sym} doit être exposé par src.solver"
+        assert getattr(slv, sym) is not None
+
+
+def test_live_drag_solver_and_dof() -> None:
+    """Vérifie le solveur temps réel de glisser-déplacer et le calcul de DDL."""
+    from src.solver import (
+        LiveDragSolver,
+        DragConstraint,
+        DragConstraintType,
+        diagnose_degrees_of_freedom,
+        DofDiagnosticStatus,
+    )
+
+    # 1. Diagnostic DoF : 2 points (4 DDL), 3 contraintes -> 1 DDL restant
+    dof_res = diagnose_degrees_of_freedom(num_points=2, num_independent_constraints=3)
+    assert dof_res.status == DofDiagnosticStatus.UNDER_CONSTRAINED
+    assert dof_res.degrees_of_freedom == 1
+
+    # 4 DDL et 4 contraintes -> Entièrement contraint (0 DDL)
+    dof_res_fully = diagnose_degrees_of_freedom(num_points=2, num_independent_constraints=4)
+    assert dof_res_fully.status == DofDiagnosticStatus.FULLY_CONSTRAINED
+    assert dof_res_fully.degrees_of_freedom == 0
+
+    # 2. Glisser-déplacer interactif
+    drag_solver = LiveDragSolver(tolerance=1e-5)
+    c_horiz = DragConstraint(
+        id="c_h",
+        constraint_type=DragConstraintType.HORIZONTAL,
+        entity_indices=(1,),
+        target_val=12.5
+    )
+    res_pos = drag_solver.live_drag_step(
+        dragged_index=1,
+        target_pos=Point2D(45.0, 99.0),
+        active_constraints=[c_horiz]
+    )
+    assert res_pos.x == 45.0
+    assert res_pos.y == 12.5

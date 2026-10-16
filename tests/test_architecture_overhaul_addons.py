@@ -11,6 +11,7 @@ Couvre:
 
 from __future__ import annotations
 import os
+from pathlib import Path
 import tempfile
 import pytest
 
@@ -47,7 +48,7 @@ from src.core.worker_pool import (
 from src.ai.cad_validator import CADValidator
 
 
-def test_user_preferences_atomic_save_and_load(tmp_path):
+def test_user_preferences_atomic_save_and_load(tmp_path: Path) -> None:
     """Vérifie la sérialisation atomique et le rechargement des préférences utilisateur."""
     config_file = str(tmp_path / "cad_prefs.json")
     mgr = PreferencesManager(config_path=config_file)
@@ -78,7 +79,7 @@ def test_user_preferences_atomic_save_and_load(tmp_path):
     assert action_pan == NavigationAction.PAN
 
 
-def test_crash_journal_and_recovery(tmp_path):
+def test_crash_journal_and_recovery(tmp_path: Path) -> None:
     """Vérifie le journal transactionnel Write-Ahead Log (WAL) et la reprise après crash."""
     journal_path = str(tmp_path / "session_crashed.journal")
     journal = TransactionJournal(journal_path=journal_path, document_name="CrashTestDoc")
@@ -101,7 +102,7 @@ def test_crash_journal_and_recovery(tmp_path):
     assert len(dirty_after) == 0
 
 
-def test_3mf_opc_container_and_beam_lattice():
+def test_3mf_opc_container_and_beam_lattice() -> None:
     """Vérifie l'export 3MF Core et l'extension Beam Lattice en conteneur OPC ZIP."""
     lattice = BeamLatticeTopology()
     n0 = lattice.add_node(0.0, 0.0, 0.0)
@@ -120,7 +121,7 @@ def test_3mf_opc_container_and_beam_lattice():
     assert zip_bytes[:2] == b"PK"
 
 
-def test_dxf_2d_streaming_importer():
+def test_dxf_2d_streaming_importer() -> None:
     """Vérifie l'importateur DXF 2D sur des entités LINE, CIRCLE et LWPOLYLINE."""
     dxf_sample = """0
 SECTION
@@ -177,7 +178,7 @@ EOF"""
     assert len(sketch.entities) > 0
 
 
-def test_svg_streaming_importer():
+def test_svg_streaming_importer() -> None:
     """Vérifie l'importateur SVG pour les balises vectorielles et chemins cubiques."""
     svg_sample = """<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
       <line x1="10" y1="20" x2="150" y2="20" stroke="black" />
@@ -190,7 +191,7 @@ def test_svg_streaming_importer():
     assert len(sketch.entities) > 0
 
 
-def test_ai_sandbox_security_hardening():
+def test_ai_sandbox_security_hardening() -> None:
     """Vérifie que le validateur AST bloque strictement l'introspection malveillante."""
     safe_script = """
 import math
@@ -215,7 +216,7 @@ b = getattr(__builtins__, 'eval')
     assert CADValidator.validate_script_security(unsafe_builtins) is not None
 
 
-def test_threemf_export_to_file_with_lattice_balls(tmp_path) -> None:
+def test_threemf_export_to_file_with_lattice_balls(tmp_path: Path) -> None:
     """Vérifie l'écriture sur disque d'une archive .3mf avec treillis de poutres et rotules."""
     lattice = BeamLatticeTopology()
     n0 = lattice.add_node(0.0, 0.0, 0.0)

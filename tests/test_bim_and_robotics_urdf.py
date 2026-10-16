@@ -28,7 +28,7 @@ from src.specialized.robot_kinematics import (
 )
 
 
-def test_bim_slab_and_window_and_space():
+def test_bim_slab_and_window_and_space() -> None:
     """Vérifie la modélisation de dalle, fenêtre, espace intérieur et leur export IFC4."""
     rebar = BIMRebar(rebar_id="HA12", diameter_mm=12.0, length_mm=5000.0, count=10)
     assert rebar.steel_weight_kg > 0.0
@@ -66,7 +66,7 @@ def test_bim_slab_and_window_and_space():
     assert "Salon_Sejour" in ifc_text
 
 
-def test_robot_arm_urdf_generation_and_parsing():
+def test_robot_arm_urdf_generation_and_parsing() -> None:
     """Vérifie la génération standard d'un fichier URDF ROS et son analyse par le parseur."""
     robot = RobotArm6Axis(model_name="KUKA_KR6_6DoF")
 

@@ -29,7 +29,7 @@ from scripts.industrial_audit_engine import CodeSceneHotspotAnalyzer
 # PILIER 1 : CHURN VOLUMÉTRIQUE RÉEL VIA NUMSTAT
 # ==============================================================================
 
-def test_volumetric_churn_numstat_parsing():
+def test_volumetric_churn_numstat_parsing() -> None:
     """Vérifie le parsing exact du Churn volumétrique (lignes ajoutées et supprimées)."""
     mock_log = (
         "COMMIT|hash001|1700000000|Alice|alice@example.com\n"
@@ -61,7 +61,7 @@ def test_volumetric_churn_numstat_parsing():
     assert bin_file.lines_deleted == 0
 
 
-def test_git_path_rename_cleaning():
+def test_git_path_rename_cleaning() -> None:
     """Vérifie la normalisation robuste des chemins Git contenant des renommages."""
     assert CodeSceneSOTAAnalyzer.clean_git_path("src/{old => new}/file.py") == "src/new/file.py"
     assert CodeSceneSOTAAnalyzer.clean_git_path("old_module.py => new_module.py") == "new_module.py"
@@ -72,7 +72,7 @@ def test_git_path_rename_cleaning():
 # PILIER 2 : DÉCROISSANCE TEMPORELLE EXPONENTIELLE PAR DEMI-VIE (90 JOURS)
 # ==============================================================================
 
-def test_half_life_decay_exact_values():
+def test_half_life_decay_exact_values() -> None:
     """
     Vérifie les valeurs caractéristiques de la décroissance exponentielle :
     w(t) = 2^(-delta_t / 90.0)
@@ -105,7 +105,7 @@ def test_half_life_decay_exact_values():
     assert w_future == 1.0
 
 
-def test_decayed_volumetric_churn_accumulation():
+def test_decayed_volumetric_churn_accumulation() -> None:
     """Vérifie que le Churn accumulé applique la pondération par demi-vie aux modifications."""
     day = 86400.0
     t_ref = 1700000000.0
@@ -140,7 +140,7 @@ def test_decayed_volumetric_churn_accumulation():
 # PILIER 3 : COUPLAGE TEMPOREL MASQUÉ VIA JACCARD (J >= 0.35 SANS IMPORT)
 # ==============================================================================
 
-def test_jaccard_similarity_calculation():
+def test_jaccard_similarity_calculation() -> None:
     """
     Vérifie la formule de Jaccard :
     J(A, B) = |A inter B| / |A union B|
@@ -186,7 +186,7 @@ def test_jaccard_similarity_calculation():
     assert pair in report.hidden_couplings
 
 
-def test_hidden_temporal_coupling_filter_low_jaccard():
+def test_hidden_temporal_coupling_filter_low_jaccard() -> None:
     """Vérifie que les paires ayant un Jaccard < 0.35 sont exclues."""
     t_ref = 1700000000.0
     # Fichier A dans 10 commits, Fichier B dans 10 commits, 2 commits en commun
@@ -216,7 +216,7 @@ def test_hidden_temporal_coupling_filter_low_jaccard():
 # PILIER 4 : ENTROPIE DE PROPRIÉTÉ DE SHANNON (CODE OWNERSHIP)
 # ==============================================================================
 
-def test_shannon_entropy_single_author():
+def test_shannon_entropy_single_author() -> None:
     """Un auteur unique (100% ownership) doit produire une entropie nulle (H = 0.00 bits)."""
     contributions = {"Brandon": 500.0}
     h, max_h, norm_h, owner, share = CodeSceneSOTAAnalyzer.calculate_shannon_entropy(contributions)
@@ -227,7 +227,7 @@ def test_shannon_entropy_single_author():
     assert share == 1.0
 
 
-def test_shannon_entropy_two_equal_authors():
+def test_shannon_entropy_two_equal_authors() -> None:
     """Deux auteurs à 50%/50% doivent produire exactement H = 1.00 bit et norm_h = 1.00."""
     contributions = {"Alice": 250.0, "Bob": 250.0}
     h, max_h, norm_h, owner, share = CodeSceneSOTAAnalyzer.calculate_shannon_entropy(contributions)
@@ -238,7 +238,7 @@ def test_shannon_entropy_two_equal_authors():
     assert pytest.approx(share, 1e-5) == 0.5
 
 
-def test_shannon_entropy_four_equal_authors():
+def test_shannon_entropy_four_equal_authors() -> None:
     """Quatre auteurs à parts égales doivent produire H = 2.00 bits (log2(4))."""
     contributions = {"A": 100.0, "B": 100.0, "C": 100.0, "D": 100.0}
     h, max_h, norm_h, owner, share = CodeSceneSOTAAnalyzer.calculate_shannon_entropy(contributions)
@@ -249,7 +249,7 @@ def test_shannon_entropy_four_equal_authors():
     assert pytest.approx(share, 1e-5) == 0.25
 
 
-def test_shannon_entropy_skewed_distribution():
+def test_shannon_entropy_skewed_distribution() -> None:
     """Vérifie le calcul avec distribution asymétrique (ex. 90% Alice, 10% Bob)."""
     contributions = {"Alice": 900.0, "Bob": 100.0}
     h, max_h, norm_h, owner, share = CodeSceneSOTAAnalyzer.calculate_shannon_entropy(contributions)
@@ -263,7 +263,7 @@ def test_shannon_entropy_skewed_distribution():
     assert pytest.approx(norm_h, 1e-4) == expected_h / 1.0
 
 
-def test_hotspot_defect_risk_composite():
+def test_hotspot_defect_risk_composite() -> None:
     """Vérifie le calcul du Hotspot Index et du risque composite avec entropie."""
     t_ref = 1700000000.0
     mock_log = (
@@ -296,7 +296,7 @@ def test_hotspot_defect_risk_composite():
 # INTÉGRATION AVEC LE DÉPÔT GIT RÉEL DU PROJET
 # ==============================================================================
 
-def test_live_repository_codescene_analysis():
+def test_live_repository_codescene_analysis() -> None:
     """Vérifie l'exécution réelle sur le dépôt Git du projet sans régression."""
     report = CodeSceneSOTAAnalyzer.analyze_git_repository(src_dir="src", repo_dir=".")
 

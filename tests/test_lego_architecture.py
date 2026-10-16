@@ -26,7 +26,7 @@ from src.core.pipeline import (
 )
 
 
-def test_protocol_conformance_geometry_provider():
+def test_protocol_conformance_geometry_provider() -> None:
     """Vérifie que la classe Solid implémente fidèlement le protocole GeometryProvider."""
     box = make_box(20.0, 30.0, 40.0)
     assert isinstance(box, GeometryProvider)
@@ -39,7 +39,7 @@ def test_protocol_conformance_geometry_provider():
     assert not box.is_empty()
 
 
-def test_protocol_conformance_feature_evaluator():
+def test_protocol_conformance_feature_evaluator() -> None:
     """Vérifie que les fonctionnalités implémentent le protocole FeatureEvaluator."""
     feat = BoxFeature("f1", "TestBox", width=10.0, height=20.0, depth=30.0)
     assert isinstance(feat, FeatureEvaluator)
@@ -49,7 +49,7 @@ def test_protocol_conformance_feature_evaluator():
     assert not feat.is_suppressed
 
 
-def test_event_bus_publish_subscribe_and_isolation():
+def test_event_bus_publish_subscribe_and_isolation() -> None:
     """Vérifie la diffusion d'événements, le filtrage par type et l'isolation des erreurs."""
     bus = CADEventBus()
     received_docs: list[DocumentModifiedEvent] = []
@@ -85,7 +85,7 @@ def test_event_bus_publish_subscribe_and_isolation():
     assert len(received_docs) == 1  # Pas d'incrément après désabonnement
 
 
-def test_feature_registry_discovery_and_instantiation():
+def test_feature_registry_discovery_and_instantiation() -> None:
     """Vérifie l'enregistrement dynamique, la découverte et la création de briques LEGO."""
     bootstrap_default_features()
     all_features = FeatureRegistry.list_all()
@@ -107,7 +107,7 @@ def test_feature_registry_discovery_and_instantiation():
     assert FeatureRegistry.create("NonExistentFeature", "id1") is None
 
 
-def test_lego_pipeline_chaining_and_fluent_api():
+def test_lego_pipeline_chaining_and_fluent_api() -> None:
     """Vérifie le chaînage fluide d'opérations géométriques et l'historique intermédiaire."""
     initial_box = make_box(20.0, 20.0, 20.0)
     tool_cyl = make_cylinder(5.0, 30.0)
@@ -141,7 +141,7 @@ def test_lego_pipeline_chaining_and_fluent_api():
     assert probe_volumes[0] < initial_box.volume()
 
 
-def test_document_emits_lego_events():
+def test_document_emits_lego_events() -> None:
     """Vérifie que les mutations de CADDocument diffusent des événements sur le bus global."""
     from src.core.event_bus import global_event_bus
 

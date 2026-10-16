@@ -14,8 +14,14 @@ import math
 import html
 import json
 from datetime import datetime
-from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional, Set
+from typing import List, Dict, Tuple, Optional, Set, Protocol
+
+
+class QualityGateVerdictProtocol(Protocol):
+    """Protocole structurel pour le verdict formel de Quality Gate."""
+    passed: bool
+    status_label: str
+    gate_details: List[Tuple[str, bool, str]]
 
 
 # ==============================================================================
@@ -787,7 +793,7 @@ class HtmlAuditReportGenerator:
         cycles: List[Tuple[str, str]],
         coupling: Dict[str, Dict[str, float]],
         mutations: Dict[str, Tuple[bool, str]],
-        qg_verdict,
+        qg_verdict: QualityGateVerdictProtocol,
         summary_metrics: Dict[str, float],
         output_html_path: str = "docs/audit_report.html",
         badges_dir: str = "docs/badges",
@@ -858,7 +864,7 @@ class HtmlAuditReportGenerator:
         reports: List,
         all_functions: List,
         summary_metrics: Dict[str, float],
-        qg_verdict,
+        qg_verdict: QualityGateVerdictProtocol,
         mutations: Dict[str, Tuple[bool, str]],
         codescene_svg: str,
         cognitive_svg: str,
@@ -1843,7 +1849,7 @@ class GithubStepSummaryGenerator:
     def export(
         cls,
         summary_metrics: Dict[str, float],
-        qg_verdict,
+        qg_verdict: QualityGateVerdictProtocol,
         reports: List,
         mutations: Dict[str, Tuple[bool, str]],
         output_md_path: str = "docs/audit_summary.md",
@@ -1876,7 +1882,7 @@ class GithubStepSummaryGenerator:
             badge = "✅ PASS" if passed else "❌ FAIL"
             gate_rows.append(f"| {desc} | {val} | {badge} |")
 
-        tests_count = int(summary_metrics.get("total_tests_passed", 670))
+        tests_count = int(summary_metrics.get("total_tests_passed", 678))
         md_content = f"""# 🛡️ CAD Studio (Radiant-Darwin) — Industrial Quality Gate Report
 
 > **Verdict Global : {qg_verdict.status_label}**

@@ -34,7 +34,7 @@ from src.viewport.spatial_xr_lod import (
 # TEST 1 : CAM 5-AXES SANS GOUGES & ENVELOPPE PORTE-OUTIL
 # ==============================================================================
 
-def test_five_axis_gouge_avoidance_and_rtcp():
+def test_five_axis_gouge_avoidance_and_rtcp() -> None:
     """Vérifie l'orientation d'outil 5-axes, la détection de collision et le G-code."""
     holder = ToolHolderGeometry(
         cutter_radius=5.0,
@@ -82,7 +82,7 @@ def test_five_axis_gouge_avoidance_and_rtcp():
 # TEST 2 : PLACEMENT AUTOMATISÉ DE FIBRES CONTINUES (AFP) GUIDÉ PAR σ₁
 # ==============================================================================
 
-def test_afp_continuous_fiber_placement_stress_aligned():
+def test_afp_continuous_fiber_placement_stress_aligned() -> None:
     """Vérifie le traçage de mèches de carbone alignées sur les contraintes principales."""
     # Fonction de champ de contrainte : flexion pure avec traction en X et cisaillement XY
     def mock_stress_field(pos: Vector3D) -> StressTensor3D:
@@ -130,7 +130,7 @@ def test_afp_continuous_fiber_placement_stress_aligned():
 # TEST 3 : CONTRÔLE CMM ET RECALAGE LASER SCAN PAR ICP
 # ==============================================================================
 
-def test_cmm_metrology_svd_icp_alignment():
+def test_cmm_metrology_svd_icp_alignment() -> None:
     """Vérifie l'alignement rigide SVD-ICP et la détection d'écarts d'usinage."""
     # Modèle nominal : grille de points sur un plan horizontal Z = 0 avec normale +Z
     nominal_pts: list[Vector3D] = []
@@ -166,7 +166,7 @@ def test_cmm_metrology_svd_icp_alignment():
 # TEST 4 : JUMEAU NUMÉRIQUE ÉLECTRO-THERMIQUE ECAD ↔ MCAD (IPC-2581)
 # ==============================================================================
 
-def test_ecad_thermal_twin_joule_heating():
+def test_ecad_thermal_twin_joule_heating() -> None:
     """Vérifie le calcul des pertes Joule des pistes de cuivre et la diffusion thermique."""
     twin = ECADThermalTwin(board_width_mm=100.0, board_length_mm=80.0, board_thickness_mm=1.6)
 
@@ -212,7 +212,7 @@ def test_ecad_thermal_twin_joule_heating():
 # TEST 5 : STREAMING GRAPHIQUE XR & DÉCIMATION CONTINUE LOD (90 FPS)
 # ==============================================================================
 
-def test_spatial_xr_lod_streaming_at_90fps():
+def test_spatial_xr_lod_streaming_at_90fps() -> None:
     """Vérifie la sélection de niveau de détail (LOD) et le régulateur de budget de trame."""
     decimator = ContinuousLODDecimator(target_fps=90.0)
     assert pytest.approx(decimator.frame_budget_ms, 1e-2) == 11.11

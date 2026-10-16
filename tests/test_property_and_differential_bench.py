@@ -8,6 +8,7 @@ Garantit la conformité industrielle :
 """
 
 import os
+from pathlib import Path
 import json
 import time
 import pytest
@@ -19,7 +20,7 @@ from src.core.nexus_kernel.property_and_differential_bench import (
 )
 
 
-def test_property_and_differential_audit_bench_1000_cases_under_2_seconds(tmp_path) -> None:
+def test_property_and_differential_audit_bench_1000_cases_under_2_seconds(tmp_path: Path) -> None:
     """
     Exigence Maîtresse : Le banc d'audit continu PropertyAndDifferentialAuditBench
     doit être capable d'exécuter 1000 cas aléatoires en moins de 2 secondes (2000 ms).

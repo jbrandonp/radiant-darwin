@@ -50,7 +50,7 @@ from src.core.types import Point2D, Vector3D
 # PILIER 1 : SURFACES NURBS ANALYTIQUES CONTINUES (G1, G2, G3) & COONS PATCH
 # ============================================================================
 
-def test_pillar_1_nurbs_evaluation_and_curvatures():
+def test_pillar_1_nurbs_evaluation_and_curvatures() -> None:
     """Vérifie l'évaluation analytique exacte de surfaces NURBS, normales et courbures."""
     ctrl_pts = [
         [(0.0, 0.0, 0.0), (10.0, 0.0, 5.0), (20.0, 0.0, 0.0)],
@@ -94,7 +94,7 @@ def test_pillar_1_nurbs_evaluation_and_curvatures():
         assert len(tip_pt) == 3
 
 
-def test_pillar_1_coons_patch_and_g2_continuity():
+def test_pillar_1_coons_patch_and_g2_continuity() -> None:
     """Vérifie la génération d'un patch de Coons et la continuité de frontière G1/G2."""
     c_south = [(0.0, 0.0, 0.0), (10.0, 0.0, 2.0), (20.0, 0.0, 0.0)]
     c_north = [(0.0, 20.0, 0.0), (10.0, 20.0, 2.0), (20.0, 20.0, 0.0)]
@@ -116,7 +116,7 @@ def test_pillar_1_coons_patch_and_g2_continuity():
 # PILIER 2 : INTEROPÉRABILITÉ & IMPORTATEUR UNIVERSEL STEP (AP203/AP214/AP242)
 # ============================================================================
 
-def test_pillar_2_step_importer_ap242_with_pmi():
+def test_pillar_2_step_importer_ap242_with_pmi() -> None:
     """Vérifie le parsing STEP ISO 10303-21 Part 21 et l'extraction PMI AP242."""
     step_content = """ISO-10303-21;
 HEADER;
@@ -176,7 +176,7 @@ END-ISO-10303-21;
 # PILIER 3 : ATELIERS MÉTIERS SPÉCIALISÉS (BIM, ROBOTIQUE, CFD, ECAD/MCAD)
 # ============================================================================
 
-def test_pillar_3_bim_engine_and_ifc4_export():
+def test_pillar_3_bim_engine_and_ifc4_export() -> None:
     """Vérifie la génération de murs multicouches BIM, ferraillages et export IFC4."""
     layers = [
         BIMLayer(name="Beton_Arme", thickness=0.20, material="Concrete_C25_30"),
@@ -215,7 +215,7 @@ def test_pillar_3_bim_engine_and_ifc4_export():
     assert "IFCREINFORCINGBAR" in ifc_text.upper()
 
 
-def test_pillar_3_robot_6axis_kinematics_and_jacobians():
+def test_pillar_3_robot_6axis_kinematics_and_jacobians() -> None:
     """Vérifie la cinématique géométrique directe, le Jacobien 6x6 et la détection de singularité."""
     robot = RobotArm6Axis()
     home_angles = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -243,7 +243,7 @@ def test_pillar_3_robot_6axis_kinematics_and_jacobians():
     assert trajectory[-1] == pytest.approx(end_pos, abs=1e-3)
 
 
-def test_pillar_3_aerodynamics_cfd_solver():
+def test_pillar_3_aerodynamics_cfd_solver() -> None:
     """Vérifie le calcul des forces de portance, traînée, coefficients et décollement de couche limite."""
     solver = AerodynamicsSolver()
     flow = FluidFlowProperties(velocity_m_s=40.0, air_density=1.225, dynamic_viscosity=1.81e-5)
@@ -263,7 +263,7 @@ def test_pillar_3_aerodynamics_cfd_solver():
     assert solver.detect_boundary_layer_separation(angle_of_attack_deg=19.0) is True
 
 
-def test_pillar_3_ecad_mcad_pcb_clearance():
+def test_pillar_3_ecad_mcad_pcb_clearance() -> None:
     """Vérifie l'intégration PCB KiCadStepUp avec détection de collision dans le boîtier."""
     comps = [
         PCBComponent3D(designator="U1", package="QFP64", pos_x=25.0, pos_y=25.0, height_z=2.5, width_x=12.0, length_y=12.0),
@@ -284,7 +284,7 @@ def test_pillar_3_ecad_mcad_pcb_clearance():
 # PILIER 4 : SIMULATION MULTI-PHYSIQUE NON-LINÉAIRE (FEM TET10, PLASTICITÉ, CONTACT)
 # ============================================================================
 
-def test_pillar_4_tet10_element_and_plasticity():
+def test_pillar_4_tet10_element_and_plasticity() -> None:
     """Vérifie l'élément quadratique tétraédrique Tet10 et la plasticité de von Mises."""
     # 4 sommets + 6 nœuds milieux d'arêtes
     nodes = np.array([
@@ -318,7 +318,7 @@ def test_pillar_4_tet10_element_and_plasticity():
     assert eps_p > 0.0
 
 
-def test_pillar_4_frictional_contact_solver():
+def test_pillar_4_frictional_contact_solver() -> None:
     """Vérifie la formulation de contact frottant de Coulomb par pénalité."""
     contact = FrictionalContactPair(penalty_normal=1e5, friction_coefficient=0.25)
 
@@ -333,7 +333,7 @@ def test_pillar_4_frictional_contact_solver():
 # PILIER 5 : FAO / USINAGE CNC (SIMULATION VOLUMIQUE VOXELS & POST-PROCESSEURS)
 # ============================================================================
 
-def test_pillar_5_volumetric_cam_stock_simulator():
+def test_pillar_5_volumetric_cam_stock_simulator() -> None:
     """Vérifie la simulation visuelle volumique d'enlèvement de matière par voxel et l'anti-collision."""
     # Brut initial 100x100x50 mm avec résolution voxel 5mm -> grille 20x20x10
     sim = VolumetricStockSimulator(stock_size=(100.0, 100.0, 50.0), voxel_pitch_mm=5.0)
@@ -355,7 +355,7 @@ def test_pillar_5_volumetric_cam_stock_simulator():
     assert sim.detect_tool_collision((50.0, 50.0, -5.0), fixture_box) is True
 
 
-def test_pillar_5_cnc_post_processor_registry():
+def test_pillar_5_cnc_post_processor_registry() -> None:
     """Vérifie la génération de G-Code certifié pour Fanuc, Siemens 840D (TRAORI 5-axes) et Heidenhain."""
     registry = CNCPostProcessorRegistry()
     points = [
@@ -385,7 +385,7 @@ def test_pillar_5_cnc_post_processor_registry():
 # PILIER 6 : SOLVEUR D'ESQUISSE 2D AVANCÉ (PROJECTION 3D, CONGÉ, TRIM, G2)
 # ============================================================================
 
-def test_pillar_6_sketcher_3d_projection_and_fillet():
+def test_pillar_6_sketcher_3d_projection_and_fillet() -> None:
     """Vérifie la projection d'arêtes 3D externes, le congé 2D et le trim de segments."""
     # 1. Projection d'une arête 3D (0, 0, 10) -> (50, 0, 10) sur le plan Z=10
     edge_p0 = (0.0, 0.0, 10.0)
@@ -427,7 +427,7 @@ def test_pillar_6_sketcher_3d_projection_and_fillet():
     assert inter.v == pytest.approx(5.0, abs=1e-5)
 
 
-def test_pillar_6_sketcher_solver_g2_and_external_geometry():
+def test_pillar_6_sketcher_solver_g2_and_external_geometry() -> None:
     """Vérifie le solveur d'esquisse Levenberg-Marquardt avec contraintes G2 et référence externe."""
     solver = SketchConstraintSolver2D()
 
@@ -461,7 +461,7 @@ def test_pillar_6_sketcher_solver_g2_and_external_geometry():
 # PILIER 7 : TABLEUR PARAMÉTRIQUE & SOURIS 3D 3DCONNEXION SPACEMOUSE
 # ============================================================================
 
-def test_pillar_7_parametric_spreadsheet_formulas_and_aliases():
+def test_pillar_7_parametric_spreadsheet_formulas_and_aliases() -> None:
     """Vérifie le moteur de tableur paramétrique, évaluation d'arbres AST et liaisons d'alias."""
     sheet = ParametricSpreadsheet()
 
@@ -497,7 +497,7 @@ def test_pillar_7_parametric_spreadsheet_formulas_and_aliases():
     assert "Référence circulaire" in cell_d1.error_message
 
 
-def test_pillar_7_spacemouse_6dof_controller_and_camera_navigation():
+def test_pillar_7_spacemouse_6dof_controller_and_camera_navigation() -> None:
     """Vérifie le filtrage 6-DoF, la zone morte, l'amortissement inertiel et le décodage HID."""
     config = SpaceMouseConfig(deadzone=0.05, power_curve=2.0)
     controller = SpaceMouseController(config)
@@ -535,7 +535,7 @@ def test_pillar_7_spacemouse_6dof_controller_and_camera_navigation():
     assert dx == pytest.approx(0.5, abs=0.05)
 
 
-def test_deep_nurbs_fundamental_forms_and_two_surface_continuity():
+def test_deep_nurbs_fundamental_forms_and_two_surface_continuity() -> None:
     """Vérifie les première et seconde formes fondamentales et la continuité entre surfaces distinctes."""
     from src.core.nexus_kernel.nurbs_surface import check_surface_continuity, ContinuityLevel
 
@@ -563,7 +563,7 @@ def test_deep_nurbs_fundamental_forms_and_two_surface_continuity():
     assert level == ContinuityLevel.C0_DISCONTINUOUS
 
 
-def test_deep_nonlinear_fea_solver_equilibrium():
+def test_deep_nonlinear_fea_solver_equilibrium() -> None:
     """Vérifie l'équilibre non-linéaire avec plasticité et contact."""
     mat = BilinearPlasticMaterial(
         name="Alu6061",
@@ -593,7 +593,7 @@ def test_deep_nonlinear_fea_solver_equilibrium():
     assert float(res["total_normal_contact_force_n"]) > 0.0
 
 
-def test_deep_cam_generate_gcode_and_report():
+def test_deep_cam_generate_gcode_and_report() -> None:
     """Vérifie les rapports volumiques et la génération G-Code multimarques."""
     from src.cam.volumetric_simulator import CNCDialect
 

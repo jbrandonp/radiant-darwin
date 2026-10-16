@@ -42,7 +42,7 @@ from src.fea.openfoam_bridge import OpenFoamCase, CfdFluidType, CfdTurbulenceMod
 # PILIER 8 : SYSTÈME D'UNITÉS PHYSIQUES & ANNULATION TRANSACTIONNELLE
 # ==============================================================================
 
-def test_pillar_8_physical_units_and_expressions():
+def test_pillar_8_physical_units_and_expressions() -> None:
     """Vérifie la conversion et les opérations arithmétiques sur les grandeurs physiques."""
     # 1. Longueurs et additions inter-unités
     q_inch = PhysicalQuantity(2.0, "in")
@@ -65,7 +65,7 @@ def test_pillar_8_physical_units_and_expressions():
     assert pytest.approx(stress_mpa.value_si, 1e-3) == 2.5e8  # 250 MPa = 2.5e8 Pa
 
 
-def test_pillar_8_transactional_undo_redo():
+def test_pillar_8_transactional_undo_redo() -> None:
     """Vérifie la pile de commandes Undo/Redo sans perte d'état."""
     from src.core.document import CADDocument
     from src.core.feature import BoxFeature
@@ -108,7 +108,7 @@ def test_pillar_8_transactional_undo_redo():
 # PILIER 3 : SOLVEUR D'ESQUISSE INTERACTIF 60 FPS & DIAGNOSTIC DOF
 # ==============================================================================
 
-def test_pillar_3_live_drag_solver_and_dof_diagnostic():
+def test_pillar_3_live_drag_solver_and_dof_diagnostic() -> None:
     """Vérifie le glisser-déplacer d'esquisse en temps réel et le diagnostic des degrés de liberté."""
     solver = LiveDragSolver(tolerance=1e-5)
 
@@ -147,7 +147,7 @@ def test_pillar_3_live_drag_solver_and_dof_diagnostic():
 # PILIER 1 : CONGÉS ANALYTIQUES À SPHÈRE ROULANTE & COINS À RETRAIT
 # ==============================================================================
 
-def test_pillar_1_rolling_ball_blend_and_setback_corner():
+def test_pillar_1_rolling_ball_blend_and_setback_corner() -> None:
     """Vérifie le calcul de la trajectoire de la sphère roulante et des coins à retrait."""
     engine = RollingBallBlendEngine(tolerance=1e-6)
 
@@ -193,7 +193,7 @@ def test_pillar_1_rolling_ball_blend_and_setback_corner():
 # PILIER 4 : LIAISONS CINÉMATIQUES AVANCÉES & VUES ÉCLATÉES
 # ==============================================================================
 
-def test_pillar_4_assembly_kinematics_and_exploded_views():
+def test_pillar_4_assembly_kinematics_and_exploded_views() -> None:
     """Vérifie la cinématique des engrenages, pignons-crémaillères, vis et vues éclatées."""
     # 1. GearMate
     gear = GearMate(
@@ -270,7 +270,7 @@ def test_pillar_4_assembly_kinematics_and_exploded_views():
 # PILIER 5 : TECHDRAW COUPES BRISÉES & CADRES GD&T ISO 1101 / ASME Y14.5
 # ==============================================================================
 
-def test_pillar_5_techdraw_broken_sections_and_gdt():
+def test_pillar_5_techdraw_broken_sections_and_gdt() -> None:
     """Vérifie la génération des coupes brisées et des cadres de tolérancement GD&T."""
     # 1. Feature Control Frame (Localisation avec Datum A, B, C)
     fcf = FeatureControlFrame(
@@ -316,7 +316,7 @@ def test_pillar_5_techdraw_broken_sections_and_gdt():
 # PILIER 6 : EXPORTATEURS IGES 5.3 & GLTF 2.0 PBR
 # ==============================================================================
 
-def test_pillar_6_iges_and_gltf_exporters():
+def test_pillar_6_iges_and_gltf_exporters() -> None:
     """Vérifie la structure stricte des fichiers IGES 5.3 (80 colonnes) et glTF 2.0 JSON."""
     verts = [
         Vector3D(0.0, 0.0, 0.0),
@@ -355,7 +355,7 @@ def test_pillar_6_iges_and_gltf_exporters():
 # PILIER 7 : PASSERELLES CALCULIX FEA & OPENFOAM CFD
 # ==============================================================================
 
-def test_pillar_7_calculix_and_openfoam_bridges():
+def test_pillar_7_calculix_and_openfoam_bridges() -> None:
     """Vérifie la génération des jeux de données CalculiX .inp et de l'arborescence OpenFOAM."""
     # 1. CalculiX Simulation Deck
     deck = CalculixSimulationDeck(

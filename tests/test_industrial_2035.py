@@ -19,7 +19,7 @@ from src.core.generative_lattices import (
 )
 
 
-def test_draft_angle_analysis_cube():
+def test_draft_angle_analysis_cube() -> None:
     """Vérifie le calcul analytique des angles de dépouille et la détection de contre-dépouilles."""
     # Pavé droit aligné sur Z
     box = make_box(20.0, 20.0, 20.0)
@@ -36,7 +36,7 @@ def test_draft_angle_analysis_cube():
     assert not res.is_fully_demoldable
 
 
-def test_draft_angle_empty_solid():
+def test_draft_angle_empty_solid() -> None:
     """Vérifie la robustesse face à un solide vide."""
     empty = Solid(solid_name="Empty")
     res = compute_draft_angles(empty)
@@ -44,7 +44,7 @@ def test_draft_angle_empty_solid():
     assert res.undercut_count == 0
 
 
-def test_wall_thickness_evaluation():
+def test_wall_thickness_evaluation() -> None:
     """Vérifie la détection des épaisseurs minimales et zones critiques."""
     box = make_box(10.0, 10.0, 10.0)
     res = compute_wall_thickness(box, min_nominal_mm=2.0)
@@ -56,7 +56,7 @@ def test_wall_thickness_evaluation():
     assert len(res.thickness_values) > 0
 
 
-def test_mesh_healing_and_quality_certificate():
+def test_mesh_healing_and_quality_certificate() -> None:
     """Vérifie l'audit topologique et la certification d'étanchéité industrielle."""
     cyl = make_cylinder(10.0, 25.0)
     healed, report = heal_and_validate_mesh(cyl)
@@ -71,7 +71,7 @@ def test_mesh_healing_and_quality_certificate():
     assert sum(1 for action in report.healing_actions if "Manifold3D" in action) > 0
 
 
-def test_octet_truss_lattice_unit_cell():
+def test_octet_truss_lattice_unit_cell() -> None:
     """Vérifie la génération géométrique d'une cellule Octet-Truss étanche."""
     cell = make_octet_cell(cell_size=10.0, strut_radius=1.0)
     assert not cell.is_empty()
@@ -80,7 +80,7 @@ def test_octet_truss_lattice_unit_cell():
     assert cell.genus() > 0  # Contient des ouvertures traversantes (poreuse)
 
 
-def test_tpms_gyroid_unit_cell():
+def test_tpms_gyroid_unit_cell() -> None:
     """Vérifie la génération de la surface minimale Gyroïde étanche."""
     gyroid = make_tpms_gyroid_cell(cell_size=12.0, wall_thickness=1.2)
     assert not gyroid.is_empty()
@@ -92,7 +92,7 @@ def test_tpms_gyroid_unit_cell():
     assert b_max.z <= 12.05
 
 
-def test_generate_lattice_volume():
+def test_generate_lattice_volume() -> None:
     """Vérifie la répétition spatiale d'un réseau réticulaire dans un volume borné."""
     b_min = Vector3D(0.0, 0.0, 0.0)
     b_max = Vector3D(20.0, 20.0, 20.0)
@@ -106,7 +106,7 @@ def test_generate_lattice_volume():
     assert l_max.z >= 20.0
 
 
-def test_lightweight_infilled_aerospace_part():
+def test_lightweight_infilled_aerospace_part() -> None:
     """Vérifie l'allègement topologique d'une pièce avec peau externe étanche et cœur alvéolaire."""
     block = make_box(25.0, 25.0, 25.0)
     orig_vol = block.volume()

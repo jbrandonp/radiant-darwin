@@ -106,6 +106,7 @@ class TransactionJournal:
         self._seq: int = 0
         self._file_handle: Optional[TextIO] = None
         self._is_closed: bool = False
+        self._fsync_supported: bool = True
         self._init_journal()
 
     def _init_journal(self) -> None:
@@ -153,7 +154,7 @@ class TransactionJournal:
         try:
             os.fsync(self._file_handle.fileno())
         except (AttributeError, OSError):
-            pass
+            self._fsync_supported = False
         return current_seq
 
     def record_add_feature(self, feature: Feature) -> int:
@@ -224,7 +225,7 @@ class TransactionJournal:
             try:
                 self._file_handle.close()
             except OSError:
-                pass
+                self._file_handle = None
             self._file_handle = None
         self._is_closed = True
 

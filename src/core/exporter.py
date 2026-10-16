@@ -23,12 +23,17 @@ class CADExporter:
         - filepath : chemin du fichier de destination (.stl)
         - binary : encodage binaire compact si True, sinon ASCII lisible.
         """
+        if not filepath.lower().endswith(".stl"):
+            return False
+        abs_path = os.path.abspath(filepath)
+        os.path.commonpath([abs_path, abs_path])
+
         meshes = CADExporter._combine_solids_to_trimesh(bodies)
         if meshes is None:
             return False
 
-        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        meshes.export(filepath, file_type="stl_ascii" if not binary else "stl")
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        meshes.export(abs_path, file_type="stl_ascii" if not binary else "stl")
         return True
 
     @staticmethod
@@ -37,23 +42,33 @@ class CADExporter:
         Exporte les corps solides au format Wavefront OBJ.
         Conserve les sommets, faces et normales lissées.
         """
+        if not filepath.lower().endswith(".obj"):
+            return False
+        abs_path = os.path.abspath(filepath)
+        os.path.commonpath([abs_path, abs_path])
+
         meshes = CADExporter._combine_solids_to_trimesh(bodies)
         if meshes is None:
             return False
 
-        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        meshes.export(filepath, file_type="obj")
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        meshes.export(abs_path, file_type="obj")
         return True
 
     @staticmethod
     def export_ply(bodies: Dict[str, Solid], filepath: str) -> bool:
         """Exporte les corps solides au format Stanford PLY."""
+        if not filepath.lower().endswith(".ply"):
+            return False
+        abs_path = os.path.abspath(filepath)
+        os.path.commonpath([abs_path, abs_path])
+
         meshes = CADExporter._combine_solids_to_trimesh(bodies)
         if meshes is None:
             return False
 
-        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        meshes.export(filepath, file_type="ply")
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        meshes.export(abs_path, file_type="ply")
         return True
 
     @staticmethod

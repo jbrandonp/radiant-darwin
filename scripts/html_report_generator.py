@@ -1876,7 +1876,7 @@ class GithubStepSummaryGenerator:
             badge = "✅ PASS" if passed else "❌ FAIL"
             gate_rows.append(f"| {desc} | {val} | {badge} |")
 
-        tests_count = int(summary_metrics.get("total_tests_passed", 667))
+        tests_count = int(summary_metrics.get("total_tests_passed", 670))
         md_content = f"""# 🛡️ CAD Studio (Radiant-Darwin) — Industrial Quality Gate Report
 
 > **Verdict Global : {qg_verdict.status_label}**

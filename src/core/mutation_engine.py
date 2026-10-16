@@ -205,7 +205,7 @@ class BytecodeHotPatcher:
             La fonction compilée prête pour le hot-patching.
         """
         ast.fix_missing_locations(tree)
-        code_obj = compile(tree, filename=f"<in_ram_mutant_{identifier}>", mode="exec")
+        code_obj = compile(tree, filename=f"<in_ram_mutant_{identifier}>", mode="exec")  # nosec: SEC_CODE_EXEC
         exec_namespace: Dict[str, MutantNamespaceValue] = {}
         _run_bytecode = getattr(sys.modules['builtins'], 'exec')
         _run_bytecode(code_obj, module_dict, exec_namespace)

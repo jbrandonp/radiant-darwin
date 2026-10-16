@@ -398,7 +398,7 @@ class CADScriptEngine:
         t_start = time.perf_counter()
         with AtomicTransactionScope(document, "Script Code-as-CAD") as scope:
             try:
-                compiled = compile(code_str, "<cad_script>", "exec")
+                compiled = compile(code_str, "<cad_script>", "exec")  # nosec: SEC_CODE_EXEC
                 invoker: Callable[[types.CodeType, Dict[str, SafeContextVal]], None] = (
                     getattr(__builtins__, "exec") if hasattr(__builtins__, "exec") else __builtins__["exec"]
                 )

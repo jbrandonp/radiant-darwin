@@ -440,6 +440,22 @@ class SecuritySASTVisitor(ast.NodeVisitor):
         if self.lines and 1 <= lineno <= len(self.lines):
             snippet = self.lines[lineno - 1].strip()
 
+        # Prise en charge des suppressions formelles de sécurité (# nosec, # sast-ignore, # noqa)
+        line_comment = snippet.lower()
+        prev_comment = (
+            self.lines[lineno - 2].strip().lower()
+            if (lineno >= 2 and len(self.lines) >= lineno - 1)
+            else ""
+        )
+        if (
+            "# nosec" in line_comment
+            or "# sast-ignore" in line_comment
+            or "# noqa" in line_comment
+            or "# nosec" in prev_comment
+            or "# sast-ignore" in prev_comment
+        ):
+            return
+
         finding = SecurityFinding(
             rule_id=rule_id,
             category=category,

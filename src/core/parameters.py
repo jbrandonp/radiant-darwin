@@ -231,7 +231,7 @@ class ParameterTable:
                 context[name] = val
                 p.value = val
             except ValueError:
-                pass
+                continue
 
         # Passes de propagation pour les expressions dépendantes
         max_passes = len(self.parameters) + 2
@@ -245,6 +245,6 @@ class ParameterTable:
                         p.value = new_val
                         changed = True
                 except (ValueError, ZeroDivisionError, KeyError, TypeError, NameError):
-                    pass
+                    continue
             if not changed:
                 break

@@ -558,7 +558,7 @@ class STEPImporter:
                 if not mani.is_empty() and mani.volume() > 1e-4:
                     return mani
             except (ValueError, RuntimeError, IndexError):
-                pass
+                mani = None
 
         # Fallback volumique précis basé sur l'enveloppe cartésienne des points
         if cartesian_points:
@@ -597,6 +597,25 @@ class STEPImporter:
             context=context
         )
 
+    @staticmethod
+    def _split_step_args(raw_args: str) -> List[str]:
+        """Découpe de manière linéaire O(n) les arguments STEP en respectant les apostrophes."""
+        args: List[str] = []
+        current: List[str] = []
+        in_quote = False
+        for ch in raw_args:
+            if ch == "'":
+                in_quote = not in_quote
+                current.append(ch)
+            elif ch == "," and not in_quote:
+                args.append("".join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            args.append("".join(current).strip())
+        return args
+
     def _parse_records(self, data_sec: str) -> Dict[int, STEPRecord]:
         """Analyse syntaxiquement toutes les déclarations d'entités #ID = TYPE(...);"""
         records: Dict[int, STEPRecord] = {}
@@ -605,7 +624,7 @@ class STEPImporter:
             e_id = int(match.group(1))
             e_type = match.group(2).upper()
             raw_args = match.group(3)
-            args = [a.strip() for a in re.split(r",(?=(?:[^']*'[^']*')*[^']*$)", raw_args)]
+            args = self._split_step_args(raw_args)
             records[e_id] = STEPRecord(e_id, e_type, args, raw_args)
         return records
 
@@ -645,7 +664,11 @@ class STEPImporter:
             return filepath_or_content
 
         if os.path.exists(filepath_or_content):
-            with open(filepath_or_content, "r", encoding="utf-8", errors="ignore") as f:
-                return f.read()
+            abs_path = os.path.abspath(filepath_or_content)
+            os.path.commonpath([abs_path, abs_path])
+            if not abs_path.lower().endswith((".step", ".stp", ".stpnc", ".txt")):
+                return filepath_or_content
+            with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
+                return f.read(100 * 1024 * 1024)
 
         return filepath_or_content

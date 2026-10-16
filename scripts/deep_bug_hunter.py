@@ -55,7 +55,14 @@ class BugHunterVisitor(ast.NodeVisitor):
         elif len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
             # except Exception: pass
             exc_name = ast.unparse(node.type) if node.type else "Exception"
-            if exc_name not in ("ImportError", "ModuleNotFoundError", "AttributeError"):
+            if isinstance(node.type, ast.Tuple):
+                is_benign = all(
+                    ast.unparse(elt) in ("ImportError", "ModuleNotFoundError", "AttributeError")
+                    for elt in node.type.elts
+                )
+            else:
+                is_benign = exc_name in ("ImportError", "ModuleNotFoundError", "AttributeError")
+            if not is_benign:
                 self.issues.append((
                     node.lineno,
                     "SILENT_PASS_EXCEPT",

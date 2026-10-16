@@ -389,7 +389,7 @@ class PreferencesManager:
 
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
-                content = f.read()
+                content = f.read(10 * 1024 * 1024)
             raw_data = json.loads(content)
             if isinstance(raw_data, dict):
                 self._preferences = UserPreferences.from_dict(raw_data)

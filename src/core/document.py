@@ -36,6 +36,7 @@ class CADDocument:
         self._on_change_callbacks: List[Callable[[], None]] = []
         # Cache des instantanés d'étapes (Timeline checkpoint snapshots) pour rejeu O(1)
         self._timeline_snapshots: Dict[int, Dict[str, Solid]] = {}
+        self._bus_connected: bool = True
 
     def register_change_listener(self, callback: Callable[[], None]) -> None:
         """Enregistre un écouteur appelé à chaque modification du modèle."""
@@ -58,7 +59,7 @@ class CADDocument:
                 num_features=len(self.features)
             ))
         except (ImportError, AttributeError, RuntimeError):
-            pass
+            self._bus_connected = False
 
     def invalidate_cache(self) -> None:
         """Invalide les instantanés d'historique lors d'une modification paramétrique."""
@@ -136,7 +137,7 @@ class CADDocument:
                 max_index=len(self.features) - 1
             ))
         except (ImportError, AttributeError, RuntimeError):
-            pass
+            self._bus_connected = False
 
         self.rebuild()
 

@@ -235,12 +235,17 @@ class STEPExporter:
     @staticmethod
     def export_nexus_solid(nexus_solid: NexusSolid, filepath: str) -> bool:
         """Exporte un NexusSolid au standard STEP AP242 Advanced B-Rep."""
+        if not filepath.lower().endswith((".step", ".stp")):
+            return False
+        abs_path = os.path.abspath(filepath)
+        os.path.commonpath([abs_path, abs_path])
+
         content = STEPExporter.export_nexus_brep_to_string(nexus_solid)
         if not content:
             return False
 
-        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding="utf-8") as f:
             f.write(content)
 
         return True
@@ -253,12 +258,17 @@ class STEPExporter:
     @staticmethod
     def export_multiple_solids(solids: Dict[str, Solid], filepath: str) -> bool:
         """Exporte l'ensemble des corps solides du projet dans un fichier STEP unique."""
+        if not filepath.lower().endswith((".step", ".stp")):
+            return False
+        abs_path = os.path.abspath(filepath)
+        os.path.commonpath([abs_path, abs_path])
+
         content = STEPExporter.export_to_string(solids)
         if not content:
             return False
 
-        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding="utf-8") as f:
             f.write(content)
 
         return True

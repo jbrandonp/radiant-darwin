@@ -105,14 +105,19 @@ class CADIOFacade:
         triangles: Optional[List[Tuple[int, int, int]]] = None
     ) -> bool:
         """Exporte des entités filaires et maillées au format standard IGES 5.3."""
+        if not filepath.lower().endswith((".igs", ".iges")):
+            return False
+        abs_path = os.path.abspath(filepath)
+        os.path.commonpath([abs_path, abs_path])
+
         exporter = IgesExporter()
         content = exporter.export_iges_lines_and_mesh(
             lines=lines if lines is not None else [],
             vertices=vertices if vertices is not None else [],
             triangles=triangles if triangles is not None else []
         )
-        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding="utf-8") as f:
             f.write(content)
         return True
 
@@ -125,9 +130,14 @@ class CADIOFacade:
         material: Optional[PbrMaterial] = None
     ) -> bool:
         """Exporte un maillage 3D au format Khronos glTF 2.0 PBR."""
+        if not filepath.lower().endswith((".gltf", ".glb")):
+            return False
+        abs_path = os.path.abspath(filepath)
+        os.path.commonpath([abs_path, abs_path])
+
         exporter = GltfExporter()
         content = exporter.export_mesh_to_gltf(vertices, triangles, material=material)
-        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding="utf-8") as f:
             f.write(content)
         return True

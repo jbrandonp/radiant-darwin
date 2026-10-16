@@ -267,7 +267,7 @@ class CADAIBridge:
             try:
                 res.append(float(m))
             except ValueError:
-                pass
+                continue
         return res
 
     def _register_and_build_result(

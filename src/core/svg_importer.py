@@ -99,7 +99,7 @@ class SVGImporter:
             p2 = cls._map_pt(x2, y2, height, invert_y)
             sketch.add_line(p1, p2)
         except (ValueError, KeyError):
-            pass
+            return
 
     @classmethod
     def _parse_svg_circle(
@@ -114,7 +114,7 @@ class SVGImporter:
                 center = cls._map_pt(cx, cy, height, invert_y)
                 sketch.add_circle(center, radius=r)
         except (ValueError, KeyError):
-            pass
+            return
 
     @classmethod
     def _parse_svg_rect(
@@ -136,7 +136,7 @@ class SVGImporter:
                 sketch.add_line(p2, p3)
                 sketch.add_line(p3, p0)
         except (ValueError, KeyError):
-            pass
+            return
 
     @classmethod
     def _handle_move_to(

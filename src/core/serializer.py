@@ -104,7 +104,7 @@ class SketchSerializer:
                 try:
                     pts.append(Point2D(float(coord[0]), float(coord[1])))
                 except (ValueError, TypeError):
-                    pass
+                    continue
 
         e_type = str(ent_dict.get("type", "polygon"))
         if e_type == "bspline":

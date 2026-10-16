@@ -1,5 +1,5 @@
 """
-Validation et benchmark comparatif entre AstQualityAuditor (ancien moteur)
+Benchmark comparatif de performance entre AstQualityAuditor (ancien moteur)
 et UnifiedIndustrialAstVisitor (nouveau moteur single-pass).
 """
 
@@ -20,10 +20,10 @@ import scripts.unified_ast_engine as new_engine
 
 def validate_parity() -> bool:
     """
-    Vérifie la parité exacte de toutes les métriques sur l'ensemble des 129 fichiers de src/.
+    Vérifie la parité exacte de toutes les métriques sur l'ensemble des fichiers de src/.
     """
     print("=" * 70)
-    print("TEST DE PARITÉ DÉTERMINISTE DES MÉTRIQUES (129 FICHIERS)")
+    print("TEST DE PARITÉ DÉTERMINISTE DES MÉTRIQUES")
     print("=" * 70)
 
     py_files: List[str] = []

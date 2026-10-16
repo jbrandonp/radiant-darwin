@@ -1184,9 +1184,7 @@ class CADMainWindow(QMainWindow):
         try:
             from src.core.fasteners import clear_fastener_cache
             clear_fastener_cache()
-        except ImportError:
-            pass
-        except AttributeError:
+        except (ImportError, AttributeError):
             pass
         super().closeEvent(event)
         import gc

@@ -164,3 +164,35 @@ def test_step_importer_boundary_wires_and_fallback() -> None:
     assert outer_res == w1
     assert len(inner_list) == 1
     assert inner_list[0] == w2
+
+
+def test_step_importer_triangulate_and_fallback() -> None:
+    """Vérifie la triangulation modulaire des faces B-Rep et le cube de repli."""
+    import numpy as np
+    from src.core.nexus_kernel.brep_topology import NexusBRep, NexusFace, NexusWire, NexusPlaneSurface
+
+    brep = NexusBRep("TestBRep")
+    surf = NexusPlaneSurface("Pl", np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+    wire = NexusWire("WireTri", [])
+    # Simuler sample_points retournant un triangle
+    wire.sample_points = lambda n=64: [
+        np.array([0.0, 0.0, 0.0]),
+        np.array([10.0, 0.0, 0.0]),
+        np.array([0.0, 10.0, 0.0])
+    ]
+    face = NexusFace("F1", surf, wire)
+    brep.add_face(face)
+
+    verts, tris, count = STEPImporter._triangulate_brep_faces(brep)
+    assert count == 1
+    assert len(verts) == 3
+    assert len(tris) == 1
+
+    # Fallback cartésien
+    cart_pts = {
+        1: np.array([0.0, 0.0, 0.0]),
+        2: np.array([10.0, 20.0, 30.0])
+    }
+    box = STEPImporter._build_manifold_fallback_from_points(cart_pts)
+    assert box is not None
+    assert box.volume() > 0.0

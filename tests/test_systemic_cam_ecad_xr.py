@@ -271,3 +271,117 @@ def test_cnc_post_processor_registry_dialects() -> None:
     prog_generic = CNCPostProcessorRegistry.generate_program("GENERIC_HAAS", pts, "HAAS_01")
     assert "(HAAS/GENERIC ISO PROGRAM HAAS_01)" in prog_generic
     assert "G21 G90 G54" in prog_generic
+
+
+def test_cam_engine_zigzag_passes() -> None:
+    """Vérifie la génération modulaire des trajectoires zigzag en surfaçage."""
+    from src.cam.cam_engine import CAMEngine
+    pts = CAMEngine._generate_zigzag_passes(x0=0.0, x1=50.0, y0=0.0, y1=20.0, current_z=-2.0, stepover=10.0)
+    assert len(pts) > 0
+    for p in pts:
+        assert p.pos.z == -2.0
+        assert p.is_rapid is False
+
+
+def test_threemf_exporter_modular_appenders() -> None:
+    """Vérifie l'ajout modulaire de solides et de lattices dans l'export 3MF."""
+    from src.core.threemf_exporter import ThreeMFExporter, BeamLatticeTopology
+    from src.core.geometry import Solid
+
+    cube = Solid.cube(10.0, 10.0, 10.0)
+    lines: list[str] = []
+    items: list[int] = []
+
+    # Appender solide
+    next_id = ThreeMFExporter._append_solid_objects({"Solid1": cube}, lines, items, 2)
+    assert next_id == 3
+    assert len(items) == 1
+    assert "<mesh>" in lines[0]
+
+    # Appender lattice
+    lat = BeamLatticeTopology()
+    n0 = lat.add_node(0.0, 0.0, 0.0)
+    n1 = lat.add_node(5.0, 5.0, 5.0)
+    lat.add_beam(n0, n1, 1.0)
+    next_id_lat = ThreeMFExporter._append_lattice_objects({"Lat1": lat}, lines, items, next_id)
+    assert next_id_lat == 4
+    assert len(items) == 2
+
+
+def test_robot_kinematics_urdf_subparsers() -> None:
+    """Vérifie les sous-analyseurs d'origine, d'axe et de limites URDF."""
+    import xml.etree.ElementTree as ET
+    from src.specialized.robot_kinematics import RobotKinematicsEngine
+
+    # Origine
+    origin_el = ET.Element("origin", attrib={"xyz": "1.0 2.0 3.0", "rpy": "0.1 0.2 0.3"})
+    xyz, rpy = RobotKinematicsEngine._parse_urdf_origin(origin_el)
+    assert xyz == (1.0, 2.0, 3.0)
+    assert rpy == (0.1, 0.2, 0.3)
+    assert RobotKinematicsEngine._parse_urdf_origin(None) == ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+
+    # Axe
+    axis_el = ET.Element("axis", attrib={"xyz": "0.0 1.0 0.0"})
+    axis = RobotKinematicsEngine._parse_urdf_axis(axis_el)
+    assert axis == (0.0, 1.0, 0.0)
+    assert RobotKinematicsEngine._parse_urdf_axis(None) == (0.0, 0.0, 1.0)
+
+    # Limites
+    limit_el = ET.Element("limit", attrib={"lower": "-1.5", "upper": "1.5", "velocity": "3.0", "effort": "50.0"})
+    low, up, vel, eff = RobotKinematicsEngine._parse_urdf_limits(limit_el)
+    assert low == -1.5 and up == 1.5 and vel == 3.0 and eff == 50.0
+    assert RobotKinematicsEngine._parse_urdf_limits(None)[2] == 2.0
+
+
+def test_assembly_manager_joint_helpers() -> None:
+    """Vérifie le bornage articulaire et la rotation axiale dans AssemblyManager."""
+    from src.assembly.assembly_manager import AssemblyManager, Joint, JointType
+    from src.core.types import Vector3D
+    from src.core.geometry import Solid
+
+    joint = Joint("J1", JointType.REVOLUTE, "P", "C", Vector3D(0.0, 0.0, 1.0), min_limit=-10.0, max_limit=10.0, current_value=0.0)
+
+    val, delta = AssemblyManager._clamp_joint_value(joint, 5.0)
+    assert val == 5.0 and delta == 5.0
+    assert joint.current_value == 5.0
+
+    val_clamp, delta_clamp = AssemblyManager._clamp_joint_value(joint, 50.0)
+    assert val_clamp == 10.0 and delta_clamp == 5.0
+
+    # Rotation axiale
+    cube = Solid.cube(10.0, 10.0, 10.0)
+    rot_z = AssemblyManager._apply_joint_rotation(cube, Vector3D(0.0, 0.0, 1.0), 90.0)
+    assert rot_z is not None
+    rot_x = AssemblyManager._apply_joint_rotation(cube, Vector3D(1.0, 0.0, 0.0), 90.0)
+    assert rot_x is not None
+    rot_y = AssemblyManager._apply_joint_rotation(cube, Vector3D(0.0, 1.0, 0.0), 90.0)
+    assert rot_y is not None
+
+
+def test_keymap_manager_modifier_synonyms() -> None:
+    """Vérifie la normalisation des raccourcis avec les synonymes système (WIN, CMD, CONTROL)."""
+    from src.core.preferences import KeymapManager
+
+    km = KeymapManager()
+    assert km.normalize_shortcut("control + s") == "Ctrl+S"
+    assert km.normalize_shortcut("cmd + shift + z") == "Shift+Meta+Z"
+    assert km.normalize_shortcut("win + alt + d") == "Alt+Meta+D"
+    assert km.normalize_shortcut("") == ""
+
+
+def test_serializer_multitransform_steps() -> None:
+    """Vérifie la désérialisation robuste des étapes MultiTransform."""
+    from src.core.serializer import Serializer
+    raw_steps = [
+        {"type": "linear", "count": 3, "spacing": 25.0, "axis": "Y"},
+        {"type": "circular", "count": 4, "total_angle": 180.0}
+    ]
+    steps = Serializer._parse_multitransform_steps(raw_steps)
+    assert len(steps) == 2
+    assert steps[0].transform_type == "linear"
+    assert steps[0].count == 3
+    assert steps[0].spacing == 25.0
+    assert steps[1].transform_type == "circular"
+    assert steps[1].total_angle == 180.0
+
+    assert Serializer._parse_multitransform_steps("invalid") == []

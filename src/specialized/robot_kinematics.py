@@ -224,7 +224,41 @@ class RobotArm6Axis:
         return "\n".join(lines)
 
     @staticmethod
-    def parse_urdf(urdf_text: str) -> List[URDFJoint]:
+    def _parse_urdf_origin(origin_elem: Optional[ET.Element]) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+        """Extrait l'origine spatiale XYZ et l'orientation RPY d'un élément joint."""
+        origin_xyz = (0.0, 0.0, 0.0)
+        origin_rpy = (0.0, 0.0, 0.0)
+        if origin_elem is not None:
+            xyz_raw = origin_elem.attrib.get("xyz", "0 0 0").split()
+            if len(xyz_raw) == 3:
+                origin_xyz = (float(xyz_raw[0]), float(xyz_raw[1]), float(xyz_raw[2]))
+            rpy_raw = origin_elem.attrib.get("rpy", "0 0 0").split()
+            if len(rpy_raw) == 3:
+                origin_rpy = (float(rpy_raw[0]), float(rpy_raw[1]), float(rpy_raw[2]))
+        return origin_xyz, origin_rpy
+
+    @staticmethod
+    def _parse_urdf_axis(axis_elem: Optional[ET.Element]) -> Tuple[float, float, float]:
+        """Extrait le vecteur directeur d'axe cinématique d'un élément joint."""
+        if axis_elem is not None:
+            axis_raw = axis_elem.attrib.get("xyz", "0 0 1").split()
+            if len(axis_raw) == 3:
+                return (float(axis_raw[0]), float(axis_raw[1]), float(axis_raw[2]))
+        return (0.0, 0.0, 1.0)
+
+    @staticmethod
+    def _parse_urdf_limits(limit_elem: Optional[ET.Element]) -> Tuple[float, float, float, float]:
+        """Extrait les limites articulaires (min, max, vélocité, effort) d'un élément joint."""
+        lower, upper, vel, eff = -3.14159, 3.14159, 2.0, 100.0
+        if limit_elem is not None:
+            lower = float(limit_elem.attrib.get("lower", str(lower)))
+            upper = float(limit_elem.attrib.get("upper", str(upper)))
+            vel = float(limit_elem.attrib.get("velocity", str(vel)))
+            eff = float(limit_elem.attrib.get("effort", str(eff)))
+        return lower, upper, vel, eff
+
+    @classmethod
+    def parse_urdf(cls, urdf_text: str) -> List[URDFJoint]:
         """Analyse un document XML URDF et reconstruit la hiérarchie cinématique des liaisons."""
         root = ET.fromstring(urdf_text)
         joints: List[URDFJoint] = []
@@ -238,31 +272,9 @@ class RobotArm6Axis:
             p_link = parent_elem.attrib.get("link", "") if parent_elem is not None else ""
             c_link = child_elem.attrib.get("link", "") if child_elem is not None else ""
 
-            origin_xyz = (0.0, 0.0, 0.0)
-            origin_rpy = (0.0, 0.0, 0.0)
-            origin_elem = joint_elem.find("origin")
-            if origin_elem is not None:
-                xyz_raw = origin_elem.attrib.get("xyz", "0 0 0").split()
-                if len(xyz_raw) == 3:
-                    origin_xyz = (float(xyz_raw[0]), float(xyz_raw[1]), float(xyz_raw[2]))
-                rpy_raw = origin_elem.attrib.get("rpy", "0 0 0").split()
-                if len(rpy_raw) == 3:
-                    origin_rpy = (float(rpy_raw[0]), float(rpy_raw[1]), float(rpy_raw[2]))
-
-            axis = (0.0, 0.0, 1.0)
-            axis_elem = joint_elem.find("axis")
-            if axis_elem is not None:
-                axis_raw = axis_elem.attrib.get("xyz", "0 0 1").split()
-                if len(axis_raw) == 3:
-                    axis = (float(axis_raw[0]), float(axis_raw[1]), float(axis_raw[2]))
-
-            lower, upper, vel, eff = -3.14159, 3.14159, 2.0, 100.0
-            limit_elem = joint_elem.find("limit")
-            if limit_elem is not None:
-                lower = float(limit_elem.attrib.get("lower", str(lower)))
-                upper = float(limit_elem.attrib.get("upper", str(upper)))
-                vel = float(limit_elem.attrib.get("velocity", str(vel)))
-                eff = float(limit_elem.attrib.get("effort", str(eff)))
+            origin_xyz, origin_rpy = cls._parse_urdf_origin(joint_elem.find("origin"))
+            axis = cls._parse_urdf_axis(joint_elem.find("axis"))
+            lower, upper, vel, eff = cls._parse_urdf_limits(joint_elem.find("limit"))
 
             joints.append(URDFJoint(
                 name=j_name,
@@ -283,3 +295,5 @@ class RobotArm6Axis:
 
 # Alias pour interopérabilité
 DenavitHartenbergParameter = DHParameter
+RobotKinematicsEngine = RobotArm6Axis
+

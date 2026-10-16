@@ -343,6 +343,18 @@ class Solid:
         self._cached_buffer = buffer
         return buffer
 
+    @classmethod
+    def make_box(cls, width: float, height: float, depth: float, center: bool = False, name: str = "Box") -> Solid:
+        """Fabrique une boîte solide paramétrique via la méthode de classe Solid.make_box."""
+        return make_box(width, height, depth, center, name)
+
+    @classmethod
+    def cube(cls, size_or_x: float, y: Optional[float] = None, z: Optional[float] = None, center: bool = False, name: str = "Cube") -> Solid:
+        """Fabrique un cube ou pavé solide paramétrique via la méthode de classe Solid.cube."""
+        sy = y if y is not None else size_or_x
+        sz = z if z is not None else size_or_x
+        return make_box(size_or_x, sy, sz, center, name)
+
 
 def make_box(width: float, height: float, depth: float, center: bool = False, name: str = "Box") -> Solid:
     """

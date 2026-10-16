@@ -219,6 +219,13 @@ class KeymapManager:
         """Retourne une copie intégrale du dictionnaire des raccourcis."""
         return dict(self._keymap)
 
+    MODIFIER_SYNONYMS: Dict[str, str] = {
+        "CTRL": "Ctrl", "CONTROL": "Ctrl",
+        "SHIFT": "Shift",
+        "ALT": "Alt",
+        "META": "Meta", "CMD": "Meta", "COMMAND": "Meta", "WIN": "Meta"
+    }
+
     def normalize_shortcut(self, shortcut: str) -> str:
         """Normalise une chaîne de raccourci (ex: 'ctrl + s' -> 'Ctrl+S')."""
         clean = shortcut.strip()
@@ -230,15 +237,9 @@ class KeymapManager:
         modifiers: List[str] = []
         key: str = ""
         for p in parts:
-            p_upper = p.upper()
-            if p_upper in ("CTRL", "CONTROL"):
-                modifiers.append("Ctrl")
-            elif p_upper == "SHIFT":
-                modifiers.append("Shift")
-            elif p_upper == "ALT":
-                modifiers.append("Alt")
-            elif p_upper in ("META", "CMD", "COMMAND", "WIN"):
-                modifiers.append("Meta")
+            mod = self.MODIFIER_SYNONYMS.get(p.upper())
+            if mod is not None:
+                modifiers.append(mod)
             else:
                 key = p.capitalize() if len(p) > 1 else p.upper()
         if not key:

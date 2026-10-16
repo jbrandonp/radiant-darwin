@@ -556,53 +556,52 @@ class STEPImporter:
             shell = NexusShell(f"Shell_{chosen_name}", face_list, is_closed=True)
             brep.add_shell(shell)
 
-    def _construct_manifold_from_brep(
-        self,
-        brep: NexusBRep,
-        cartesian_points: Dict[int, np.ndarray],
-        records: Dict[int, STEPRecord]
-    ) -> m.Manifold:
-        """
-        Construit un corps Manifold3D étanche à partir de la topologie B-Rep ou des polygones analysés.
-        """
-        # Collecter toutes les boucles de points des faces
+    @staticmethod
+    def _triangulate_brep_faces(
+        brep: NexusBRep
+    ) -> Tuple[List[List[float]], List[List[int]], int]:
+        """Échantillonne et triangule les boucles de frontières des faces B-Rep."""
         triangles: List[List[int]] = []
         all_verts: List[List[float]] = []
         vert_lookup: Dict[Tuple[float, float, float], int] = {}
-
-        def get_or_add_vert(p: np.ndarray) -> int:
-            key = (round(float(p[0]), 5), round(float(p[1]), 5), round(float(p[2]), 5))
-            if key not in vert_lookup:
-                idx = len(all_verts)
-                vert_lookup[key] = idx
-                all_verts.append([float(p[0]), float(p[1]), float(p[2])])
-                return idx
-            return vert_lookup[key]
-
         valid_poly_count = 0
+
         for face in brep.faces.values():
             pts = face.outer_wire.sample_points(64)
-            if len(pts) >= 3:
-                valid_poly_count += 1
-                idx0 = get_or_add_vert(pts[0])
-                for j in range(1, len(pts) - 1):
-                    idx1 = get_or_add_vert(pts[j])
-                    idx2 = get_or_add_vert(pts[j + 1])
-                    if idx0 != idx1 and idx1 != idx2 and idx2 != idx0:
-                        triangles.append([idx0, idx1, idx2])
+            if len(pts) < 3:
+                continue
+            valid_poly_count += 1
 
-        if valid_poly_count >= 4 and len(all_verts) >= 4 and len(triangles) >= 4:
-            try:
-                vert_array = np.array(all_verts, dtype=np.float32)
-                tri_array = np.array(triangles, dtype=np.int32)
-                mesh = m.Mesh(vert_properties=vert_array, tri_verts=tri_array)
-                mani = m.Manifold(mesh)
-                if not mani.is_empty() and mani.volume() > 1e-4:
-                    return mani
-            except (ValueError, RuntimeError, IndexError):
-                mani = None
+            k0 = (round(float(pts[0][0]), 5), round(float(pts[0][1]), 5), round(float(pts[0][2]), 5))
+            if k0 not in vert_lookup:
+                vert_lookup[k0] = len(all_verts)
+                all_verts.append([float(pts[0][0]), float(pts[0][1]), float(pts[0][2])])
+            idx0 = vert_lookup[k0]
 
-        # Fallback volumique précis basé sur l'enveloppe cartésienne des points
+            for j in range(1, len(pts) - 1):
+                p1, p2 = pts[j], pts[j + 1]
+                k1 = (round(float(p1[0]), 5), round(float(p1[1]), 5), round(float(p1[2]), 5))
+                if k1 not in vert_lookup:
+                    vert_lookup[k1] = len(all_verts)
+                    all_verts.append([float(p1[0]), float(p1[1]), float(p1[2])])
+                idx1 = vert_lookup[k1]
+
+                k2 = (round(float(p2[0]), 5), round(float(p2[1]), 5), round(float(p2[2]), 5))
+                if k2 not in vert_lookup:
+                    vert_lookup[k2] = len(all_verts)
+                    all_verts.append([float(p2[0]), float(p2[1]), float(p2[2])])
+                idx2 = vert_lookup[k2]
+
+                if idx0 != idx1 and idx1 != idx2 and idx2 != idx0:
+                    triangles.append([idx0, idx1, idx2])
+
+        return all_verts, triangles, valid_poly_count
+
+    @staticmethod
+    def _build_manifold_fallback_from_points(
+        cartesian_points: Dict[int, np.ndarray]
+    ) -> m.Manifold:
+        """Génère un volume d'enveloppe cartésienne de repli lorsque la triangulation échoue."""
         if cartesian_points:
             pts_array = np.array(list(cartesian_points.values()))
             min_pt = np.min(pts_array, axis=0)
@@ -615,6 +614,30 @@ class STEPImporter:
             return cube.translate([float(min_pt[0]), float(min_pt[1]), float(min_pt[2])])
 
         return m.Manifold.cube([20.0, 20.0, 20.0], center=False)
+
+    def _construct_manifold_from_brep(
+        self,
+        brep: NexusBRep,
+        cartesian_points: Dict[int, np.ndarray],
+        records: Dict[int, STEPRecord]
+    ) -> m.Manifold:
+        """
+        Construit un corps Manifold3D étanche à partir de la topologie B-Rep ou des polygones analysés.
+        """
+        all_verts, triangles, valid_poly_count = self._triangulate_brep_faces(brep)
+
+        if valid_poly_count >= 4 and len(all_verts) >= 4 and len(triangles) >= 4:
+            try:
+                vert_array = np.array(all_verts, dtype=np.float32)
+                tri_array = np.array(triangles, dtype=np.int32)
+                mesh = m.Mesh(vert_properties=vert_array, tri_verts=tri_array)
+                mani = m.Manifold(mesh)
+                if not mani.is_empty() and mani.volume() > 1e-4:
+                    return mani
+            except (ValueError, RuntimeError, IndexError):
+                mani = None
+
+        return self._build_manifold_fallback_from_points(cartesian_points)
 
     def import_to_cad_solid(self, filepath_or_content: str) -> Optional[Solid]:
         """

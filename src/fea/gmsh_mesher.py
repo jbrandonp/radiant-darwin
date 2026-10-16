@@ -50,8 +50,13 @@ class GmshVolumetricMesher:
     Prend une géométrie étanche (Manifold) et génère une tessellation tétraédrique interne.
     """
 
-    def __init__(self, target_element_size: float = 10.0) -> None:
-        self.element_size: float = max(0.1, float(target_element_size))
+    def __init__(
+        self,
+        target_element_size: float = 10.0,
+        element_size: Optional[float] = None
+    ) -> None:
+        eff_size = element_size if element_size is not None else target_element_size
+        self.element_size: float = max(0.1, float(eff_size))
         self.nodes: Dict[int, GmshNode] = {}
         self.elements: Dict[int, GmshElement] = {}
 
@@ -99,31 +104,19 @@ class GmshVolumetricMesher:
             node_tags=[va, vb, vc, vd] + midpoints
         )
 
-    def mesh_bounding_box_domain(
+    def _generate_node_grid(
         self,
         min_pt: Vector3D,
-        max_pt: Vector3D,
-        order: int = 1
-    ) -> Tuple[List[GmshNode], List[GmshElement]]:
-        """
-        Génère un maillage volumique tétraédrique régulier d'un domaine parallélépipédique.
-        Chaque cube est découpé en 5 ou 6 tétraèdres sans repliement.
-        """
-        self.nodes.clear()
-        self.elements.clear()
-
-        nx = max(2, int(math.ceil((max_pt.x - min_pt.x) / self.element_size)) + 1)
-        ny = max(2, int(math.ceil((max_pt.y - min_pt.y) / self.element_size)) + 1)
-        nz = max(2, int(math.ceil((max_pt.z - min_pt.z) / self.element_size)) + 1)
-
-        dx = (max_pt.x - min_pt.x) / float(nx - 1)
-        dy = (max_pt.y - min_pt.y) / float(ny - 1)
-        dz = (max_pt.z - min_pt.z) / float(nz - 1)
-
-        # 1. Génération de la grille nodale
+        nx: int,
+        ny: int,
+        nz: int,
+        dx: float,
+        dy: float,
+        dz: float
+    ) -> Tuple[np.ndarray, int]:
+        """Génère la grille nodale structurée 3D et enregistre les nœuds."""
         node_grid = np.zeros((nx, ny, nz), dtype=np.int64)
         node_counter = 1
-
         for k in range(nz):
             z = min_pt.z + float(k) * dz
             for j in range(ny):
@@ -136,8 +129,67 @@ class GmshVolumetricMesher:
                         coords=Vector3D(x, y, z)
                     )
                     node_counter += 1
+        return node_grid, node_counter
 
-        # 2. Décomposition de chaque cellule cubique en 5 tétraèdres
+    @staticmethod
+    def _decompose_cell_to_tets(
+        node_grid: np.ndarray,
+        i: int,
+        j: int,
+        k: int
+    ) -> List[Tuple[int, int, int, int]]:
+        """Décompose une cellule cubique locale en 5 tétraèdres selon la parité de la maille."""
+        n0 = int(node_grid[i, j, k])
+        n1 = int(node_grid[i + 1, j, k])
+        n2 = int(node_grid[i + 1, j + 1, k])
+        n3 = int(node_grid[i, j + 1, k])
+        n4 = int(node_grid[i, j, k + 1])
+        n5 = int(node_grid[i + 1, j, k + 1])
+        n6 = int(node_grid[i + 1, j + 1, k + 1])
+        n7 = int(node_grid[i, j + 1, k + 1])
+
+        if (i + j + k) % 2 == 0:
+            return [
+                (n0, n1, n3, n4),
+                (n1, n2, n3, n6),
+                (n1, n4, n5, n6),
+                (n3, n4, n6, n7),
+                (n1, n3, n4, n6)
+            ]
+        return [
+            (n0, n1, n2, n5),
+            (n0, n2, n3, n7),
+            (n0, n4, n5, n7),
+            (n2, n5, n6, n7),
+            (n0, n2, n5, n7)
+        ]
+
+    def mesh_bounding_box_domain(
+        self,
+        min_pt: Vector3D,
+        max_pt: Vector3D,
+        order: int = 1
+    ) -> Tuple[List[GmshNode], List[GmshElement]]:
+        """
+        Génère un maillage volumique tétraédrique régulier d'un domaine parallélépipédique.
+        Chaque cube est découpé en 5 ou 6 tétraèdres sans repliement.
+        """
+        if max_pt.x <= min_pt.x or max_pt.y <= min_pt.y or max_pt.z <= min_pt.z:
+            raise ValueError("Dimensions du domaine de maillage invalides (max_pt <= min_pt).")
+
+        self.nodes.clear()
+        self.elements.clear()
+
+        nx = max(2, int(math.ceil((max_pt.x - min_pt.x) / self.element_size)) + 1)
+        ny = max(2, int(math.ceil((max_pt.y - min_pt.y) / self.element_size)) + 1)
+        nz = max(2, int(math.ceil((max_pt.z - min_pt.z) / self.element_size)) + 1)
+
+        dx = (max_pt.x - min_pt.x) / float(nx - 1)
+        dy = (max_pt.y - min_pt.y) / float(ny - 1)
+        dz = (max_pt.z - min_pt.z) / float(nz - 1)
+
+        node_grid, node_counter = self._generate_node_grid(min_pt, nx, ny, nz, dx, dy, dz)
+
         elem_counter = 1
         edge_midpoints: Dict[Tuple[int, int], int] = {}
         next_node_tag = [node_counter]
@@ -145,37 +197,7 @@ class GmshVolumetricMesher:
         for k in range(nz - 1):
             for j in range(ny - 1):
                 for i in range(nx - 1):
-                    # Sommets du cube local
-                    # Bas (z) : 0=(i,j), 1=(i+1,j), 2=(i+1,j+1), 3=(i,j+1)
-                    # Haut (z+1) : 4=(i,j), 5=(i+1,j), 6=(i+1,j+1), 7=(i,j+1)
-                    n0 = int(node_grid[i, j, k])
-                    n1 = int(node_grid[i + 1, j, k])
-                    n2 = int(node_grid[i + 1, j + 1, k])
-                    n3 = int(node_grid[i, j + 1, k])
-                    n4 = int(node_grid[i, j, k + 1])
-                    n5 = int(node_grid[i + 1, j, k + 1])
-                    n6 = int(node_grid[i + 1, j + 1, k + 1])
-                    n7 = int(node_grid[i, j + 1, k + 1])
-
-                    # Découpage standard en 5 tétraèdres alternés selon parité
-                    tets: List[Tuple[int, int, int, int]]
-                    if (i + j + k) % 2 == 0:
-                        tets = [
-                            (n0, n1, n3, n4),
-                            (n1, n2, n3, n6),
-                            (n1, n4, n5, n6),
-                            (n3, n4, n6, n7),
-                            (n1, n3, n4, n6)
-                        ]
-                    else:
-                        tets = [
-                            (n0, n1, n2, n5),
-                            (n0, n2, n3, n7),
-                            (n0, n4, n5, n7),
-                            (n2, n5, n6, n7),
-                            (n0, n2, n5, n7)
-                        ]
-
+                    tets = self._decompose_cell_to_tets(node_grid, i, j, k)
                     for tet_nodes in tets:
                         self.elements[elem_counter] = self._create_tet_element(
                             elem_counter, order, tet_nodes, edge_midpoints, next_node_tag

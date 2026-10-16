@@ -258,6 +258,26 @@ class FeatureDeserializerRegistry:
         return None
 
     @staticmethod
+    def _parse_multitransform_steps(raw_steps: JSONValue) -> List[MultiTransformStep]:
+        """Désérialise la liste des étapes de transformation combinée."""
+        steps_objs: List[MultiTransformStep] = []
+        if not isinstance(raw_steps, list):
+            return steps_objs
+
+        for st_data in raw_steps:
+            if isinstance(st_data, dict):
+                t_type = str(st_data.get("type", "linear"))
+                cnt = int(st_data.get("count", 2))
+                spc = float(st_data.get("spacing", 20.0))
+                ax = str(st_data.get("axis", "X"))
+                tot_ang = float(st_data.get("total_angle", 360.0))
+                mp_str = str(st_data.get("mirror_plane", "YZ"))
+                mp = PlaneType(mp_str) if mp_str in PlaneType._value2member_map_ else PlaneType.YZ
+                s_fact = float(st_data.get("scale_factor", 1.0))
+                steps_objs.append(MultiTransformStep(t_type, cnt, spc, ax, tot_ang, mp, s_fact))
+        return steps_objs
+
+    @staticmethod
     def _build_patterns_and_transforms(
         f_cls: str, f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
         op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
@@ -286,20 +306,7 @@ class FeatureDeserializerRegistry:
         if f_cls == "MultiTransformFeature":
             src = str(f_data.get("source_body_id", ""))
             join_b = bool(f_data.get("join_bodies", True))
-            raw_steps = f_data.get("steps", [])
-            steps_objs: List[MultiTransformStep] = []
-            if isinstance(raw_steps, list):
-                for st_data in raw_steps:
-                    if isinstance(st_data, dict):
-                        t_type = str(st_data.get("type", "linear"))
-                        cnt = int(st_data.get("count", 2))
-                        spc = float(st_data.get("spacing", 20.0))
-                        ax = str(st_data.get("axis", "X"))
-                        tot_ang = float(st_data.get("total_angle", 360.0))
-                        mp_str = str(st_data.get("mirror_plane", "YZ"))
-                        mp = PlaneType(mp_str) if mp_str in PlaneType._value2member_map_ else PlaneType.YZ
-                        s_fact = float(st_data.get("scale_factor", 1.0))
-                        steps_objs.append(MultiTransformStep(t_type, cnt, spc, ax, tot_ang, mp, s_fact))
+            steps_objs = Serializer._parse_multitransform_steps(f_data.get("steps", []))
             return MultiTransformFeature(f_id, f_name, src, steps_objs, join_b)
 
         return None
@@ -690,3 +697,9 @@ class ProjectSerializer:
                 return json.load(f)
         except Exception:
             return None
+
+
+# Alias pour compatibilité
+Serializer = ProjectSerializer
+setattr(Serializer, "_parse_multitransform_steps", staticmethod(FeatureDeserializerRegistry._parse_multitransform_steps))
+

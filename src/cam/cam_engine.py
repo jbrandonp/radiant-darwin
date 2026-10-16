@@ -70,6 +70,31 @@ class CAMEngine:
         self.safe_z: float = 5.0      # Hauteur de sécurité de dégagement
         self.stepdown_mm: float = 2.0  # Profondeur de passe en Z
 
+    @staticmethod
+    def _generate_zigzag_passes(
+        x0: float,
+        x1: float,
+        y0: float,
+        y1: float,
+        current_z: float,
+        stepover: float
+    ) -> List[ToolpathPoint]:
+        """Génère la trajectoire zigzag bidirectionnelle d'une passe de surfaçage en Z."""
+        points: List[ToolpathPoint] = []
+        y = y0
+        direction = 1
+
+        while y <= y1:
+            target_x = x1 if direction == 1 else x0
+            points.append(ToolpathPoint(Vector3D(target_x, y, current_z), is_rapid=False))
+
+            y += stepover
+            if y <= y1:
+                points.append(ToolpathPoint(Vector3D(target_x, y, current_z), is_rapid=False))
+            direction = -direction
+
+        return points
+
     def generate_facing_toolpath(
         self,
         min_x: float, max_x: float,
@@ -97,26 +122,12 @@ class CAMEngine:
 
         while current_z > target_z:
             current_z = max(target_z, current_z - stepdown)
-            y = y0
-            direction = 1
 
-            # Dégagement rapide vers le point de départ
             op.points.append(ToolpathPoint(Vector3D(x0, y0, clearance_z), is_rapid=True))
             op.points.append(ToolpathPoint(Vector3D(x0, y0, current_z), is_rapid=False))
 
-            while y <= y1:
-                if direction == 1:
-                    op.points.append(ToolpathPoint(Vector3D(x1, y, current_z), is_rapid=False))
-                else:
-                    op.points.append(ToolpathPoint(Vector3D(x0, y, current_z), is_rapid=False))
-
-                y += stepover
-                if y <= y1:
-                    if direction == 1:
-                        op.points.append(ToolpathPoint(Vector3D(x1, y, current_z), is_rapid=False))
-                    else:
-                        op.points.append(ToolpathPoint(Vector3D(x0, y, current_z), is_rapid=False))
-                direction = -direction
+            zigzag_pts = self._generate_zigzag_passes(x0, x1, y0, y1, current_z, stepover)
+            op.points.extend(zigzag_pts)
 
             if op.points:
                 op.points.append(ToolpathPoint(Vector3D(op.points[-1].pos.x, op.points[-1].pos.y, clearance_z), is_rapid=True))

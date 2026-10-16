@@ -118,3 +118,73 @@ def test_calculix_stress_parsing_helpers() -> None:
     # Ligne corrompue
     assert CalculixResultParser._parse_single_stress_line("invalid") is None
 
+
+def test_gmsh_mesher_modular_helpers() -> None:
+    """Vérifie la grille nodale modulaire, la décomposition en tétraèdres et la validation des bornes."""
+    import pytest
+    from src.fea.gmsh_mesher import GmshVolumetricMesher
+    from src.core.types import Vector3D
+
+    mesher = GmshVolumetricMesher(element_size=10.0)
+
+    # 1. Validation des bornes invalides
+    with pytest.raises(ValueError, match="Dimensions du domaine de maillage invalides"):
+        mesher.mesh_bounding_box_domain(Vector3D(10.0, 10.0, 10.0), Vector3D(5.0, 10.0, 10.0))
+
+    # 2. Grille nodale
+    grid, next_id = mesher._generate_node_grid(
+        Vector3D(0.0, 0.0, 0.0), nx=3, ny=2, nz=2, dx=10.0, dy=10.0, dz=10.0
+    )
+    assert grid.shape == (3, 2, 2)
+    assert next_id == 13
+    assert len(mesher.nodes) == 12
+
+    # 3. Décomposition d'une cellule locale
+    tets_even = mesher._decompose_cell_to_tets(grid, 0, 0, 0)
+    assert len(tets_even) == 5
+
+    tets_odd = mesher._decompose_cell_to_tets(grid, 1, 0, 0)
+    assert len(tets_odd) == 5
+
+
+def test_nonlinear_fem_sparse_assembly_modular() -> None:
+    """Vérifie l'accumulation des degrés de liberté et l'assemblage creux vectorisé."""
+    import numpy as np
+    from src.fea.nonlinear_fem import NonlinearFEASolver, Tet10Element, BilinearPlasticMaterial
+
+    node_coords = np.array([
+        [0.0, 0.0, 0.0],
+        [10.0, 0.0, 0.0],
+        [0.0, 10.0, 0.0],
+        [0.0, 0.0, 10.0],
+        [5.0, 0.0, 0.0],
+        [5.0, 5.0, 0.0],
+        [0.0, 5.0, 0.0],
+        [0.0, 0.0, 5.0],
+        [5.0, 0.0, 5.0],
+        [0.0, 5.0, 5.0]
+    ], dtype=np.float64)
+
+    elem = Tet10Element(element_id=1, node_indices=list(range(10)))
+    mat = BilinearPlasticMaterial(
+        youngs_modulus_mpa=210000.0,
+        poissons_ratio=0.3,
+        yield_strength_mpa=250.0,
+        tangent_modulus_mpa=10000.0
+    )
+
+    rows: list[int] = []
+    cols: list[int] = []
+    data: list[float] = []
+
+    ke = elem.calculate_stiffness_matrix(node_coords, mat)
+    NonlinearFEASolver._accumulate_element_dofs(elem, ke, rows, cols, data)
+
+    assert len(rows) > 0
+    assert len(rows) == len(cols) == len(data)
+
+    # Assemblage complet
+    csr = NonlinearFEASolver.assemble_global_sparse_stiffness([elem], node_coords, mat)
+    assert csr.shape == (30, 30)
+    assert csr.nnz > 0
+

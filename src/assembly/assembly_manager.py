@@ -74,6 +74,30 @@ class AssemblyManager:
         self.joints[joint_id] = j
         return j
 
+    @staticmethod
+    def _clamp_joint_value(joint: Joint, target_value: float) -> Tuple[float, float]:
+        """Borne la consigne articulaire dans les limites et calcule le déplacement delta."""
+        val = target_value
+        if joint.min_limit is not None:
+            val = max(joint.min_limit, val)
+        if joint.max_limit is not None:
+            val = min(joint.max_limit, val)
+        delta = val - joint.current_value
+        joint.current_value = val
+        return val, delta
+
+    @staticmethod
+    def _apply_joint_rotation(solid: Solid, axis: Vector3D, delta: float) -> Solid:
+        """Applique une rotation axiale relative à un composant solide selon son axe directeur."""
+        if abs(axis.z) > 0.5:
+            sign = 1.0 if axis.z > 0 else -1.0
+            return solid.rotate(0.0, 0.0, delta * sign)
+        if abs(axis.x) > 0.5:
+            sign = 1.0 if axis.x > 0 else -1.0
+            return solid.rotate(delta * sign, 0.0, 0.0)
+        sign = 1.0 if axis.y > 0 else -1.0
+        return solid.rotate(0.0, delta * sign, 0.0)
+
     def animate_joint(
         self,
         joint_id: str,
@@ -94,29 +118,11 @@ class AssemblyManager:
 
         updated = dict(bodies)
         child_solid = updated[child_id]
-        val = new_value
-        if joint.min_limit is not None:
-            val = max(joint.min_limit, val)
-        if joint.max_limit is not None:
-            val = min(joint.max_limit, val)
-        delta = val - joint.current_value
-        joint.current_value = val
+        _, delta = self._clamp_joint_value(joint, new_value)
 
         if joint.joint_type in (JointType.REVOLUTE, JointType.CYLINDRICAL):
-            # Rotation autour de l'axe spécifié (avec prise en compte du signe de l'axe)
-            if abs(joint.axis.z) > 0.5:
-                sign = 1.0 if joint.axis.z > 0 else -1.0
-                transformed = child_solid.rotate(0.0, 0.0, delta * sign)
-            elif abs(joint.axis.x) > 0.5:
-                sign = 1.0 if joint.axis.x > 0 else -1.0
-                transformed = child_solid.rotate(delta * sign, 0.0, 0.0)
-            else:
-                sign = 1.0 if joint.axis.y > 0 else -1.0
-                transformed = child_solid.rotate(0.0, delta * sign, 0.0)
-            updated[child_id] = transformed
-
+            updated[child_id] = self._apply_joint_rotation(child_solid, joint.axis, delta)
         elif joint.joint_type == JointType.SLIDER:
-            # Translation le long de l'axe spécifié
             offset = joint.axis.normalized().scale(delta)
             updated[child_id] = child_solid.translate(offset)
 
@@ -147,3 +153,7 @@ class AssemblyManager:
         has_col = bool(overlap_vol > 1e-3)
 
         return InterferenceResult(id_a, id_b, has_col, overlap_vol)
+
+
+# Alias d'interopérabilité
+Joint = MechanicalJoint

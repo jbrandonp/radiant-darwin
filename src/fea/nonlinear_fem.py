@@ -212,6 +212,27 @@ class NonlinearFEASolver:
         }
 
     @staticmethod
+    def _accumulate_element_dofs(
+        elem: Tet10Element,
+        ke: np.ndarray,
+        rows: List[int],
+        cols: List[int],
+        data: List[float]
+    ) -> None:
+        """Accumule les degrés de liberté d'un élément Tet10 dans les listes COO."""
+        elem_dofs = np.zeros(30, dtype=np.int64)
+        for i, node_idx in enumerate(elem.node_indices):
+            base = 3 * node_idx
+            elem_dofs[3 * i] = base
+            elem_dofs[3 * i + 1] = base + 1
+            elem_dofs[3 * i + 2] = base + 2
+
+        r_indices, c_indices = np.where(np.abs(ke) > 1e-12)
+        rows.extend(elem_dofs[r_indices].tolist())
+        cols.extend(elem_dofs[c_indices].tolist())
+        data.extend(ke[r_indices, c_indices].tolist())
+
+    @staticmethod
     def assemble_global_sparse_stiffness(
         elements: List[Tet10Element],
         node_coords: np.ndarray,
@@ -232,20 +253,7 @@ class NonlinearFEASolver:
 
         for elem in elements:
             ke = elem.calculate_stiffness_matrix(node_coords, material)
-            indices = elem.node_indices
-            for i in range(10):
-                node_i = indices[i]
-                for j in range(10):
-                    node_j = indices[j]
-                    for d_i in range(3):
-                        dof_i = 3 * node_i + d_i
-                        for d_j in range(3):
-                            dof_j = 3 * node_j + d_j
-                            val = float(ke[3 * i + d_i, 3 * j + d_j])
-                            if abs(val) > 1e-12:
-                                rows.append(dof_i)
-                                cols.append(dof_j)
-                                data.append(val)
+            NonlinearFEASolver._accumulate_element_dofs(elem, ke, rows, cols, data)
 
         coo = sp.coo_matrix((data, (rows, cols)), shape=(total_dofs, total_dofs), dtype=np.float64)
         return coo.tocsr()

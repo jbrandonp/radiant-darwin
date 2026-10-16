@@ -95,6 +95,45 @@ class ThreeMFExporter:
         )
 
     @classmethod
+    def _append_solid_objects(
+        cls,
+        solids: Dict[str, Solid],
+        lines: List[str],
+        build_items: List[int],
+        start_obj_id: int
+    ) -> int:
+        """Ajoute les objets maillés volumiques à la ressource 3MF."""
+        obj_id = start_obj_id
+        for s_name, solid in solids.items():
+            if solid.is_empty():
+                continue
+            buf = solid.to_mesh_buffer()
+            if buf.is_empty():
+                continue
+            lines.append(cls._build_mesh_object_xml(obj_id, s_name, buf))
+            build_items.append(obj_id)
+            obj_id += 1
+        return obj_id
+
+    @classmethod
+    def _append_lattice_objects(
+        cls,
+        lattices: Dict[str, BeamLatticeTopology],
+        lines: List[str],
+        build_items: List[int],
+        start_obj_id: int
+    ) -> int:
+        """Ajoute les objets de treillis réticulaires (Beam Lattice) à la ressource 3MF."""
+        obj_id = start_obj_id
+        for l_name, lattice in lattices.items():
+            if lattice.is_empty():
+                continue
+            lines.append(cls._build_lattice_object_xml(obj_id, l_name, lattice))
+            build_items.append(obj_id)
+            obj_id += 1
+        return obj_id
+
+    @classmethod
     def build_model_xml(
         cls,
         solids: Optional[Dict[str, Solid]] = None,
@@ -123,28 +162,11 @@ class ThreeMFExporter:
         obj_id = 2
         build_items: List[int] = []
 
-        # 1. Export des solides volumiques
         if solids:
-            for s_name, solid in solids.items():
-                if solid.is_empty():
-                    continue
-                buf = solid.to_mesh_buffer()
-                if buf.is_empty():
-                    continue
-                mesh_xml = cls._build_mesh_object_xml(obj_id, s_name, buf)
-                lines.append(mesh_xml)
-                build_items.append(obj_id)
-                obj_id += 1
+            obj_id = cls._append_solid_objects(solids, lines, build_items, obj_id)
 
-        # 2. Export des treillis réticulaires (Beam Lattice)
         if lattices:
-            for l_name, lattice in lattices.items():
-                if lattice.is_empty():
-                    continue
-                lattice_xml = cls._build_lattice_object_xml(obj_id, l_name, lattice)
-                lines.append(lattice_xml)
-                build_items.append(obj_id)
-                obj_id += 1
+            obj_id = cls._append_lattice_objects(lattices, lines, build_items, obj_id)
 
         lines.append('  </resources>')
         lines.append('  <build>')

@@ -167,6 +167,49 @@ class SDFIntervalTreeNode:
 
         return SDFInterval(0.0, 0.0)
 
+    @staticmethod
+    def _try_prune_union(
+        left: SDFIntervalTreeNode,
+        right: SDFIntervalTreeNode,
+        int_l: SDFInterval,
+        int_r: SDFInterval
+    ) -> Optional[SDFIntervalTreeNode]:
+        """Règle d'élagage pour l'Union min(L, R)."""
+        if int_l.max_val < int_r.min_val:
+            return left
+        if int_r.max_val < int_l.min_val:
+            return right
+        return None
+
+    @staticmethod
+    def _try_prune_intersection(
+        left: SDFIntervalTreeNode,
+        right: SDFIntervalTreeNode,
+        int_l: SDFInterval,
+        int_r: SDFInterval
+    ) -> Optional[SDFIntervalTreeNode]:
+        """Règle d'élagage pour l'Intersection max(L, R)."""
+        if int_l.min_val > int_r.max_val:
+            return left
+        if int_r.min_val > int_l.max_val:
+            return right
+        return None
+
+    @staticmethod
+    def _try_prune_difference(
+        left: SDFIntervalTreeNode,
+        right: SDFIntervalTreeNode,
+        int_l: SDFInterval,
+        int_r: SDFInterval
+    ) -> Optional[SDFIntervalTreeNode]:
+        """Règle d'élagage pour la Différence max(L, -R)."""
+        neg_r = int_r.negate()
+        if int_l.min_val > neg_r.max_val:
+            return left
+        if neg_r.min_val > int_l.max_val:
+            return SDFIntervalTreeNode(CSGOpType.CONSTANT, params=(neg_r.min_val,))
+        return None
+
     def prune_for_tile(
         self,
         ix: SDFInterval,
@@ -192,28 +235,20 @@ class SDFIntervalTreeNode:
         int_l = pruned_left.eval_interval(ix, iy, iz)
         int_r = pruned_right.eval_interval(ix, iy, iz)
 
-        # Règle d'élagage pour l'Union min(L, R) :
-        # Si L.max_val < R.min_val, L est strictement plus petit que R sur toute la tuile -> R est supprimé !
         if self.op == CSGOpType.UNION:
-            if int_l.max_val < int_r.min_val:
-                return pruned_left
-            if int_r.max_val < int_l.min_val:
-                return pruned_right
+            pruned_union = self._try_prune_union(pruned_left, pruned_right, int_l, int_r)
+            if pruned_union is not None:
+                return pruned_union
 
-        # Règle d'élagage pour l'Intersection max(L, R) :
         if self.op == CSGOpType.INTERSECTION:
-            if int_l.min_val > int_r.max_val:
-                return pruned_left
-            if int_r.min_val > int_l.max_val:
-                return pruned_right
+            pruned_inter = self._try_prune_intersection(pruned_left, pruned_right, int_l, int_r)
+            if pruned_inter is not None:
+                return pruned_inter
 
-        # Règle d'élagage pour la Différence max(L, -R) :
         if self.op == CSGOpType.DIFFERENCE:
-            neg_r = int_r.negate()
-            if int_l.min_val > neg_r.max_val:
-                return pruned_left
-            if neg_r.min_val > int_l.max_val:
-                return SDFIntervalTreeNode(CSGOpType.CONSTANT, params=(neg_r.min_val,))
+            pruned_diff = self._try_prune_difference(pruned_left, pruned_right, int_l, int_r)
+            if pruned_diff is not None:
+                return pruned_diff
 
         return SDFIntervalTreeNode(self.op, left=pruned_left, right=pruned_right, params=self.params)
 

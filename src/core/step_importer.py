@@ -450,8 +450,36 @@ class STEPImporter:
         ref_rec: STEPRecord,
         loop_wire_map: Dict[int, NexusWire]
     ) -> List[NexusWire]:
-        bound_refs = [int(x) for x in re.findall(r"#(\d+)", ref_rec.raw_args)]
+        source_text = ref_rec.raw_args if ref_rec.raw_args else ", ".join(ref_rec.args)
+        bound_refs = [int(x) for x in re.findall(r"#(\d+)", source_text)]
         return [loop_wire_map[b_id] for b_id in bound_refs if b_id in loop_wire_map]
+
+    @classmethod
+    def _extract_boundary_wires_from_rec(
+        cls,
+        ref_rec: STEPRecord,
+        loop_wire_map: Dict[int, NexusWire],
+        outer_wire: Optional[NexusWire],
+        inner_wires: List[NexusWire]
+    ) -> Optional[NexusWire]:
+        """Extrait et classe les fils de frontière d'un enregistrement BOUND."""
+        for w in cls._collect_bound_wires(ref_rec, loop_wire_map):
+            if outer_wire is None:
+                outer_wire = w
+            else:
+                inner_wires.append(w)
+        return outer_wire
+
+    @staticmethod
+    def _find_fallback_outer_wire(
+        ref_ids: List[int],
+        loop_wire_map: Dict[int, NexusWire]
+    ) -> Optional[NexusWire]:
+        """Recherche un fil extérieur de repli parmi les identifiants de référence."""
+        for ref_id in ref_ids:
+            if ref_id in loop_wire_map:
+                return loop_wire_map[ref_id]
+        return None
 
     @classmethod
     def _resolve_face_boundaries_and_surface(
@@ -471,19 +499,14 @@ class STEPImporter:
             if not ref_rec:
                 continue
             if "BOUND" in ref_rec.entity_type:
-                for w in cls._collect_bound_wires(ref_rec, loop_wire_map):
-                    if outer_wire is None:
-                        outer_wire = w
-                    else:
-                        inner_wires.append(w)
+                outer_wire = cls._extract_boundary_wires_from_rec(
+                    ref_rec, loop_wire_map, outer_wire, inner_wires
+                )
             elif ref_id in surface_map:
                 face_surf = surface_map[ref_id]
 
         if outer_wire is None:
-            for ref_id in ref_ids:
-                if ref_id in loop_wire_map:
-                    outer_wire = loop_wire_map[ref_id]
-                    break
+            outer_wire = cls._find_fallback_outer_wire(ref_ids, loop_wire_map)
 
         return outer_wire, inner_wires, face_surf
 

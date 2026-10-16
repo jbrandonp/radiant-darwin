@@ -162,3 +162,31 @@ def test_fidget_interval_tree_evaluation_helpers() -> None:
     iz = SDFInterval(-2.0, 2.0)
     res_int = sphere_node.eval_interval(ix, iy, iz)
     assert res_int.min_val < 0.0
+
+
+def test_fidget_interval_tree_pruning_rules() -> None:
+    """Vérifie les règles d'élagage d'arbre d'intervalles (Union, Intersection, Différence)."""
+    from src.core.nexus_kernel.fidget_interval_tree import SDFIntervalTreeNode, CSGOpType, SDFInterval
+
+    node_a = SDFIntervalTreeNode(op=CSGOpType.CONSTANT, params=(1.0,))
+    node_b = SDFIntervalTreeNode(op=CSGOpType.CONSTANT, params=(5.0,))
+
+    int_a = SDFInterval(1.0, 2.0)
+    int_b = SDFInterval(4.0, 6.0)
+
+    # 1. Union: A max (2.0) < B min (4.0) -> A l'emporte (min)
+    pruned_u = SDFIntervalTreeNode._try_prune_union(node_a, node_b, int_a, int_b)
+    assert pruned_u == node_a
+
+    # 2. Intersection: A min (1.0) < B max (6.0), mais B min (4.0) > A max (2.0) -> B l'emporte (max)
+    pruned_i = SDFIntervalTreeNode._try_prune_intersection(node_a, node_b, int_a, int_b)
+    assert pruned_i == node_b
+
+    # 3. Différence: max(L, -R)
+    # L in [1.0, 2.0], R in [-10.0, -8.0] -> -R in [8.0, 10.0]
+    # L max (2.0) < -R min (8.0) -> -R l'emporte
+    int_r = SDFInterval(-10.0, -8.0)
+    pruned_d = SDFIntervalTreeNode._try_prune_difference(node_a, node_b, int_a, int_r)
+    assert pruned_d is not None
+    assert pruned_d.op == CSGOpType.CONSTANT
+    assert pruned_d.params == (8.0,)

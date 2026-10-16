@@ -773,6 +773,46 @@ class Sketch2D:
             target.p1 = inter_pt
         return target
 
+    @staticmethod
+    def _detect_corner_topology(
+        l1: SketchLine,
+        l2: SketchLine,
+        eps: float = 1e-4
+    ) -> Optional[Tuple[Point2D, Point2D, Point2D, bool, bool]]:
+        """
+        Détecte la topologie d'un coin formé par deux segments sécants ou contigus.
+        Retourne (corner, p0, p1, is_l1_end, is_l2_start) ou None si non connectés.
+        """
+        if float(np.hypot(l1.p2.u - l2.p1.u, l1.p2.v - l2.p1.v)) < eps:
+            return l1.p2, l1.p1, l2.p2, True, True
+        if float(np.hypot(l1.p1.u - l2.p1.u, l1.p1.v - l2.p1.v)) < eps:
+            return l1.p1, l1.p2, l2.p2, False, True
+        if float(np.hypot(l1.p2.u - l2.p2.u, l1.p2.v - l2.p2.v)) < eps:
+            return l1.p2, l1.p1, l2.p1, True, False
+        if float(np.hypot(l1.p1.u - l2.p2.u, l1.p1.v - l2.p2.v)) < eps:
+            return l1.p1, l1.p2, l2.p1, False, False
+        return None
+
+    @staticmethod
+    def _update_line_endpoints(
+        l1: SketchLine,
+        l2: SketchLine,
+        p_l1: Point2D,
+        p_l2: Point2D,
+        is_l1_end: bool,
+        is_l2_start: bool
+    ) -> None:
+        """Met à jour les extrémités ajustées de deux lignes d'angle."""
+        if is_l1_end:
+            l1.p2 = p_l1
+        else:
+            l1.p1 = p_l1
+
+        if is_l2_start:
+            l2.p1 = p_l2
+        else:
+            l2.p2 = p_l2
+
     def fillet_2d_lines(
         self,
         line1_id: str,
@@ -791,35 +831,16 @@ class Sketch2D:
         if not l1 or not l2 or radius <= 0.0:
             return None
 
-        eps = 1e-4
-        if np.hypot(l1.p2.u - l2.p1.u, l1.p2.v - l2.p1.v) < eps:
-            corner, p0, p1 = l1.p2, l1.p1, l2.p2
-            is_l1_end, is_l2_start = True, True
-        elif np.hypot(l1.p1.u - l2.p1.u, l1.p1.v - l2.p1.v) < eps:
-            corner, p0, p1 = l1.p1, l1.p2, l2.p2
-            is_l1_end, is_l2_start = False, True
-        elif np.hypot(l1.p2.u - l2.p2.u, l1.p2.v - l2.p2.v) < eps:
-            corner, p0, p1 = l1.p2, l1.p1, l2.p1
-            is_l1_end, is_l2_start = True, False
-        elif np.hypot(l1.p1.u - l2.p2.u, l1.p1.v - l2.p2.v) < eps:
-            corner, p0, p1 = l1.p1, l1.p2, l2.p1
-            is_l1_end, is_l2_start = False, False
-        else:
+        corner_topo = self._detect_corner_topology(l1, l2)
+        if corner_topo is None:
             return None
+        corner, p0, p1, is_l1_end, is_l2_start = corner_topo
 
         t0, t1, center, eff_rad = fillet_2d(p0, corner, p1, radius)
         if eff_rad <= 0.0:
             return None
 
-        if is_l1_end:
-            l1.p2 = t0
-        else:
-            l1.p1 = t0
-
-        if is_l2_start:
-            l2.p1 = t1
-        else:
-            l2.p2 = t1
+        self._update_line_endpoints(l1, l2, t0, t1, is_l1_end, is_l2_start)
 
         self._counter += 1
         fillet_circle = SketchCircle(f"fillet_{self._counter}", center, eff_rad, segments=24)
@@ -843,21 +864,10 @@ class Sketch2D:
         if not l1 or not l2 or distance <= 0.0:
             return None
 
-        eps = 1e-4
-        if np.hypot(l1.p2.u - l2.p1.u, l1.p2.v - l2.p1.v) < eps:
-            corner, p0, p1 = l1.p2, l1.p1, l2.p2
-            is_l1_end, is_l2_start = True, True
-        elif np.hypot(l1.p1.u - l2.p1.u, l1.p1.v - l2.p1.v) < eps:
-            corner, p0, p1 = l1.p1, l1.p2, l2.p2
-            is_l1_end, is_l2_start = False, True
-        elif np.hypot(l1.p2.u - l2.p2.u, l1.p2.v - l2.p2.v) < eps:
-            corner, p0, p1 = l1.p2, l1.p1, l2.p1
-            is_l1_end, is_l2_start = True, False
-        elif np.hypot(l1.p1.u - l2.p2.u, l1.p1.v - l2.p2.v) < eps:
-            corner, p0, p1 = l1.p1, l1.p2, l2.p1
-            is_l1_end, is_l2_start = False, False
-        else:
+        corner_topo = self._detect_corner_topology(l1, l2)
+        if corner_topo is None:
             return None
+        corner, p0, p1, is_l1_end, is_l2_start = corner_topo
 
         v0 = np.array([p0.u - corner.u, p0.v - corner.v], dtype=np.float64)
         v1 = np.array([p1.u - corner.u, p1.v - corner.v], dtype=np.float64)
@@ -871,15 +881,7 @@ class Sketch2D:
         c0 = Point2D(corner.u + float(d0[0]), corner.v + float(d0[1]))
         c1 = Point2D(corner.u + float(d1[0]), corner.v + float(d1[1]))
 
-        if is_l1_end:
-            l1.p2 = c0
-        else:
-            l1.p1 = c0
-
-        if is_l2_start:
-            l2.p1 = c1
-        else:
-            l2.p2 = c1
+        self._update_line_endpoints(l1, l2, c0, c1, is_l1_end, is_l2_start)
 
         self._counter += 1
         chamfer_line = SketchLine(f"chamfer_{self._counter}", c0, c1)

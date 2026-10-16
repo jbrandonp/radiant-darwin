@@ -135,3 +135,32 @@ def test_step_importer_modular_extractors() -> None:
     assert "MainBody" in solids
     assert len(pmi) == 1
     assert "GEOMETRIC_TOLERANCE" in pmi[0]
+
+
+def test_step_importer_boundary_wires_and_fallback() -> None:
+    """Vérifie la résolution des fils de frontière et la détection de fil de repli."""
+    from src.core.step_importer import STEPRecord
+    from src.core.nexus_kernel.brep_topology import NexusWire
+
+    w1 = NexusWire("Wire_1", [])
+    w2 = NexusWire("Wire_2", [])
+    loop_map = {101: w1, 102: w2}
+
+    # Test fallback outer wire
+    found = STEPImporter._find_fallback_outer_wire([999, 102, 101], loop_map)
+    assert found == w2
+    assert STEPImporter._find_fallback_outer_wire([998, 999], loop_map) is None
+
+    # Test extract boundary wires
+    rec = STEPRecord(200, "FACE_OUTER_BOUND", ["'B1'", "#101", ".T."])
+    inner_list: list[NexusWire] = []
+    outer = STEPImporter._extract_boundary_wires_from_rec(rec, loop_map, None, inner_list)
+    assert outer == w1
+    assert len(inner_list) == 0
+
+    # Second bound wire becomes inner wire
+    rec2 = STEPRecord(201, "FACE_BOUND", ["'B2'", "#102", ".T."])
+    outer_res = STEPImporter._extract_boundary_wires_from_rec(rec2, loop_map, outer, inner_list)
+    assert outer_res == w1
+    assert len(inner_list) == 1
+    assert inner_list[0] == w2

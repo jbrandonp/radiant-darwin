@@ -158,3 +158,36 @@ def test_sketch_dimension_default_value_calculation() -> None:
     # Entité inconnue
     dim_none = sk.add_dimension(DimensionType.DISTANCE, "unknown_ent")
     assert dim_none.value == 0.0
+
+
+def test_sketch_corner_topology_and_endpoint_updating() -> None:
+    """Vérifie la détection des 4 topologies de coins et la mise à jour des extrémités."""
+    from src.core.types import Point2D
+    from src.core.sketch import Sketch2D, SketchLine
+
+    # 1. Configuration L1 fin <-> L2 début
+    l1_a = SketchLine("l1_a", Point2D(0.0, 0.0), Point2D(10.0, 0.0))
+    l2_a = SketchLine("l2_a", Point2D(10.0, 0.0), Point2D(10.0, 10.0))
+    res_a = Sketch2D._detect_corner_topology(l1_a, l2_a)
+    assert res_a is not None
+    corner, p0, p1, is_l1_end, is_l2_start = res_a
+    assert corner.u == 10.0 and corner.v == 0.0
+    assert is_l1_end is True and is_l2_start is True
+
+    # 2. Configuration L1 début <-> L2 début
+    l1_b = SketchLine("l1_b", Point2D(10.0, 0.0), Point2D(0.0, 0.0))
+    l2_b = SketchLine("l2_b", Point2D(10.0, 0.0), Point2D(10.0, 10.0))
+    res_b = Sketch2D._detect_corner_topology(l1_b, l2_b)
+    assert res_b is not None
+    _, _, _, is_l1_end_b, is_l2_start_b = res_b
+    assert is_l1_end_b is False and is_l2_start_b is True
+
+    # 3. Configuration non connectée
+    l1_c = SketchLine("l1_c", Point2D(0.0, 0.0), Point2D(5.0, 0.0))
+    l2_c = SketchLine("l2_c", Point2D(10.0, 0.0), Point2D(10.0, 10.0))
+    assert Sketch2D._detect_corner_topology(l1_c, l2_c) is None
+
+    # 4. Test mise à jour des extrémités
+    Sketch2D._update_line_endpoints(l1_a, l2_a, Point2D(8.0, 0.0), Point2D(10.0, 2.0), True, True)
+    assert l1_a.p2.u == 8.0 and l1_a.p2.v == 0.0
+    assert l2_a.p1.u == 10.0 and l2_a.p1.v == 2.0

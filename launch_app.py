@@ -114,8 +114,21 @@ def launch_cad_studio() -> bool:
         return True
     else:
         err = k32.GetLastError()
-        print(f"Échec du démarrage de CAD Studio (Erreur Win32: {err}).")
-        return False
+        print(f"Rattachement direct WinSta0 indisponible (Erreur Win32: {err}), lancement via sous-processus standard...")
+        try:
+            env = dict(os.environ)
+            env["PYTHONPATH"] = root_dir + os.pathsep + env.get("PYTHONPATH", "")
+            proc = subprocess.Popen(
+                [python_exe, "-m", "src.main"],
+                cwd=root_dir,
+                env=env,
+                creationflags=0x00000200
+            )
+            print(f"CAD Studio démarré avec succès (PID: {proc.pid}).")
+            return True
+        except Exception as exc:
+            print(f"Échec du démarrage de CAD Studio: {exc}")
+            return False
 
 
 if __name__ == "__main__":

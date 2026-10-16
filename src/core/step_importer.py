@@ -557,7 +557,7 @@ class STEPImporter:
                 mani = m.Manifold(mesh)
                 if not mani.is_empty() and mani.volume() > 1e-4:
                     return mani
-            except Exception:
+            except (ValueError, RuntimeError, IndexError):
                 pass
 
         # Fallback volumique précis basé sur l'enveloppe cartésienne des points

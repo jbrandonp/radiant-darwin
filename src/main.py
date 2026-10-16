@@ -63,6 +63,10 @@ def main() -> int:
             f.write(f"[6/6] app.exec() ended with returncode {ret}\n")
             f.flush()
 
+        del window
+        import gc
+        gc.collect()
+
         return ret
     except Exception as e:
         import traceback

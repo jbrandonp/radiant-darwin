@@ -244,7 +244,7 @@ class ParameterTable:
                         context[name] = new_val
                         p.value = new_val
                         changed = True
-                except Exception:
+                except (ValueError, ZeroDivisionError, KeyError, TypeError, NameError):
                     pass
             if not changed:
                 break

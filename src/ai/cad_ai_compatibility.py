@@ -123,7 +123,7 @@ class AIArgumentAdapter:
                 decoded = json.loads(clean_str)
                 if isinstance(decoded, dict):
                     return cls._normalize_dict(decoded)
-            except Exception:
+            except (json.JSONDecodeError, ValueError, TypeError):
                 pass
 
         return {}
@@ -231,7 +231,7 @@ class AIArgumentAdapter:
                         if isinstance(v, (str, int, float, bool)):
                             res[str(k)] = v
                     return res
-            except Exception:
+            except (json.JSONDecodeError, ValueError, TypeError):
                 pass
         return {}
 

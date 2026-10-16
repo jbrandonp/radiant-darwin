@@ -434,16 +434,16 @@ class AITaskFuture:
         if fire_now:
             try:
                 cb(self)
-            except Exception:
-                pass
+            except Exception as err:
+                print(f"Erreur callback immédiat tâche IA : {err}")
 
     def _fire_callbacks(self) -> None:
         """Déclenche tous les callbacks enregistrés."""
         for cb in self._callbacks:
             try:
                 cb(self)
-            except Exception:
-                pass
+            except Exception as err:
+                print(f"Erreur callback tâche IA : {err}")
 
     def wait(self, timeout_s: Optional[float] = None) -> bool:
         """Attend la fin de l'exécution pendant timeout_s secondes au maximum."""

@@ -1948,8 +1948,8 @@ class MultiRailLoftFeature(Feature):
                 solid = Solid(loft_m, self.name)
                 self.status = FeatureStatus.OK
                 return _apply_boolean_operation(existing_bodies, solid, self.operation, self.body_id, self.target_body_id)
-        except Exception:
-            pass
+        except Exception as err:
+            print(f"Avertissement lissage Loft non-manifold ({self.name}): {err}, bascule vers géométrie de secours.")
 
         cube = m.Manifold.cube([20.0, 20.0, abs(z_end - z_start)], center=False)
         solid = Solid(cube, self.name)

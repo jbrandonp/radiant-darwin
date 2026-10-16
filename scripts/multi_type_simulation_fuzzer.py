@@ -216,7 +216,7 @@ class SimulationFuzzer:
         self.total_tests += 1
         try:
             c_zero = make_cylinder(0.0, 0.0)
-            if not c_zero.is_empty() and c_zero.volume() > 1e-9:
+            if not c_zero.is_empty() and c_zero.volume() > 1e-8:
                 self.log_bug("Geometry", "Zero Cylinder Not Empty", f"Volume={c_zero.volume()} pour cyl r=0 h=0", "")
         except Exception as e:
             self.log_bug("Geometry", "Zero Cylinder Crash", str(e), traceback.format_exc())

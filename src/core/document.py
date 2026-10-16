@@ -57,7 +57,7 @@ class CADDocument:
                 num_bodies=len(self.bodies),
                 num_features=len(self.features)
             ))
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             pass
 
     def invalidate_cache(self) -> None:
@@ -135,7 +135,7 @@ class CADDocument:
                 new_index=clamped_idx,
                 max_index=len(self.features) - 1
             ))
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             pass
 
         self.rebuild()

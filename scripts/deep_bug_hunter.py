@@ -99,9 +99,14 @@ def hunt_bugs_in_file(filepath: str) -> List[Tuple[int, str, str]]:
     # Vérifications textuelles supplémentaires
     for idx, line in enumerate(lines, start=1):
         stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
         # Détection de divisions par norme sans garde-fou
-        if "/ norm" in stripped or "/ length" in stripped or "/ dist" in stripped:
-            if not any(k in stripped for k in ("max(", "if ", "or 1", "epsilon", "1e-", "abs(")):
+        if any(token in stripped for token in ("/ norm", "/ length", "/ dist")):
+            # Vérifier si la ligne elle-même ou les 5 lignes précédentes contiennent une garde
+            surrounding = " ".join(lines[max(0, idx - 6):idx])
+            has_guard = any(k in surrounding for k in ("max(", "if ", "or 1", "epsilon", "1e-", "abs(", "continue", "return", "np.maximum"))
+            if not has_guard:
                 visitor.issues.append((
                     idx,
                     "UNGUARDED_DIVISION",

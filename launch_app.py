@@ -32,9 +32,12 @@ def launch_cad_studio() -> bool:
     # Sur les plateformes non-Windows, lancer directement via subprocess
     if sys.platform != "win32":
         try:
+            env = dict(os.environ)
+            env["PYTHONPATH"] = root_dir + os.pathsep + env.get("PYTHONPATH", "")
             proc = subprocess.Popen(
-                [python_exe, main_script],
+                [python_exe, "-m", "src.main"],
                 cwd=root_dir,
+                env=env,
                 start_new_session=True
             )
             print(f"CAD Studio démarré avec succès (PID: {proc.pid}).")
@@ -77,7 +80,8 @@ def launch_cad_studio() -> bool:
             ("dwThreadId", wintypes.DWORD),
         ]
 
-    cmd_line = f'"{python_exe}" "{main_script}"'
+    os.environ["PYTHONPATH"] = root_dir + os.pathsep + os.environ.get("PYTHONPATH", "")
+    cmd_line = f'"{python_exe}" -m src.main'
 
     si = STARTUPINFOW()
     si.cb = ctypes.sizeof(STARTUPINFOW)

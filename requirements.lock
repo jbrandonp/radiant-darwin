@@ -2,6 +2,7 @@
 # Fichier de Verrouillage Déterministe de Dépendances (OpenSSF Scorecard Hardened)
 # Généré automatiquement par Radiant-Darwin SupplyChainAuditor le 2026-10-15T06:13:17.800077+00:00
 # Règle OpenSSF : Dépendances strictement épinglées avec versions exactes
+# NOTE: The authoritative sources of truth are pyproject.toml and uv.lock.
 # ============================================================================
 
 attrs==26.1.0  # transitive | MIT

@@ -1,3 +1,9 @@
+# ==============================================================================
+# Radiant-Darwin — Derived Runtime Requirements
+# NOTE: The authoritative sources of truth are pyproject.toml and uv.lock.
+# This file is maintained for legacy pip compatibility and container deployments.
+# To regenerate from pyproject.toml: uv pip compile pyproject.toml -o requirements.txt
+# ==============================================================================
 PySide6>=6.6.0
 PyOpenGL>=3.1.7
 PyOpenGL_accelerate>=3.1.7

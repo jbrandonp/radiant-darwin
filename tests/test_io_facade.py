@@ -82,3 +82,24 @@ def test_io_facade_3mf_export(tmp_path: Path) -> None:
     assert export_ok is True
     assert Path(threemf_path).is_file()
     assert Path(threemf_path).stat().st_size > 0
+
+
+def test_io_facade_iges_and_gltf_exports(tmp_path: Path) -> None:
+    """Vérifie l'exportation aux formats standardisés IGES 5.3 et glTF 2.0 PBR."""
+    v1 = Vector3D(0.0, 0.0, 0.0)
+    v2 = Vector3D(10.0, 0.0, 0.0)
+    v3 = Vector3D(10.0, 10.0, 0.0)
+    lines = [(v1, v2), (v2, v3)]
+    vertices = [v1, v2, v3]
+    triangles = [(0, 1, 2)]
+
+    iges_path = str(tmp_path / "model.igs")
+    gltf_path = str(tmp_path / "model.gltf")
+
+    assert CADIOFacade.export_iges(iges_path, lines=lines, vertices=vertices, triangles=triangles) is True
+    assert Path(iges_path).is_file()
+    assert Path(iges_path).stat().st_size > 0
+
+    assert CADIOFacade.export_gltf(gltf_path, vertices=vertices, triangles=triangles) is True
+    assert Path(gltf_path).is_file()
+    assert Path(gltf_path).stat().st_size > 0

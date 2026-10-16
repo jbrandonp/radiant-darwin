@@ -10,6 +10,8 @@ Architecture fortement typée : strictement zéro Any et zéro object.
 from __future__ import annotations
 from typing import Dict, List, Optional, Set, Tuple, Union
 
+import os
+from src.core.types import Vector3D
 from src.core.geometry import Solid
 from src.core.sketch import Sketch2D
 from src.core.nexus_kernel.hybrid_solid import NexusSolid
@@ -21,6 +23,8 @@ from src.sheetmetal.dxf_exporter import DXFExporter
 from src.core.svg_importer import SVGImporter
 from src.drawing.svg_exporter import SVGDrawingExporter
 from src.core.threemf_exporter import ThreeMFExporter
+from src.core.iges_exporter import IgesExporter
+from src.core.gltf_exporter import GltfExporter, PbrMaterial
 from src.sheetmetal.sheet_metal import FlatPattern
 from src.drawing.drawing_generator import TechnicalSheet
 
@@ -91,3 +95,39 @@ class CADIOFacade:
     def export_technical_drawing_svg(cls, sheet: TechnicalSheet, filepath: str) -> str:
         """Exporte une mise en plan technique normalisée ISO au format vectoriel SVG."""
         return SVGDrawingExporter.export_svg(sheet, filepath)
+
+    @classmethod
+    def export_iges(
+        cls,
+        filepath: str,
+        lines: Optional[List[Tuple[Vector3D, Vector3D]]] = None,
+        vertices: Optional[List[Vector3D]] = None,
+        triangles: Optional[List[Tuple[int, int, int]]] = None
+    ) -> bool:
+        """Exporte des entités filaires et maillées au format standard IGES 5.3."""
+        exporter = IgesExporter()
+        content = exporter.export_iges_lines_and_mesh(
+            lines=lines if lines is not None else [],
+            vertices=vertices if vertices is not None else [],
+            triangles=triangles if triangles is not None else []
+        )
+        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+        return True
+
+    @classmethod
+    def export_gltf(
+        cls,
+        filepath: str,
+        vertices: List[Vector3D],
+        triangles: List[Tuple[int, int, int]],
+        material: Optional[PbrMaterial] = None
+    ) -> bool:
+        """Exporte un maillage 3D au format Khronos glTF 2.0 PBR."""
+        exporter = GltfExporter()
+        content = exporter.export_mesh_to_gltf(vertices, triangles, material=material)
+        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+        return True

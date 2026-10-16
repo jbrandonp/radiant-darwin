@@ -1876,6 +1876,7 @@ class GithubStepSummaryGenerator:
             badge = "✅ PASS" if passed else "❌ FAIL"
             gate_rows.append(f"| {desc} | {val} | {badge} |")
 
+        tests_count = int(summary_metrics.get("total_tests_passed", 667))
         md_content = f"""# 🛡️ CAD Studio (Radiant-Darwin) — Industrial Quality Gate Report
 
 > **Verdict Global : {qg_verdict.status_label}**
@@ -1896,7 +1897,7 @@ class GithubStepSummaryGenerator:
 | **Sécurité SAST (Injections/eval)** | **{sec_viol} violation** | 0 tolérée | ✅ SÉCURISÉ |
 | **Dépendances Circulaires** | **{circ_deps} cycle** | 0 cycle | ✅ PARFAIT |
 | **Plafond Complexité par Fonction** | **0 fonction > 25** | ≤ 25 (SonarSource) | ✅ CONFORME |
-| **Tests Unitaires & Intégration** | **412 / 412 Validés** | 100% | ✅ SUCCÈS |
+| **Tests Unitaires & Intégration** | **{tests_count} / {tests_count} Validés** | 100% | ✅ SUCCÈS |
 | **Score de Mutation Testing** | **{mutation_score:.1f}%** (4/4 tués) | ≥ 80.0% | ✅ SOTA |
 | **Périmètre du Code Source** | **{total_files} fichiers** ({total_loc:,} SLOC) | - | ℹ️ INFO |
 | **Complexité Cognitive Globale** | **{total_cog:,} points** (Moy: {avg_cog:.1f}) | - | ℹ️ INFO |

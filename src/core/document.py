@@ -5,7 +5,7 @@ le rollback temporel et le recalcul automatique des fonctionnalités.
 """
 
 from __future__ import annotations
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Tuple
 from dataclasses import dataclass, field
 
 from src.core.geometry import Solid
@@ -140,6 +140,39 @@ class CADDocument:
 
         self.rebuild()
 
+    def _find_first_outdated_index(self, max_idx: int) -> int:
+        """Identifie l'index de la première opération marquée OUTDATED."""
+        for idx in range(max_idx + 1):
+            if getattr(self.features[idx], "status", None) == FeatureStatus.OUTDATED:
+                return idx
+        return max_idx + 1
+
+    def _purge_invalid_snapshots(self, first_outdated_idx: int) -> None:
+        """Purge les instantanés en cache à partir de l'index périmé."""
+        for snap_idx in list(self._timeline_snapshots.keys()):
+            if snap_idx >= first_outdated_idx:
+                del self._timeline_snapshots[snap_idx]
+
+    def _find_cached_checkpoint(self, max_idx: int) -> Tuple[int, Dict[str, Solid]]:
+        """Trouve le dernier instantané en cache précédant la zone à recalculer."""
+        for prev_idx in range(max_idx - 1, -1, -1):
+            if prev_idx in self._timeline_snapshots:
+                return prev_idx + 1, dict(self._timeline_snapshots[prev_idx])
+        return 0, {}
+
+    def _evaluate_feature_step(self, feat: Feature, bodies: Dict[str, Solid]) -> Dict[str, Solid]:
+        """Évalue une feature individuelle et met à jour son statut."""
+        if feat.is_suppressed:
+            return bodies
+        try:
+            if getattr(feat, "status", None) == FeatureStatus.OUTDATED:
+                feat.status = FeatureStatus.OK
+            return feat.evaluate(bodies, self.sketches)
+        except Exception as err:
+            feat.status = FeatureStatus.ERROR
+            print(f"Erreur lors de l'évaluation de la feature {feat.name} ({feat.feature_id}) : {err}")
+            return bodies
+
     def rebuild(self) -> None:
         """
         Recalcule séquentiellement le modèle 3D avec mise en cache des étapes (Snapshots).
@@ -153,43 +186,20 @@ class CADDocument:
             self._notify_change()
             return
 
-        # Détecter la première feature marquée comme périmée (OUTDATED)
-        first_outdated_idx = max_idx + 1
-        for idx in range(max_idx + 1):
-            if getattr(self.features[idx], "status", None) == FeatureStatus.OUTDATED:
-                first_outdated_idx = idx
-                break
+        first_outdated_idx = self._find_first_outdated_index(max_idx)
 
-        # Si une opération a été modifiée, purger les snapshots à partir d'elle
         if first_outdated_idx <= max_idx:
-            for snap_idx in list(self._timeline_snapshots.keys()):
-                if snap_idx >= first_outdated_idx:
-                    del self._timeline_snapshots[snap_idx]
+            self._purge_invalid_snapshots(first_outdated_idx)
         elif max_idx in self._timeline_snapshots:
-            # Aucune opération modifiée et snapshot disponible : Restauration O(1)
+            # Restauration instantanée O(1)
             self.bodies = dict(self._timeline_snapshots[max_idx])
             self._notify_change()
             return
 
-        # Trouver le dernier point d'arrêt en cache valide
-        start_idx = 0
-        current_bodies: Dict[str, Solid] = {}
-        for prev_idx in range(max_idx - 1, -1, -1):
-            if prev_idx in self._timeline_snapshots:
-                current_bodies = dict(self._timeline_snapshots[prev_idx])
-                start_idx = prev_idx + 1
-                break
+        start_idx, current_bodies = self._find_cached_checkpoint(max_idx)
 
         for idx in range(start_idx, max_idx + 1):
-            feat = self.features[idx]
-            if not feat.is_suppressed:
-                try:
-                    if getattr(feat, "status", None) == FeatureStatus.OUTDATED:
-                        feat.status = FeatureStatus.OK
-                    current_bodies = feat.evaluate(current_bodies, self.sketches)
-                except Exception as err:
-                    feat.status = FeatureStatus.ERROR
-                    print(f"Erreur lors de l'évaluation de la feature {feat.name} ({feat.feature_id}) : {err}")
+            current_bodies = self._evaluate_feature_step(self.features[idx], current_bodies)
             self._timeline_snapshots[idx] = dict(current_bodies)
 
         self.bodies = current_bodies

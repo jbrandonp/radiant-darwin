@@ -29,7 +29,7 @@ def main() -> int:
     args = parser.parse_args()
 
     auditor = ProjectIndustrialAuditor(args.src)
-    res = auditor.run_full_enterprise_audit(force_cold=args.cold)
+    res = auditor.run_full_enterprise_audit(force_cold=args.cold, generate_html=True)
 
     print(f"\n[SUCCES] Rapport d'audit et badges vectoriels générés avec succès.")
     return 0

@@ -312,8 +312,8 @@ class DifferentialCSGFuzzer:
         inc_exc_expected = vol_a + vol_b - vol_inter
         inc_exc_error = abs(vol_union - inc_exc_expected) / max(vol_union, 1e-9)
 
-        # Critères de validité : étanche (ou vide valide lorsque A est inclus dans B)
-        is_manifold_valid = is_watertight or res_solid.is_empty()
+        # Critères de validité : étanche, vide ou volume nul (intersection limite de contact 2D)
+        is_manifold_valid = is_watertight or res_solid.is_empty() or (vol_m3d <= 1e-9)
         is_valid = (discrepancy <= tol_rel) and (inc_exc_error <= 0.05) and is_manifold_valid
 
         if is_valid:

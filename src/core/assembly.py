@@ -77,6 +77,40 @@ class AssemblySolver:
     """
 
     @classmethod
+    def _apply_single_mate(
+        cls,
+        mate: AssemblyMate,
+        instances: Dict[str, AssemblyInstance]
+    ) -> None:
+        """Applique une contrainte d'assemblage unique sur la pièce cible."""
+        id1, id2 = mate.instance1_id, mate.instance2_id
+        if id1 not in instances or id2 not in instances:
+            return
+
+        inst1, inst2 = instances[id1], instances[id2]
+        target_inst = inst2 if not inst2.is_grounded else inst1
+        ref_is_inst1 = not inst2.is_grounded
+
+        pt_ref = np.array(mate.point1 if ref_is_inst1 else mate.point2, dtype=np.float64)
+        ax_ref = np.array(mate.axis1 if ref_is_inst1 else mate.axis2, dtype=np.float64)
+        pt_tgt = np.array(mate.point2 if ref_is_inst1 else mate.point1, dtype=np.float64)
+
+        norm_ref = float(np.linalg.norm(ax_ref))
+        if norm_ref > 1e-9:
+            ax_ref /= norm_ref
+
+        if mate.mate_type in (MateType.COINCIDENT_PLANES, MateType.DISTANCE):
+            diff = pt_ref - pt_tgt + mate.offset * ax_ref
+            target_inst.transform_matrix[0:3, 3] += diff
+        elif mate.mate_type == MateType.COAXIAL:
+            disp = pt_ref - pt_tgt
+            axial_comp = float(np.dot(disp, ax_ref)) * ax_ref
+            target_inst.transform_matrix[0:3, 3] += (disp - axial_comp)
+        elif mate.mate_type in (MateType.RIGID, MateType.REVOLUTE, MateType.PRISMATIC):
+            disp = pt_ref - pt_tgt
+            target_inst.transform_matrix[0:3, 3] += disp
+
+    @classmethod
     def solve_mates(
         cls,
         instances: Dict[str, AssemblyInstance],
@@ -87,50 +121,7 @@ class AssemblySolver:
         Retourne True si toutes les liaisons sont satisfaites sans conflit géométrique.
         """
         for mate in mates:
-            id1, id2 = mate.instance1_id, mate.instance2_id
-            if id1 not in instances or id2 not in instances:
-                continue
-
-            inst1, inst2 = instances[id1], instances[id2]
-            # La pièce fixe (grounded) impose sa position à la pièce mobile
-            target_inst = inst2 if not inst2.is_grounded else inst1
-            ref_inst = inst1 if not inst2.is_grounded else inst2
-
-            pt_ref = np.array(mate.point1 if not inst2.is_grounded else mate.point2, dtype=np.float64)
-            ax_ref = np.array(mate.axis1 if not inst2.is_grounded else mate.axis2, dtype=np.float64)
-            pt_tgt = np.array(mate.point2 if not inst2.is_grounded else mate.point1, dtype=np.float64)
-            ax_tgt = np.array(mate.axis2 if not inst2.is_grounded else mate.axis1, dtype=np.float64)
-
-            # Normaliser les axes
-            norm_ref = float(np.linalg.norm(ax_ref))
-            norm_tgt = float(np.linalg.norm(ax_tgt))
-            if norm_ref > 1e-9:
-                ax_ref /= norm_ref
-            if norm_tgt > 1e-9:
-                ax_tgt /= norm_tgt
-
-            if mate.mate_type == MateType.COINCIDENT_PLANES:
-                # 1. Aligner les normales opposées (plaquage face contre face)
-                # Translation selon la normale pour combler la distance
-                diff = pt_ref - pt_tgt + mate.offset * ax_ref
-                target_inst.transform_matrix[0:3, 3] += diff
-
-            elif mate.mate_type == MateType.COAXIAL:
-                # Aligner les centres des axes cylindriques
-                # Projeter le déplacement perpendiculairement à l'axe
-                disp = pt_ref - pt_tgt
-                axial_comp = float(np.dot(disp, ax_ref)) * ax_ref
-                radial_disp = disp - axial_comp
-                target_inst.transform_matrix[0:3, 3] += radial_disp
-
-            elif mate.mate_type == MateType.DISTANCE:
-                diff = pt_ref - pt_tgt + mate.offset * ax_ref
-                target_inst.transform_matrix[0:3, 3] += diff
-
-            elif mate.mate_type in (MateType.RIGID, MateType.REVOLUTE, MateType.PRISMATIC):
-                disp = pt_ref - pt_tgt
-                target_inst.transform_matrix[0:3, 3] += disp
-
+            cls._apply_single_mate(mate, instances)
         return True
 
     _MATE_DOF_REDUCTIONS: Dict[MateType, int] = {

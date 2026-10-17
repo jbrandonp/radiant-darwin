@@ -15,7 +15,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import List, Dict, Tuple, Optional, Set, Sequence, Callable
+from typing import List, Dict, Tuple, Optional, Set, Sequence, Callable, Union
 import coverage
 
 
@@ -637,7 +637,7 @@ class AviationCoverageCoordinator:
 
     def generate_json_report(self, metrics: CertificationCoverageMetrics) -> str:
         """Exporte l'audit complet sous forme JSON pour traçabilité CI/CD et pipelines."""
-        data: Dict[str, object] = {
+        data: Dict[str, Union[str, Dict[str, Union[float, int]], List[Dict[str, Union[str, int, bool, List[Tuple[int, ...]], List[int], List[Dict[str, Union[str, Tuple[int, ...]]]]]]]]] = {
             "standard": "RTCA DO-178C / EUROCAE ED-12C Level A (DAL-A)",
             "metrics": {
                 "statement_coverage_percent": metrics.statement_coverage_percent,

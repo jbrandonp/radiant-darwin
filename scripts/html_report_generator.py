@@ -24,6 +24,28 @@ class QualityGateVerdictProtocol(Protocol):
     gate_details: List[Tuple[str, bool, str]]
 
 
+class FileReportProtocol(Protocol):
+    """Protocole structurel pour les rapports d'audit de fichiers."""
+    file_path: str
+    lines_of_code: int
+    cognitive_complexity: int
+    cyclomatic_complexity: int
+    maintainability_index: float
+    type_completeness_percent: float
+    distance_main_sequence: float
+    architecture_zone: str
+
+
+class FunctionMetricProtocol(Protocol):
+    """Protocole structurel pour les métriques de fonctions."""
+    name: str
+    file_path: str
+    line_number: int
+    cognitive_complexity: int
+    cyclomatic_complexity: int
+    lines_of_code: int
+
+
 # ==============================================================================
 # 1. GÉNÉRATEUR DE BADGES VECTORIELS SVG AU FORMAT SHIELDS.IO
 # ==============================================================================
@@ -181,7 +203,7 @@ class CodeSceneQuadrantSvgGenerator:
     """
 
     @classmethod
-    def generate_svg(cls, reports: List) -> str:
+    def generate_svg(cls, reports: List[FileReportProtocol]) -> str:
         """Génère le composant SVG du quadrant CodeScene."""
         svg_w = 920
         svg_h = 540
@@ -375,7 +397,7 @@ class CognitiveDistributionSvgGenerator:
     """
 
     @classmethod
-    def generate_svg(cls, reports: List, all_functions: List) -> str:
+    def generate_svg(cls, reports: List[FileReportProtocol], all_functions: List[FunctionMetricProtocol]) -> str:
         """Génère le dashboard SVG de la complexité cognitive."""
         svg_w = 920
         svg_h = 380
@@ -646,7 +668,7 @@ class HtmlAuditTableGenerator:
     """
 
     @classmethod
-    def generate_table_html(cls, reports: List) -> str:
+    def generate_table_html(cls, reports: List[FileReportProtocol]) -> str:
         """Produit le code HTML du tableau interactif et des boutons de contrôle."""
         # Extraire les modules distincts
         subsystems = sorted(list({
@@ -787,8 +809,8 @@ class HtmlAuditReportGenerator:
     @classmethod
     def generate_all(
         cls,
-        reports: List,
-        all_functions: List,
+        reports: List[FileReportProtocol],
+        all_functions: List[FunctionMetricProtocol],
         deps: Dict[str, Set[str]],
         cycles: List[Tuple[str, str]],
         coupling: Dict[str, Dict[str, float]],
@@ -863,8 +885,8 @@ class HtmlAuditReportGenerator:
     @classmethod
     def _build_full_html(
         cls,
-        reports: List,
-        all_functions: List,
+        reports: List[FileReportProtocol],
+        all_functions: List[FunctionMetricProtocol],
         summary_metrics: Dict[str, float],
         qg_verdict: QualityGateVerdictProtocol,
         mutations: Dict[str, Tuple[bool, str]],
@@ -1852,7 +1874,7 @@ class GithubStepSummaryGenerator:
         cls,
         summary_metrics: Dict[str, float],
         qg_verdict: QualityGateVerdictProtocol,
-        reports: List,
+        reports: List[FileReportProtocol],
         mutations: Dict[str, Tuple[bool, str]],
         output_md_path: str = "docs/audit_summary.md",
         github_step_summary_file: Optional[str] = None

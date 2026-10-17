@@ -26,7 +26,7 @@ import argparse
 import concurrent.futures
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
-from typing import List, Dict, Tuple, Optional, Set, Union, Any, Type
+from typing import List, Dict, Tuple, Optional, Set, Union, Type
 from collections import Counter
 
 
@@ -147,7 +147,7 @@ class FileAuditReport:
     distance_main_sequence: float = 0.0
     architecture_zone: str = "MAIN_SEQUENCE"
 
-    def to_cache_dict(self) -> Dict[str, Any]:
+    def to_cache_dict(self) -> Dict[str, Union[str, int, float, List[str], List[Dict[str, Union[str, int, float, bool]]], Dict[str, float]]]:
         """Sérialise le rapport d'audit pour stockage dans .audit_cache/cache.json."""
         return {
             "file_path": self.file_path,
@@ -175,7 +175,7 @@ class FileAuditReport:
     @classmethod
     def from_cache_dict(
         cls,
-        data: Dict[str, Any]
+        data: Dict[str, Union[str, int, float, List[str], List[Dict[str, Union[str, int, float, bool]]], Dict[str, float]]]
     ) -> FileAuditReport:
         """Désérialise un rapport d'audit depuis le cache incrémental sans re-parsing AST."""
         raw_funcs = data.get("functions", [])
@@ -2077,7 +2077,7 @@ class ProjectIndustrialAuditor:
             print("=" * 70)
 
         # Export JSON pour CI/CD
-        report_dict: Dict[str, Any] = {
+        report_dict: Dict[str, Union[float, str, int, bool, List[str], Dict[str, Union[float, str]]]] = {
             "total_files": float(total_files),
             "total_lines_of_code": float(total_loc),
             "total_cognitive_complexity": float(total_cognitive),

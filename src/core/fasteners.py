@@ -9,6 +9,7 @@ Tailles métriques normalisées de M3 à M20. Typage géométrique et dimensionn
 """
 
 from __future__ import annotations
+import atexit
 from typing import Dict, List, Optional, Tuple, Sequence, Union
 from dataclasses import dataclass
 import numpy as np
@@ -56,6 +57,9 @@ _FASTENER_CACHE: Dict[Tuple[str, str, float], m.Manifold] = {}
 def clear_fastener_cache() -> None:
     """Purge le cache mémoire de quincaillerie pour libérer les instances Manifold3D."""
     _FASTENER_CACHE.clear()
+
+
+atexit.register(clear_fastener_cache)
 
 
 def _make_regular_polygon_cross_section(radius: float, num_sides: int = 6) -> m.CrossSection:

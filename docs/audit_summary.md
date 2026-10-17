@@ -20,8 +20,8 @@
 | **Plafond Complexité par Fonction** | **0 fonction > 25** | ≤ 25 (SonarSource) | ✅ CONFORME |
 | **Tests Unitaires & Intégration** | **696 / 696 Validés** | 100% | ✅ SUCCÈS |
 | **Score de Mutation Testing** | **100.0%** (4/4 tués) | ≥ 80.0% | ✅ SOTA |
-| **Périmètre du Code Source** | **144 fichiers** (36,705 SLOC) | - | ℹ️ INFO |
-| **Complexité Cognitive Globale** | **9,082 points** (Moy: 63.1) | - | ℹ️ INFO |
+| **Périmètre du Code Source** | **144 fichiers** (36,752 SLOC) | - | ℹ️ INFO |
+| **Complexité Cognitive Globale** | **9,055 points** (Moy: 62.9) | - | ℹ️ INFO |
 
 ---
 
@@ -40,11 +40,11 @@
 ### 🔥 Top 5 Architectural Hotspots (CodeScene Churn × Complexité)
 | Fichier Source | Churn | Complexité Cog | Hotspot Index | SLOC |
 | :--- | :---: | :---: | :---: | :---: |
-| `src/core/operations_advanced.py` | 2397 | 514 | 1231892 | 1,691 |
-| `src/core/mutation_engine.py` | 2298 | 358 | 822613 | 1,727 |
-| `src/core/serializer.py` | 2360 | 334 | 788286 | 600 |
-| `src/core/step_importer.py` | 1395 | 412 | 574596 | 638 |
-| `src/ui/main_window.py` | 1495 | 302 | 451513 | 1,027 |
+| `src/cli.py` | 199 | 50 | 9962 | 153 |
+| `src/main.py` | 102 | 12 | 1222 | 58 |
+| `src/__init__.py` | 14 | 0 | 0 | 11 |
+| `src/ai/ai_connector_config.py` | 121 | 18 | 0 | 105 |
+| `src/ai/ai_vision_feedback.py` | 217 | 24 | 0 | 174 |
 
 ---
 

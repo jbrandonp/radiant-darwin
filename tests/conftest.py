@@ -30,3 +30,11 @@ try:
     settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 except ImportError:
     pass
+
+
+@pytest.fixture(autouse=True, scope="session")
+def purge_fastener_cache_fixture() -> pytest.FixtureRequest:
+    yield  # type: ignore[misc]
+    from src.core.fasteners import clear_fastener_cache
+    clear_fastener_cache()
+

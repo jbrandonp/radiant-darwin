@@ -53,6 +53,12 @@ TOOL_INFORMATION_URI: str = "https://github.com/jbrandonp/radiant-darwin"
 # Structures de données typées pour SARIF v2.1.0
 # -----------------------------------------------------------------------------
 
+SarifRuleDescriptor = Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, List[str]]]]]
+SarifResultItem = Dict[str, Union[str, int, Dict[str, str], List[Dict[str, Union[str, Dict[str, str]]]]]]
+SarifRunDict = Dict[str, Union[Dict[str, Dict[str, Union[str, List[SarifRuleDescriptor]]]], List[SarifResultItem]]]
+SarifDocDict = Dict[str, Union[str, List[SarifRunDict]]]
+
+
 class SarifLevel(str, Enum):
     """Niveaux de sévérité formels SARIF v2.1.0."""
     ERROR = "error"
@@ -759,7 +765,7 @@ class SarifReportGenerator:
     def generate_sarif_dict(
         self,
         findings: List[SarifFinding]
-    ) -> Dict[str, Union[str, List[dict]]]:
+    ) -> SarifDocDict:
         """
         Génère l'objet dictionnaire SARIF v2.1.0 complet et conforme au schéma OASIS.
         Paramètres : findings (List[SarifFinding]).
@@ -834,7 +840,7 @@ class SarifReportGenerator:
             }
             sarif_results.append(result_item)
 
-        sarif_doc: Dict[str, Union[str, List[dict]]] = {
+        sarif_doc: SarifDocDict = {
             "$schema": SARIF_SCHEMA_URI,
             "version": SARIF_VERSION,
             "runs": [

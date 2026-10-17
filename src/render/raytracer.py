@@ -136,6 +136,40 @@ class PBRRaytracer:
 
         return (r_clamped, g_clamped, b_clamped)
 
+    @staticmethod
+    def _rasterize_triangle(
+        image: QImage,
+        z_buffer: np.ndarray,
+        p0: Tuple[int, int, float],
+        p1: Tuple[int, int, float],
+        p2: Tuple[int, int, float],
+        color: QColor,
+        safe_w: int,
+        safe_h: int
+    ) -> None:
+        """Rasterise un triangle projeté dans le buffer d'image avec test de profondeur Z-buffer."""
+        min_x = max(0, min(p0[0], p1[0], p2[0]))
+        max_x = min(safe_w - 1, max(p0[0], p1[0], p2[0]))
+        min_y = max(0, min(p0[1], p1[1], p2[1]))
+        max_y = min(safe_h - 1, max(p0[1], p1[1], p2[1]))
+
+        denom = (p1[1] - p2[1]) * (p0[0] - p2[0]) + (p2[0] - p1[0]) * (p0[1] - p2[1])
+        if abs(denom) < 1e-5:
+            return
+
+        inv_denom = 1.0 / denom
+        for y in range(min_y, max_y + 1):
+            for x in range(min_x, max_x + 1):
+                w0 = ((p1[1] - p2[1]) * (x - p2[0]) + (p2[0] - p1[0]) * (y - p2[1])) * inv_denom
+                w1 = ((p2[1] - p0[1]) * (x - p2[0]) + (p0[0] - p2[0]) * (y - p2[1])) * inv_denom
+                w2 = 1.0 - w0 - w1
+
+                if w0 >= 0.0 and w1 >= 0.0 and w2 >= 0.0:
+                    depth = w0 * p0[2] + w1 * p1[2] + w2 * p2[2]
+                    if depth > z_buffer[y, x]:
+                        z_buffer[y, x] = depth
+                        image.setPixelColor(x, y, color)
+
     def render_solid_to_image(
         self,
         solid: Solid,
@@ -173,7 +207,6 @@ class PBRRaytracer:
         scale = min(width, height) * 0.35 / span
 
         # Matrice de vue isométrique
-        # Angle azimut 45°, élévation 30°
         cos_az = float(np.cos(np.radians(45.0)))
         sin_az = float(np.sin(np.radians(45.0)))
         cos_el = float(np.cos(np.radians(30.0)))
@@ -191,48 +224,24 @@ class PBRRaytracer:
         screen_xs = (safe_w * 0.5 + x_rot * scale).astype(np.int32)
         screen_ys = (safe_h * 0.5 - y_rot * scale).astype(np.int32)
 
-        # Liste projetée pour rasterisation
         proj_pts: List[Tuple[int, int, float]] = [
             (int(screen_xs[i]), int(screen_ys[i]), float(depths[i]))
             for i in range(len(verts))
         ]
 
-        # Z-Buffer de profondeur
         z_buffer = np.full((safe_h, safe_w), -1e9, dtype=np.float32)
 
         # Rendu des triangles avec ombrage PBR
-        for face_idx, face in enumerate(faces):
+        for face in faces:
             p0 = proj_pts[face[0]]
             p1 = proj_pts[face[1]]
             p2 = proj_pts[face[2]]
 
-            # Normale du triangle
             norm = Vector3D(float(normals[face[0]][0]), float(normals[face[0]][1]), float(normals[face[0]][2]))
             color_rgb = self.shade_vertex(norm, view_dir, material)
             qcol = QColor(int(color_rgb[0] * 255), int(color_rgb[1] * 255), int(color_rgb[2] * 255), 255)
 
-            # Dessin simple par rasterisation de triangle (Barycentrique)
-            min_x = max(0, min(p0[0], p1[0], p2[0]))
-            max_x = min(safe_w - 1, max(p0[0], p1[0], p2[0]))
-            min_y = max(0, min(p0[1], p1[1], p2[1]))
-            max_y = min(safe_h - 1, max(p0[1], p1[1], p2[1]))
-
-            denom = (p1[1] - p2[1]) * (p0[0] - p2[0]) + (p2[0] - p1[0]) * (p0[1] - p2[1])
-            if abs(denom) < 1e-5:
-                continue
-
-            inv_denom = 1.0 / denom
-            for y in range(min_y, max_y + 1):
-                for x in range(min_x, max_x + 1):
-                    w0 = ((p1[1] - p2[1]) * (x - p2[0]) + (p2[0] - p1[0]) * (y - p2[1])) * inv_denom
-                    w1 = ((p2[1] - p0[1]) * (x - p2[0]) + (p0[0] - p2[0]) * (y - p2[1])) * inv_denom
-                    w2 = 1.0 - w0 - w1
-
-                    if w0 >= 0.0 and w1 >= 0.0 and w2 >= 0.0:
-                        depth = w0 * p0[2] + w1 * p1[2] + w2 * p2[2]
-                        if depth > z_buffer[y, x]:
-                            z_buffer[y, x] = depth
-                            image.setPixelColor(x, y, qcol)
+            self._rasterize_triangle(image, z_buffer, p0, p1, p2, qcol, safe_w, safe_h)
 
         return image
 

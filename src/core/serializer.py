@@ -377,21 +377,29 @@ class FeatureDeserializerRegistry:
         return SubtractiveLoftFeature(f_id, f_name, s_start, s_end, h_off, s_top, segs, target_id)
 
     @staticmethod
+    def _parse_guide_rail_curves(raw_rails: Optional[JSONValue]) -> List[List[Tuple[float, float, float]]]:
+        """Désérialise de manière sécurisée les coordonnées 3D des courbes guides de loft."""
+        if not isinstance(raw_rails, list):
+            return []
+        rails: List[List[Tuple[float, float, float]]] = []
+        for r in raw_rails:
+            if not isinstance(r, list):
+                continue
+            pts: List[Tuple[float, float, float]] = [
+                (float(pt[0]), float(pt[1]), float(pt[2]))
+                for pt in r
+                if isinstance(pt, list) and len(pt) == 3
+            ]
+            rails.append(pts)
+        return rails
+
+    @staticmethod
     def _build_multirail_loft_shape(
         f_id: str, f_name: str, params: Dict[str, JSONPrimitive],
         op: BooleanOperation, target_id: Optional[str], f_data: Dict[str, JSONValue]
     ) -> Feature:
         sk_ids = [str(x) for x in f_data.get("profile_sketch_ids", []) if isinstance(x, str)]
-        raw_rails = f_data.get("guide_rail_curves", [])
-        rails_list: List[List[Tuple[float, float, float]]] = []
-        if isinstance(raw_rails, list):
-            for r in raw_rails:
-                if isinstance(r, list):
-                    rail_pts: List[Tuple[float, float, float]] = []
-                    for pt in r:
-                        if isinstance(pt, list) and len(pt) == 3:
-                            rail_pts.append((float(pt[0]), float(pt[1]), float(pt[2])))
-                    rails_list.append(rail_pts)
+        rails_list = Serializer._parse_guide_rail_curves(f_data.get("guide_rail_curves", []))
         n_sec = int(params.get("num_sections", 16))
         n_seg = int(params.get("num_segments", 36))
         return MultiRailLoftFeature(

@@ -1047,7 +1047,7 @@ class KernelMutationRegistry:
         return m_list
 
     @classmethod
-    def _get_solver_jacobian_mutants_part2(cls) -> List[KernelMutant]:
+    def _get_solver_jacobian_mutants_part2a(cls) -> List[KernelMutant]:
         m_list: List[KernelMutant] = []
 
         # MUT-GSOLV-SOLV-043: PARALLEL Jacobienne dérivée inversée
@@ -1127,6 +1127,11 @@ class KernelMutationRegistry:
             return ok and abs(pts[0].u - 42.0) < 0.01 and abs(pts[0].v - 84.0) < 0.01
 
         m_list.append(KernelMutant("MUT-GSOLV-SOLV-045", MutationFamily.G_SOLV, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "_fill_single_constraint_jacobian", "Annulation des dérivées de contrainte FIXED", patch_jac_fixed, test_jac_fixed))
+        return m_list
+
+    @classmethod
+    def _get_solver_jacobian_mutants_part2b(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GSOLV-SOLV-046: EQUAL Jacobienne dérivées inversées
         def patch_jac_equal() -> MutantCallable:
@@ -1202,6 +1207,10 @@ class KernelMutationRegistry:
         return m_list
 
     @classmethod
+    def _get_solver_jacobian_mutants_part2(cls) -> List[KernelMutant]:
+        return cls._get_solver_jacobian_mutants_part2a() + cls._get_solver_jacobian_mutants_part2b()
+
+    @classmethod
     def _get_solver_jacobian_mutants(cls) -> List[KernelMutant]:
         m_list: List[KernelMutant] = []
         m_list.extend(cls._get_solver_jacobian_mutants_part1())
@@ -1209,7 +1218,7 @@ class KernelMutationRegistry:
         return m_list
 
     @classmethod
-    def _get_solver_residual_mutants_part1(cls) -> List[KernelMutant]:
+    def _get_solver_residual_mutants_part1a(cls) -> List[KernelMutant]:
         m_list: List[KernelMutant] = []
 
         # MUT-GAOR-SOLV-049: COINCIDENT résidu addition au lieu de soustraction
@@ -1271,6 +1280,11 @@ class KernelMutationRegistry:
             return abs(res[0]) < 1e-6
 
         m_list.append(KernelMutant("MUT-GAOR-SOLV-051", MutationFamily.G_AOR, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "_eval_single_constraint_residual", "Addition dans le calcul du résidu VERTICAL", patch_res_vert, test_res_vert))
+        return m_list
+
+    @classmethod
+    def _get_solver_residual_mutants_part1b(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GAOR-SOLV-052: DISTANCE résidu addition au lieu de soustraction
         def patch_res_dist() -> MutantCallable:
@@ -1383,6 +1397,10 @@ class KernelMutationRegistry:
 
         m_list.append(KernelMutant("MUT-GROR-SOLV-056", MutationFamily.G_ROR, "solver_2d", "src.solver.constraints_2d", "SketchConstraintSolver2D", "solve", "Invalidation inconditionnelle du succès de résolution", patch_solve_thresh, test_solve_thresh))
         return m_list
+
+    @classmethod
+    def _get_solver_residual_mutants_part1(cls) -> List[KernelMutant]:
+        return cls._get_solver_residual_mutants_part1a() + cls._get_solver_residual_mutants_part1b()
 
     @classmethod
     def _get_solver_residual_mutants_part2(cls) -> List[KernelMutant]:
@@ -1720,7 +1738,7 @@ class KernelMutationRegistry:
     # SOUS-SYSTÈME 3 : CINÉMATIQUE ROBOTIQUE ET TRANSFORMATIONS 3D (25 mutants)
     # ------------------------------------------------------------------------
     @classmethod
-    def _get_robotics_mutants(cls) -> List[KernelMutant]:
+    def _get_robotics_mutants_part1(cls) -> List[KernelMutant]:
         m_list: List[KernelMutant] = []
 
         # MUT-GTR-ROB-073: RobotArm6Axis._dh_matrix (0,0) cos en sin
@@ -1818,6 +1836,11 @@ class KernelMutationRegistry:
             return abs(t[2, 2] - 1.0) < 1e-4
 
         m_list.append(KernelMutant("MUT-GTR-ROB-078", MutationFamily.G_TR, "robotics", "src.specialized.robot_kinematics", "RobotArm6Axis", "_dh_matrix", "Inversion de signe à la composante DH (2,2)", patch_dh_22, test_dh_22))
+        return m_list
+
+    @classmethod
+    def _get_robotics_mutants_part2a(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GAOR-ROB-079: RobotArm6Axis._dh_matrix translation X (0,3) inversée
         def patch_dh_03() -> MutantCallable:
@@ -1963,6 +1986,11 @@ class KernelMutationRegistry:
             return arm.is_singular(threshold=0.0) is False
 
         m_list.append(KernelMutant("MUT-GROR-ROB-087", MutationFamily.G_ROR, "robotics", "src.specialized.robot_kinematics", "RobotArm6Axis", "is_singular", "Forçage inconditionnel de l'état singulier", patch_sing_always, test_sing_always))
+        return m_list
+
+    @classmethod
+    def _get_robotics_mutants_part2b(cls) -> List[KernelMutant]:
+        m_list: List[KernelMutant] = []
 
         # MUT-GTR-ROB-088: plan_cartesian_trajectory interpolation inversée
         def patch_traj_inv() -> MutantCallable:
@@ -2111,8 +2139,11 @@ class KernelMutationRegistry:
             return abs(gm.compute_driven_angle(2.0) - (-1.0)) < 1e-4
 
         m_list.append(KernelMutant("MUT-GROR-ROB-097", MutationFamily.G_ROR, "robotics", "src.core.assembly_kinematics", "GearMate", "compute_driven_angle", "Inversion du rapport de transmission menant/mené", patch_gear_ratio, test_gear_ratio))
-
         return m_list
+
+    @classmethod
+    def _get_robotics_mutants(cls) -> List[KernelMutant]:
+        return cls._get_robotics_mutants_part1() + cls._get_robotics_mutants_part2a() + cls._get_robotics_mutants_part2b()
 
 
 # ============================================================================

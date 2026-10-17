@@ -13,6 +13,8 @@ import inspect
 import sys
 import textwrap
 import time
+import types
+from typing import Callable, Dict, Union
 import pytest
 import numpy as np
 
@@ -48,7 +50,7 @@ class TestAstTransformers:
         ast.fix_missing_locations(mutated_tree)
 
         compiled = compile(mutated_tree, "<gaor_test>", "exec")
-        ns: dict[str, object] = {}
+        ns: Dict[str, Callable[[float, float], float]] = {}
         exec(compiled, {}, ns)
         mutated_func = ns["calc_vector"]
         assert callable(mutated_func)
@@ -71,7 +73,7 @@ class TestAstTransformers:
         ast.fix_missing_locations(mutated_tree)
 
         compiled = compile(mutated_tree, "<gror_test>", "exec")
-        ns: dict[str, object] = {}
+        ns: Dict[str, Callable[[float], bool]] = {}
         exec(compiled, {}, ns)
         mutated_func = ns["check_threshold"]
         assert callable(mutated_func)
@@ -85,7 +87,7 @@ class TestAstTransformers:
         mutated_const = transformer_const.visit(tree_const)
         ast.fix_missing_locations(mutated_const)
         compiled_const = compile(mutated_const, "<gror_const_test>", "exec")
-        ns_const: dict[str, object] = {}
+        ns_const: Dict[str, Callable[[float], bool]] = {}
         exec(compiled_const, {}, ns_const)
         mut_const_fn = ns_const["check_threshold"]
         # eps 1e-4 muté en 1e-9 -> 1e-5 < 1e-9 est False
@@ -104,7 +106,7 @@ class TestAstTransformers:
         ast.fix_missing_locations(mutated_tree)
 
         compiled = compile(mutated_tree, "<gtr_test>", "exec")
-        ns: dict[str, object] = {"np": np}
+        ns: Dict[str, Union[Callable[[float], float], types.ModuleType]] = {"np": np}
         exec(compiled, ns, ns)
         mutated_func = ns["rot_component"]
         assert callable(mutated_func)
@@ -127,7 +129,7 @@ class TestAstTransformers:
         ast.fix_missing_locations(mutated_tree)
 
         compiled = compile(mutated_tree, "<gsolv_test>", "exec")
-        ns: dict[str, object] = {"np": np}
+        ns: Dict[str, Union[Callable[[], np.ndarray], types.ModuleType]] = {"np": np}
         exec(compiled, ns, ns)
         mutated_func = ns["fill_jac"]
         assert callable(mutated_func)

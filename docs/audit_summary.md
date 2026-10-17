@@ -40,11 +40,11 @@
 ### 🔥 Top 5 Architectural Hotspots (CodeScene Churn × Complexité)
 | Fichier Source | Churn | Complexité Cog | Hotspot Index | SLOC |
 | :--- | :---: | :---: | :---: | :---: |
-| `src/core/operations_advanced.py` | 2397 | 514 | 1231929 | 1,691 |
-| `src/core/mutation_engine.py` | 2298 | 358 | 822638 | 1,727 |
-| `src/core/serializer.py` | 2360 | 334 | 788310 | 600 |
-| `src/core/step_importer.py` | 1395 | 412 | 574613 | 638 |
-| `src/ui/main_window.py` | 1495 | 302 | 451527 | 1,027 |
+| `src/core/operations_advanced.py` | 2397 | 514 | 1231892 | 1,691 |
+| `src/core/mutation_engine.py` | 2298 | 358 | 822613 | 1,727 |
+| `src/core/serializer.py` | 2360 | 334 | 788286 | 600 |
+| `src/core/step_importer.py` | 1395 | 412 | 574596 | 638 |
+| `src/ui/main_window.py` | 1495 | 302 | 451513 | 1,027 |
 
 ---
 

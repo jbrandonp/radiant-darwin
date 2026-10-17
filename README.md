@@ -216,7 +216,7 @@ python demo_full_suite.py
 Le projet dispose d'une suite exhaustive de tests unitaires, d'intégration et de résistance aux cas limites :
 
 ```bash
-# Exécution de la suite complète de 726 tests en mode headless
+# Exécution de la suite complète de 733 tests en mode headless
 pytest tests/ -v
 
 # Vérification du Quality Gate industriel
@@ -224,7 +224,7 @@ python scripts/industrial_audit_engine.py
 ```
 
 ### Métriques d'Audit :
-- **Tests unitaires & intégration** : 726/726 passés (100% de succès)
+- **Tests unitaires & intégration** : 733/733 passés (100% de succès)
 - **Indice Composite de Maintenabilité (ISO/IEC 25010:2023 CMI)** : **96.5 / 100 [GRADE A]**
 - **Typage statique strict** : 100.00% (Strictement zéro `Any`, zéro `object` dans `src/`)
 - **Complexité cognitive** : Aucune fonction n'excède le plafond de 25 (max 23)
@@ -247,6 +247,7 @@ radiant-darwin/
 │   ├── advanced_physics_simulation_matrix_phase2.py # Matrice Phase 2 (Hamiltonien, boucles fermées, BIM, PBR...)
 │   ├── large_scale_systemic_simulations_phase3.py # Grandes Simulations Systémiques & Digital Twins (Phase 3)
 │   ├── progressive_destructive_stress_tests.py # Banc de stress-tests destructifs progressifs jusqu'à rupture
+│   ├── advanced_destructive_bifurcation_tests.py # Banc de stress-tests destructifs avancés & bifurcations non-linéaires (Phase 4)
 │   ├── deep_bug_hunter.py       # Chasseur de bugs et tolérancement géométrique
 │   └── multi_type_simulation_fuzzer.py # Fuzzing et stress-tests multi-physiques
 ├── src/
@@ -265,7 +266,7 @@ radiant-darwin/
 │   ├── viewport/                # Rendu OpenGL interactif, ViewCube, gizmos, XR LOD
 │   ├── cli.py                   # Interface en ligne de commande industrielle
 │   └── main.py                  # Point d'entrée principal GUI / CLI
-├── tests/                       # 726 tests unitaires, d'intégration et de robustesse
+├── tests/                       # 733 tests unitaires, d'intégration et de robustesse
 ├── CONTRIBUTING.md              # Guide de contribution et règles architecturales
 ├── LICENSE                      # Licence open-source MIT
 ├── pyproject.toml               # Packaging moderne PEP 517/621

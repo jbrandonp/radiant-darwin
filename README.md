@@ -216,7 +216,7 @@ python demo_full_suite.py
 Le projet dispose d'une suite exhaustive de tests unitaires, d'intégration et de résistance aux cas limites :
 
 ```bash
-# Exécution de la suite complète de 696 tests en mode headless
+# Exécution de la suite complète de 705 tests en mode headless
 pytest tests/ -v
 
 # Vérification du Quality Gate industriel
@@ -224,7 +224,7 @@ python scripts/industrial_audit_engine.py
 ```
 
 ### Métriques d'Audit :
-- **Tests unitaires & intégration** : 696/696 passés (100% de succès)
+- **Tests unitaires & intégration** : 705/705 passés (100% de succès)
 - **Indice Composite de Maintenabilité (ISO/IEC 25010:2023 CMI)** : **96.5 / 100 [GRADE A]**
 - **Typage statique strict** : 100.00% (Strictement zéro `Any`, zéro `object` dans `src/`)
 - **Complexité cognitive** : Aucune fonction n'excède le plafond de 25 (max 23)
@@ -243,6 +243,7 @@ radiant-darwin/
 │       └── ci.yml               # Pipeline CI/CD GitHub Actions multi-OS
 ├── scripts/
 │   ├── industrial_audit_engine.py # Moteur d'audit déterministe ISO 25010
+│   ├── multi_domain_simulation_matrix.py # Matrice de 8 simulations multi-physiques
 │   ├── deep_bug_hunter.py       # Chasseur de bugs et tolérancement géométrique
 │   └── multi_type_simulation_fuzzer.py # Fuzzing et stress-tests multi-physiques
 ├── src/
@@ -261,7 +262,7 @@ radiant-darwin/
 │   ├── viewport/                # Rendu OpenGL interactif, ViewCube, gizmos, XR LOD
 │   ├── cli.py                   # Interface en ligne de commande industrielle
 │   └── main.py                  # Point d'entrée principal GUI / CLI
-├── tests/                       # 696 tests unitaires, d'intégration et de robustesse
+├── tests/                       # 705 tests unitaires, d'intégration et de robustesse
 ├── CONTRIBUTING.md              # Guide de contribution et règles architecturales
 ├── LICENSE                      # Licence open-source MIT
 ├── pyproject.toml               # Packaging moderne PEP 517/621

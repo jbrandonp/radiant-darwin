@@ -65,6 +65,7 @@ from src.ai.ai_server import CADAIServer
 from src.ui.modifier_panel import ModifierStackDock
 from src.core.modifier_stack import ModifierStack
 from src.ui.ai_command_palette import AICommandPalette
+from src.system.undo_redo import UndoRedoManager, AddFeatureCommand, RemoveFeatureCommand
 
 
 class CADMainWindow(QMainWindow):
@@ -93,6 +94,12 @@ class CADMainWindow(QMainWindow):
         self.ai_server: Optional[CADAIServer] = None
         self.ai_palette: Optional[AICommandPalette] = None
         self._palette_shortcut = QShortcut(QKeySequence("Ctrl+K"), self, self._open_ai_command_palette)
+
+        # Gestionnaire transactionnel d'annulation/rétablissement (Undo/Redo)
+        self.undo_redo_manager: UndoRedoManager = UndoRedoManager(self.document)
+        self._undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self, self._on_action_undo)
+        self._redo_shortcut = QShortcut(QKeySequence("Ctrl+Y"), self, self._on_action_redo)
+        self._redo_shift_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._on_action_redo)
 
         # Initialisation UI
         self._setup_ui()
@@ -351,9 +358,49 @@ class CADMainWindow(QMainWindow):
                 self.viewport.on_document_changed()
                 self.timeline.refresh()
                 self.browser.refresh()
+                self.undo_redo_manager = UndoRedoManager(new_doc)
                 if hasattr(self, "copilot_widget"):
                     self.copilot_widget.set_document(new_doc)
                 QMessageBox.information(self, "Projet Ouvert", f"Projet chargé avec succès :\n{new_doc.name} ({len(new_doc.features)} opérations)")
+
+    # --- Gestionnaire Transactionnel d'Annulation / Rétablissement ---
+    def _add_feature_with_undo(self, feat: Feature) -> None:
+        """Ajoute une feature au document et enregistre l'action dans la pile d'annulation."""
+        self.undo_redo_manager.execute_command(AddFeatureCommand(feat))
+
+    def _on_action_undo(self) -> None:
+        """Annule la dernière action de modélisation (Ctrl+Z)."""
+        if self.undo_redo_manager.can_undo:
+            success = self.undo_redo_manager.undo()
+            if success:
+                self.viewport.update()
+                self.timeline.refresh()
+                self.browser.refresh()
+                self.status_bar.showMessage("Action annulée (Ctrl+Z)", 3000)
+                return
+        if self.document.rollback_index > 0:
+            self.document.set_rollback_index(self.document.rollback_index - 1)
+            self.viewport.update()
+            self.timeline.refresh()
+            self.browser.refresh()
+            self.status_bar.showMessage(f"Historique reculé à l'étape {self.document.rollback_index + 1}", 3000)
+
+    def _on_action_redo(self) -> None:
+        """Rétablit la dernière action de modélisation (Ctrl+Y)."""
+        if self.undo_redo_manager.can_redo:
+            success = self.undo_redo_manager.redo()
+            if success:
+                self.viewport.update()
+                self.timeline.refresh()
+                self.browser.refresh()
+                self.status_bar.showMessage("Action rétablie (Ctrl+Y)", 3000)
+                return
+        if self.document.rollback_index < len(self.document.features) - 1:
+            self.document.set_rollback_index(self.document.rollback_index + 1)
+            self.viewport.update()
+            self.timeline.refresh()
+            self.browser.refresh()
+            self.status_bar.showMessage(f"Historique avancé à l'étape {self.document.rollback_index + 1}", 3000)
 
     # --- Paramètres Utilisateur fx ---
     def _on_action_manage_parameters(self) -> None:

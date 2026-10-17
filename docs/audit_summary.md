@@ -20,8 +20,8 @@
 | **Plafond Complexité par Fonction** | **0 fonction > 25** | ≤ 25 (SonarSource) | ✅ CONFORME |
 | **Tests Unitaires & Intégration** | **696 / 696 Validés** | 100% | ✅ SUCCÈS |
 | **Score de Mutation Testing** | **100.0%** (4/4 tués) | ≥ 80.0% | ✅ SOTA |
-| **Périmètre du Code Source** | **153 fichiers** (37,604 SLOC) | - | ℹ️ INFO |
-| **Complexité Cognitive Globale** | **9,262 points** (Moy: 60.5) | - | ℹ️ INFO |
+| **Périmètre du Code Source** | **166 fichiers** (36,561 SLOC) | - | ℹ️ INFO |
+| **Complexité Cognitive Globale** | **8,969 points** (Moy: 54.0) | - | ℹ️ INFO |
 
 ---
 
@@ -40,11 +40,11 @@
 ### 🔥 Top 5 Architectural Hotspots (CodeScene Churn × Complexité)
 | Fichier Source | Churn | Complexité Cog | Hotspot Index | SLOC |
 | :--- | :---: | :---: | :---: | :---: |
-| `src/cli.py` | 199 | 50 | 9958 | 153 |
-| `src/main.py` | 102 | 12 | 1222 | 58 |
-| `src/__init__.py` | 14 | 0 | 0 | 11 |
-| `src/ai/ai_connector_config.py` | 121 | 18 | 0 | 105 |
-| `src/ai/ai_vision_feedback.py` | 217 | 24 | 0 | 174 |
+| `src/ui/main_window.py` | 1494 | 318 | 474942 | 1,068 |
+| `src/core/geometry.py` | 850 | 149 | 126615 | 541 |
+| `src/viewport/viewport_widget.py` | 402 | 103 | 41378 | 307 |
+| `src/core/document.py` | 355 | 89 | 31577 | 241 |
+| `src/cli.py` | 199 | 50 | 9953 | 153 |
 
 ---
 

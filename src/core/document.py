@@ -5,7 +5,9 @@ le rollback temporel et le recalcul automatique des fonctionnalités.
 """
 
 from __future__ import annotations
-from typing import List, Dict, Optional, Callable, Tuple
+import threading
+from contextlib import contextmanager
+from typing import List, Dict, Optional, Callable, Tuple, Iterator
 from dataclasses import dataclass, field
 
 from src.core.geometry import Solid
@@ -19,11 +21,13 @@ class CADDocument:
     """
     Conteneur central d'un projet CAO.
     Représente le modèle paramétrique complet avec son historique temporel.
+    Sécurisé pour l'accès multithread via un verrou réentrant transactionnel.
     """
 
     def __init__(self, name: str = "Untitled Document") -> None:
         """Initialise un nouveau document vide."""
         self.name: str = name
+        self._lock: threading.RLock = threading.RLock()
         self.sketches: Dict[str, Sketch2D] = {}
         self.features: List[Feature] = []
         self.bodies: Dict[str, Solid] = {}
@@ -37,6 +41,26 @@ class CADDocument:
         # Cache des instantanés d'étapes (Timeline checkpoint snapshots) pour rejeu O(1)
         self._timeline_snapshots: Dict[int, Dict[str, Solid]] = {}
         self._bus_connected: bool = True
+
+    @contextmanager
+    def read_transaction(self) -> Iterator[CADDocument]:
+        """Verrouille le document en lecture pour les threads d'arrière-plan ou l'UI."""
+        with self._lock:
+            yield self
+
+    @contextmanager
+    def write_transaction(self) -> Iterator[CADDocument]:
+        """Verrouille le document en écriture pour les modifications atomiques."""
+        with self._lock:
+            yield self
+
+    def lock(self) -> None:
+        """Acquiert le verrou réentrant du document."""
+        self._lock.acquire()
+
+    def unlock(self) -> None:
+        """Libère le verrou réentrant du document."""
+        self._lock.release()
 
     def register_change_listener(self, callback: Callable[[], None]) -> None:
         """Enregistre un écouteur appelé à chaque modification du modèle."""
@@ -179,32 +203,34 @@ class CADDocument:
         Recalcule séquentiellement le modèle 3D avec mise en cache des étapes (Snapshots).
         Si un instantané est déjà valide à l'index de rollback demandé et qu'aucune opération n'est
         périmée (OUTDATED), restauration instantanée O(1).
+        Protégé par le verrou transactionnel RLock.
         """
-        max_idx = len(self.features) - 1 if self.rollback_index == -1 else self.rollback_index
+        with self._lock:
+            max_idx = len(self.features) - 1 if self.rollback_index == -1 else self.rollback_index
 
-        if max_idx < 0 or len(self.features) == 0:
-            self.bodies = {}
+            if max_idx < 0 or len(self.features) == 0:
+                self.bodies = {}
+                self._notify_change()
+                return
+
+            first_outdated_idx = self._find_first_outdated_index(max_idx)
+
+            if first_outdated_idx <= max_idx:
+                self._purge_invalid_snapshots(first_outdated_idx)
+            elif max_idx in self._timeline_snapshots:
+                # Restauration instantanée O(1)
+                self.bodies = dict(self._timeline_snapshots[max_idx])
+                self._notify_change()
+                return
+
+            start_idx, current_bodies = self._find_cached_checkpoint(max_idx)
+
+            for idx in range(start_idx, max_idx + 1):
+                current_bodies = self._evaluate_feature_step(self.features[idx], current_bodies)
+                self._timeline_snapshots[idx] = dict(current_bodies)
+
+            self.bodies = current_bodies
             self._notify_change()
-            return
-
-        first_outdated_idx = self._find_first_outdated_index(max_idx)
-
-        if first_outdated_idx <= max_idx:
-            self._purge_invalid_snapshots(first_outdated_idx)
-        elif max_idx in self._timeline_snapshots:
-            # Restauration instantanée O(1)
-            self.bodies = dict(self._timeline_snapshots[max_idx])
-            self._notify_change()
-            return
-
-        start_idx, current_bodies = self._find_cached_checkpoint(max_idx)
-
-        for idx in range(start_idx, max_idx + 1):
-            current_bodies = self._evaluate_feature_step(self.features[idx], current_bodies)
-            self._timeline_snapshots[idx] = dict(current_bodies)
-
-        self.bodies = current_bodies
-        self._notify_change()
 
     def get_all_mesh_buffers(self) -> List[MeshBuffer]:
         """Convertit tous les corps solides et instances d'assemblage en tampons maillés pour OpenGL."""

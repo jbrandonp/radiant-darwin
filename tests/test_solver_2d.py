@@ -7,6 +7,14 @@ import numpy as np
 
 from src.core.types import Point2D
 from src.solver.constraints_2d import SketchConstraintSolver2D
+from src.solver.live_drag_solver import (
+    LiveDragSolver,
+    DragConstraint,
+    DragConstraintType,
+    DofDiagnosticStatus,
+    diagnose_degrees_of_freedom,
+)
+
 
 
 def test_solve_horizontal_and_vertical() -> None:
@@ -154,3 +162,50 @@ def test_live_drag_solver_and_dof() -> None:
     )
     assert res_pos.x == 45.0
     assert res_pos.y == 12.5
+
+
+def test_live_drag_coincident_2d_point() -> None:
+    """Vérifie la projection exacte sur un point 2D (target_pos) sans contrainte diagonale x=y."""
+    drag_solver = LiveDragSolver(tolerance=1e-5)
+    c_coinc = DragConstraint(
+        id="c_pt",
+        constraint_type=DragConstraintType.COINCIDENT,
+        entity_indices=(2,),
+        target_pos=Point2D(12.3, 45.6)
+    )
+    res_pos = drag_solver.live_drag_step(
+        dragged_index=2,
+        target_pos=Point2D(100.0, 200.0),
+        active_constraints=[c_coinc]
+    )
+    assert pytest.approx(res_pos.x, 1e-4) == 12.3
+    assert pytest.approx(res_pos.y, 1e-4) == 45.6
+
+
+def test_unified_sketch_solver_facade() -> None:
+    """Vérifie que la façade unifiée orchestre à la fois le mode interactif et le mode rigoureux."""
+    from src.solver.unified_solver import UnifiedSketchSolver, SolverMode
+    solver = UnifiedSketchSolver()
+    assert solver.interactive_solver is not None
+    assert solver.rigorous_solver is not None
+
+    # Test mode interactif via façade
+    c_vert = DragConstraint(
+        id="c_v",
+        constraint_type=DragConstraintType.VERTICAL,
+        entity_indices=(0,),
+        target_val=33.0
+    )
+    dragged = solver.solve_interactive_drag(
+        dragged_index=0,
+        target_pos=Point2D(0.0, 88.0),
+        active_constraints=[c_vert]
+    )
+    assert pytest.approx(dragged.x, 1e-4) == 33.0
+    assert pytest.approx(dragged.y, 1e-4) == 88.0
+
+    # Test diagnostic via façade
+    diag = solver.diagnose_dof(num_points=3, num_independent_constraints=6)
+    assert diag.degrees_of_freedom == 0
+    assert diag.status.value == "fully_constrained"
+

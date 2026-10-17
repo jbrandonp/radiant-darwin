@@ -19,6 +19,7 @@ from src.viewport.nav_bar import ViewportNavBar
 from src.viewport.ray_picking import RayPicker, PickResult, PickedEntityType
 from src.viewport.viewport_shading import ShadingMode
 from src.viewport.snap_engine import SnapResult
+from src.viewport.transform_gizmo import GizmoAxis, GizmoMode
 from src.core.push_pull import PushPullEngine
 
 
@@ -263,15 +264,40 @@ class CADViewportWidget(QOpenGLWidget):
         if self._handle_navigation_press(event.button(), event.modifiers()):
             return
         if event.button() == Qt.MouseButton.LeftButton:
+            # 1. Vérifier si on clique sur un axe du gizmo de transformation actif
+            if self.renderer.transform_gizmo.is_visible:
+                r_orig, r_dir = self.camera.unproject_ray(
+                    float(event.position().x()), float(event.position().y()), self.width(), self.height()
+                )
+                hit_axis = self.renderer.transform_gizmo.hit_test(r_orig, r_dir)
+                if hit_axis != GizmoAxis.NONE:
+                    self.renderer.transform_gizmo.start_drag(
+                        hit_axis, float(event.position().x()), float(event.position().y()), r_orig, r_dir
+                    )
+                    self.update()
+                    return
+
             self._handle_interactive_pick(event.position())
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """Gère le déplacement de la souris lors des opérations d'orbite, de pan et d'accrochage."""
+        """Gère le déplacement de la souris lors des opérations d'orbite, de pan, de gizmo et d'accrochage."""
         current_pos = event.position().toPoint()
         delta = current_pos - self._last_mouse_pos
         dx = float(delta.x())
         dy = float(delta.y())
         self._last_mouse_pos = current_pos
+
+        # Manipulation interactive directe via TransformGizmo 3D
+        if self.renderer.transform_gizmo.is_dragging:
+            r_orig, r_dir = self.camera.unproject_ray(
+                float(current_pos.x()), float(current_pos.y()), self.width(), self.height()
+            )
+            delta_t, delta_rot, delta_s = self.renderer.transform_gizmo.update_drag(
+                float(current_pos.x()), float(current_pos.y()), r_orig, r_dir
+            )
+            self.renderer.transform_gizmo.position = self.renderer.transform_gizmo._drag_start_pos + delta_t
+            self.update()
+            return
 
         if self._is_orbiting:
             self.camera.orbit(dx * 0.45, -dy * 0.45)
@@ -289,7 +315,10 @@ class CADViewportWidget(QOpenGLWidget):
                 self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        """Relâche les verrous de navigation lors du relâchement du clic."""
+        """Relâche les verrous de navigation et de manipulation gizmo lors du relâchement du clic."""
+        if self.renderer.transform_gizmo.is_dragging:
+            self.renderer.transform_gizmo.end_drag()
+            self.update()
         self._is_orbiting = False
         self._is_panning = False
 

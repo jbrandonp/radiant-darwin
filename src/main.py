@@ -17,6 +17,9 @@ from src.ui.main_window import CADMainWindow
 
 def main() -> int:
     """Fonction principale de démarrage de CAD Studio (GUI ou CLI headless)."""
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     # Si des arguments de ligne de commande sont passés, router vers le CLI industriel
     cli_commands = {"audit", "create-box", "cam-5axis", "ecad-thermal", "xr-stream", "connect-ai", "--version", "-h", "--help"}
     if len(sys.argv) > 1 and any(arg in cli_commands or arg.startswith("-") for arg in sys.argv[1:]):

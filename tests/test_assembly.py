@@ -91,3 +91,39 @@ def test_assembly_kinematic_transmission_mates() -> None:
     assert screw.pitch_mm == 5.0
     advance = screw.compute_axial_advance(2.0 * math.pi)
     assert abs(advance.z - 5.0) < 1e-9
+
+
+def test_assembly_arbitrary_axis_rodrigues_rotation() -> None:
+    """Vérifie la cinématique de rotation exacte autour d'un axe 3D oblique non-cartésien (1, 1, 0)."""
+    from src.assembly.kinematics.rodrigues import (
+        compute_rodrigues_rotation_matrix,
+        apply_rodrigues_rotation
+    )
+    # Rotation 90° autour de l'axe diagonal (1, 1, 0)
+    axis = Vector3D(1.0, 1.0, 0.0)
+    R = compute_rodrigues_rotation_matrix(axis, 90.0)
+    # R doit être strictement orthonormale : R * R.T = I
+    import numpy as np
+    assert np.allclose(R @ R.T, np.eye(3), atol=1e-6)
+    assert pytest.approx(float(np.linalg.det(R)), 1e-6) == 1.0
+
+    # Application à un solide
+    box = make_box(10.0, 10.0, 10.0)
+    rotated = apply_rodrigues_rotation(box, axis, 90.0)
+    assert pytest.approx(rotated.volume(), 1e-3) == box.volume()
+
+
+def test_assembly_manager_revolute_with_origin_anchor() -> None:
+    """Vérifie qu'une liaison pivot avec point d'ancrage décentré pivote autour du centre défini."""
+    mgr = AssemblyManager()
+    joint = mgr.add_joint(
+        "j_anchor", "PivotAnchor", JointType.REVOLUTE, "base", "arm",
+        axis=Vector3D(0.0, 0.0, 1.0),
+        origin=Vector3D(50.0, 50.0, 0.0)
+    )
+    arm = make_box(10.0, 10.0, 10.0)
+    bodies = {"base": make_box(100.0, 100.0, 10.0), "arm": arm}
+    updated = mgr.animate_joint("j_anchor", bodies, new_value=180.0)
+    assert "arm" in updated
+    assert pytest.approx(updated["arm"].volume(), 1e-3) == arm.volume()
+

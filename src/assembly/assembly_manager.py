@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 from src.core.types import Vector3D
 from src.core.geometry import Solid
+from src.assembly.kinematics.rodrigues import apply_rodrigues_rotation
 
 
 class JointType(Enum):
@@ -33,6 +34,7 @@ class MechanicalJoint:
     current_value: float = 0.0  # Angle (deg) ou Déplacement (mm)
     min_limit: Optional[float] = None
     max_limit: Optional[float] = None
+    origin: Vector3D = field(default_factory=lambda: Vector3D(0.0, 0.0, 0.0))
 
 
 @dataclass
@@ -60,7 +62,8 @@ class AssemblyManager:
         joint_type: JointType,
         parent_id: str,
         child_id: str,
-        axis: Vector3D = Vector3D(0.0, 0.0, 1.0)
+        axis: Vector3D = Vector3D(0.0, 0.0, 1.0),
+        origin: Optional[Vector3D] = None
     ) -> MechanicalJoint:
         """Enregistre une nouvelle liaison cinématique."""
         j = MechanicalJoint(
@@ -69,7 +72,8 @@ class AssemblyManager:
             joint_type=joint_type,
             parent_body_id=parent_id,
             child_body_id=child_id,
-            axis=axis
+            axis=axis,
+            origin=origin if origin is not None else Vector3D(0.0, 0.0, 0.0)
         )
         self.joints[joint_id] = j
         return j
@@ -87,16 +91,14 @@ class AssemblyManager:
         return val, delta
 
     @staticmethod
-    def _apply_joint_rotation(solid: Solid, axis: Vector3D, delta: float) -> Solid:
-        """Applique une rotation axiale relative à un composant solide selon son axe directeur."""
-        if abs(axis.z) > 0.5:
-            sign = 1.0 if axis.z > 0 else -1.0
-            return solid.rotate(0.0, 0.0, delta * sign)
-        if abs(axis.x) > 0.5:
-            sign = 1.0 if axis.x > 0 else -1.0
-            return solid.rotate(delta * sign, 0.0, 0.0)
-        sign = 1.0 if axis.y > 0 else -1.0
-        return solid.rotate(0.0, delta * sign, 0.0)
+    def _apply_joint_rotation(
+        solid: Solid,
+        axis: Vector3D,
+        delta: float,
+        origin: Optional[Vector3D] = None
+    ) -> Solid:
+        """Applique une rotation spatiale axiale exacte par formule d'Euler-Rodrigues."""
+        return apply_rodrigues_rotation(solid, axis, delta, origin)
 
     def animate_joint(
         self,
@@ -121,12 +123,13 @@ class AssemblyManager:
         _, delta = self._clamp_joint_value(joint, new_value)
 
         if joint.joint_type in (JointType.REVOLUTE, JointType.CYLINDRICAL):
-            updated[child_id] = self._apply_joint_rotation(child_solid, joint.axis, delta)
+            updated[child_id] = self._apply_joint_rotation(child_solid, joint.axis, delta, joint.origin)
         elif joint.joint_type == JointType.SLIDER:
             offset = joint.axis.normalized().scale(delta)
             updated[child_id] = child_solid.translate(offset)
 
         return updated
+
 
     @staticmethod
     def check_interference(solid_a: Solid, solid_b: Solid, id_a: str = "A", id_b: str = "B") -> InterferenceResult:

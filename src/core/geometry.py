@@ -99,6 +99,14 @@ class Solid:
         res.color = self.color
         return res
 
+    def transform(self, matrix_3x4: Union[Sequence[Sequence[float]], np.ndarray]) -> Solid:
+        """Applique une transformation affine 3x4 [R | T] au solide."""
+        mat_list = [list(row) for row in matrix_3x4]
+        new_manifold = self._manifold.transform(mat_list)
+        res = Solid(new_manifold, self.name)
+        res.color = self.color
+        return res
+
     def scale(self, factor_x: float, factor_y: float, factor_z: float) -> Solid:
         """Applique une mise à l'échelle non-uniforme au solide."""
         new_manifold = self._manifold.scale([factor_x, factor_y, factor_z])

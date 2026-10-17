@@ -1,6 +1,10 @@
 """
 Package du solveur de contraintes géométriques 2D (CAD Studio Solver Layer).
-Fournit la résolution non linéaire Levenberg-Marquardt des contraintes géométriques.
+Fournit :
+- La résolution non linéaire Levenberg-Marquardt des contraintes géométriques
+- Le solveur de glisser-déplacer interactif à 60 FPS
+- La façade UnifiedSketchSolver pour une intégration transparente
+- Le diagnostic complet des degrés de liberté (DDL / DoF)
 
 Typage statique strict : strictement zéro Any et zéro object.
 """
@@ -13,13 +17,17 @@ from src.solver.constraints_2d import (
     GeometricConstraint2D,
     SketchConstraintSolver2D,
 )
-from src.core.live_sketch_solver import (
+from src.solver.live_drag_solver import (
     DragConstraintType,
     DofDiagnosticStatus,
     DofDiagnosticResult,
     DragConstraint,
     diagnose_degrees_of_freedom,
     LiveDragSolver,
+)
+from src.solver.unified_solver import (
+    SolverMode,
+    UnifiedSketchSolver,
 )
 
 __all__ = [
@@ -35,4 +43,7 @@ __all__ = [
     "DragConstraint",
     "diagnose_degrees_of_freedom",
     "LiveDragSolver",
+    # Façade unifiée
+    "SolverMode",
+    "UnifiedSketchSolver",
 ]

@@ -37,7 +37,7 @@ from src.core.operations_advanced import (
     HelixFeature, RibFeature, SplitFeature, SubtractiveLoftFeature, SubtractiveSweepFeature,
     DynamicDatumPlaneFeature, DatumAttachmentMode, VariableRadiusFilletFeature, MultiRailLoftFeature
 )
-from src.core.fasteners import FastenerFeature
+
 
 
 class SketchSerializer:
@@ -549,6 +549,7 @@ class FeatureDeserializerRegistry:
             return SheetMetalFeature(f_id, f_name, bw, bl, th, br, fl, kf, target_id)
 
         if f_cls == "FastenerFeature":
+            from src.core.fasteners import FastenerFeature
             ftype = str(f_data.get("fastener_type", "hex_bolt"))
             size = str(f_data.get("standard_size", "M6"))
             length = float(params.get("length", 30.0))

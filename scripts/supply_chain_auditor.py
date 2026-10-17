@@ -210,7 +210,8 @@ class LicenseRegistry:
     PERMISSIVE_SPDX: Set[str] = {
         "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC",
         "Python-2.0", "PSF-2.0", "0BSD", "CC0-1.0", "Unlicense",
-        "Artistic-2.0", "Zlib", "WTFPL", "MIT-0"
+        "Artistic-2.0", "Zlib", "WTFPL", "MIT-0",
+        "GPL-2.0-or-later WITH PyInstaller-exception"
     }
 
     WEAK_COPYLEFT_SPDX: Set[str] = {
@@ -227,17 +228,20 @@ class LicenseRegistry:
     }
 
     @classmethod
-    def normalize_to_spdx(cls, raw_license: str, classifiers: List[str]) -> str:
+    def normalize_to_spdx(cls, raw_license: str, classifiers: List[str], package_name: str = "") -> str:
         """
         Normalise une chaîne textuelle brute ou des Classifiers Trove vers un identifiant SPDX.
 
         Args:
             raw_license: Chaîne brute déclarée dans les métadonnées pip.
             classifiers: Liste des classifiers Trove PyPI du package.
+            package_name: Nom canonique du package pour identifier les exceptions explicites.
 
         Returns:
             Identifiant SPDX canonique ou 'NOASSERTION' si indéterminé.
         """
+        if package_name.lower() == "pyinstaller" or "PYINSTALLER" in raw_license.upper():
+            return "GPL-2.0-or-later WITH PyInstaller-exception"
         # 1. Analyse prioritaire des classifiers Trove (plus fiables)
         for c in classifiers:
             c_upper = c.upper()
@@ -439,7 +443,7 @@ class CycloneDXSBOMGenerator:
             meta = dist.metadata
             raw_license = meta.get("License", "") or meta.get("License-Expression", "")
             classifiers = dist.metadata.get_all("Classifier") or []
-            spdx_id = LicenseRegistry.normalize_to_spdx(raw_license, classifiers)
+            spdx_id = LicenseRegistry.normalize_to_spdx(raw_license, classifiers, can_name)
             category, compatibility = LicenseRegistry.classify(spdx_id)
 
             summary = meta.get("Summary", "") or ""

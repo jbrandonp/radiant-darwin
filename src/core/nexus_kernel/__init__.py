@@ -66,6 +66,12 @@ from src.core.nexus_kernel.trimmed_brep_watertight import (
 from src.core.nexus_kernel.symplectic_integrator import (
     GeneralizedAlphaStepResult, GeneralizedAlphaIntegrator, VolumetricLockingMitigation
 )
+from src.core.nexus_kernel.native_accel import (
+    NativeAccelerationEngine, AccelerationBackend,
+    accelerated_orient2d, accelerated_orient3d,
+    accelerated_interval_overlap, accelerated_saye_quadrature,
+    accelerated_nurbs_knot_span
+)
 
 __all__ = [
     "SurfaceType", "CurveType", "NexusVertex", "NexusCurve", "NexusLineCurve",
@@ -86,5 +92,7 @@ __all__ = [
     "CSGOpType", "SDFInterval", "SDFIntervalTreeNode",
     "ClosedLoopDynamicsResult", "ClosedLoopKinematicEngine",
     "CoordinatedBoundaryVertex", "WatertightEdgeReport", "WatertightTrimmedEdge", "CoordinatedMeshSealer",
-    "GeneralizedAlphaStepResult", "GeneralizedAlphaIntegrator", "VolumetricLockingMitigation"
+    "GeneralizedAlphaStepResult", "GeneralizedAlphaIntegrator", "VolumetricLockingMitigation",
+    "NativeAccelerationEngine", "AccelerationBackend", "accelerated_orient2d", "accelerated_orient3d",
+    "accelerated_interval_overlap", "accelerated_saye_quadrature", "accelerated_nurbs_knot_span"
 ]

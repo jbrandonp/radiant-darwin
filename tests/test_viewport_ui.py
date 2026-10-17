@@ -118,3 +118,60 @@ def test_properties_panel_field_ranges(qapp: QApplication) -> None:
 
     panel.set_feature("")
     assert len(panel.param_spinboxes) == 0
+
+
+def test_transform_gizmo_interaction() -> None:
+    """Vérifie le fonctionnement du manipulateur 3D interactif (TransformGizmo)."""
+    from src.viewport.transform_gizmo import TransformGizmo, GizmoMode, GizmoAxis
+    from src.core.types import Vector3D
+
+    gizmo = TransformGizmo()
+    assert gizmo.is_visible is False
+
+    # 1. Activation et positionnement
+    gizmo.set_target(Vector3D(0.0, 0.0, 0.0))
+    assert gizmo.is_visible is True
+    assert gizmo.position == Vector3D(0.0, 0.0, 0.0)
+
+    # 2. Test d'intersection par rayon sur l'axe X
+    ray_origin = Vector3D(15.0, 0.0, 100.0)
+    ray_dir = Vector3D(0.0, 0.0, -1.0)
+    hit_axis = gizmo.hit_test(ray_origin, ray_dir)
+    assert hit_axis == GizmoAxis.X
+    assert gizmo.hovered_axis == GizmoAxis.X
+
+    # 3. Session de glissement en translation
+    gizmo.start_drag(GizmoAxis.X, mouse_x=100.0, mouse_y=200.0, ray_origin=ray_origin, ray_dir=ray_dir)
+    assert gizmo.is_dragging is True
+    assert gizmo.active_axis == GizmoAxis.X
+
+    delta_t, delta_r, delta_s = gizmo.update_drag(
+        mouse_x=140.0, mouse_y=200.0,
+        ray_origin=ray_origin, ray_dir=ray_dir
+    )
+    assert delta_t.x > 0.0
+    assert delta_t.y == 0.0
+    assert delta_t.z == 0.0
+    gizmo.end_drag()
+    assert gizmo.is_dragging is False
+
+    # 4. Mode Rotation
+    gizmo.set_mode(GizmoMode.ROTATE)
+    assert gizmo.mode == GizmoMode.ROTATE
+    gizmo.start_drag(GizmoAxis.ROTATE_Z, mouse_x=100.0, mouse_y=100.0, ray_origin=ray_origin, ray_dir=ray_dir)
+    _, rot_deg, _ = gizmo.update_drag(120.0, 100.0, ray_origin, ray_dir)
+    assert rot_deg > 0.0
+    gizmo.end_drag()
+
+    # 5. Mode Échelle
+    gizmo.set_mode(GizmoMode.SCALE)
+    gizmo.start_drag(GizmoAxis.SCALE_XYZ, mouse_x=50.0, mouse_y=50.0, ray_origin=ray_origin, ray_dir=ray_dir)
+    _, _, scale_vec = gizmo.update_drag(60.0, 50.0, ray_origin, ray_dir)
+    assert scale_vec.x > 1.0
+    gizmo.end_drag()
+
+    # 6. Masquage
+    gizmo.hide()
+    assert gizmo.is_visible is False
+    assert gizmo.hovered_axis == GizmoAxis.NONE
+

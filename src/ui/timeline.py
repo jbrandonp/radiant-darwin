@@ -8,9 +8,10 @@ from __future__ import annotations
 from typing import Optional, List
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel,
-    QScrollArea, QFrame, QSlider, QSizePolicy
+    QScrollArea, QFrame, QSlider, QSizePolicy, QMenu
 )
 from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QContextMenuEvent
 
 from src.core.document import CADDocument
 from src.core.feature import Feature
@@ -18,6 +19,8 @@ from src.core.feature import Feature
 
 class TimelineStepButton(QPushButton):
     """Pastille représentant une opération paramétrique dans la timeline."""
+
+    reorder_requested = Signal(int, int)  # (from_index, to_index)
 
     def __init__(self, index: int, feature: Feature, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -57,6 +60,17 @@ class TimelineStepButton(QPushButton):
             }
         """)
         self.setCheckable(True)
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        """Menu contextuel pour réorganiser l'opération dans l'arbre paramétrique."""
+        menu = QMenu(self)
+        act_left = menu.addAction("◀ Déplacer vers la gauche (Avancer)")
+        act_right = menu.addAction("▶ Déplacer vers la droite (Reculer)")
+        action = menu.exec(event.globalPos())
+        if action == act_left and self.feature_index > 0:
+            self.reorder_requested.emit(self.feature_index, self.feature_index - 1)
+        elif action == act_right:
+            self.reorder_requested.emit(self.feature_index, self.feature_index + 1)
 
 
 class CADTimeline(QWidget):
@@ -195,7 +209,12 @@ class CADTimeline(QWidget):
                 btn.setEnabled(False)
                 btn.setStyleSheet("background-color: #1e2025; color: #555a64; border: 1px dashed #30333b;")
             btn.clicked.connect(lambda checked=False, f_id=feat.feature_id: self.feature_selected.emit(f_id))
+            btn.reorder_requested.connect(self._on_reorder_requested)
             self.steps_layout.addWidget(btn)
+
+    def _on_reorder_requested(self, from_idx: int, to_idx: int) -> None:
+        """Réorganise une opération dans l'arbre chronologique du document."""
+        self.document.reorder_feature(from_idx, to_idx)
 
     def _goto_first(self) -> None:
         """Revient au tout début de l'arbre."""

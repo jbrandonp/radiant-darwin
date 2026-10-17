@@ -160,3 +160,33 @@ def test_document_emits_lego_events() -> None:
 
     unsub1()
     unsub2()
+
+
+def test_event_bus_weak_ref_avoids_memory_leak() -> None:
+    """Vérifie que la destruction d'un objet supprime automatiquement son abonnement (zéro fuite mémoire)."""
+    import gc
+    from src.core.event_bus import global_event_bus
+
+    class TemporaryListener:
+        def __init__(self) -> None:
+            self.count = 0
+
+        def on_event(self, event: CADEvent) -> None:
+            self.count += 1
+
+    listener = TemporaryListener()
+    global_event_bus.subscribe(DocumentModifiedEvent, listener.on_event)
+
+    # 1. Notifié quand l'objet est vivant
+    notified = global_event_bus.publish(DocumentModifiedEvent("test", 1, 1))
+    assert listener.count == 1
+    assert notified >= 1
+
+    # 2. Destruction de l'objet
+    del listener
+    gc.collect()
+
+    # 3. L'abonnement a expiré sans fuite mémoire
+    notified_after = global_event_bus.publish(DocumentModifiedEvent("test2", 2, 2))
+    # Le gestionnaire mort a été nettoyé
+    assert notified_after == 0

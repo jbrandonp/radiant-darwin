@@ -1621,8 +1621,8 @@ class MutationTestingEngine:
                 "Assembly Mate Coordinate Solver",
                 "tests/test_four_chantiers_master.py",
                 "src/core/assembly.py",
-                "diff = pt_ref - pt_tgt + mate.offset * ax_ref",
-                "diff = pt_ref - pt_tgt + (mate.offset + 10.0) * ax_ref",
+                "diff = pt_ref_curr - pt_tgt_curr + mate.offset * v_ref",
+                "diff = pt_ref_curr - pt_tgt_curr + (mate.offset + 10.0) * v_ref",
                 "AOR (Arithmetic Operator Replacement)"
             ),
             (

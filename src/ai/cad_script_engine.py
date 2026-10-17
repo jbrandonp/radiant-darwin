@@ -9,6 +9,7 @@ Architecture fortement typée : strictement zéro Any et zéro object.
 from __future__ import annotations
 import ast
 import math
+import sys
 import time
 import types
 from dataclasses import dataclass, field
@@ -397,12 +398,29 @@ class CADScriptEngine:
 
         t_start = time.perf_counter()
         with AtomicTransactionScope(document, "Script Code-as-CAD") as scope:
+            old_trace = sys.gettrace()
+            step_counter = [0]
+
+            def _watchdog_trace(
+                frame: types.FrameType,
+                event: str,
+                arg: Union[Exception, str, int, float, bool, None]
+            ) -> Optional[Callable[..., None]]:
+                step_counter[0] += 1
+                if (step_counter[0] & 0x1FF) == 0:
+                    token.check_cancelled()
+                return _watchdog_trace
+
             try:
                 compiled = compile(code_str, "<cad_script>", "exec")  # nosec: SEC_CODE_EXEC
                 invoker: Callable[[types.CodeType, Dict[str, SafeContextVal]], None] = (
                     getattr(__builtins__, "exec") if hasattr(__builtins__, "exec") else __builtins__["exec"]
                 )
-                invoker(compiled, safe_globals)
+                sys.settrace(_watchdog_trace)
+                try:
+                    invoker(compiled, safe_globals)
+                finally:
+                    sys.settrace(old_trace)
                 t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
 
                 n_bodies = len(context.created_bodies)

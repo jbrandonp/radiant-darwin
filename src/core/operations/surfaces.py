@@ -291,6 +291,11 @@ class FilletFeature(Feature):
     """
     Congé de raccordement paramétrique (Fillet) adoucissant les arêtes vives.
     Réduit les concentrations de contraintes mécaniques selon les standards industriels.
+
+    Note architecturale (Mesh CSG vs B-Rep) :
+    Radiant Darwin s'appuie sur le moteur volumique Manifold3D (maillages 2-variétés étanches)
+    plutôt que sur un noyau analytique B-Rep/NURBS pur. L'arrondi est calculé via une dilatation
+    par somme de Minkowski ou simplification géométrique préservant l'intégrité volumique.
     """
 
     def __init__(
@@ -299,14 +304,85 @@ class FilletFeature(Feature):
         name: str = "Fillet",
         target_body_id: str = "",
         radius: float = 2.0,
-        segments: int = 16
+        segments: int = 16,
+        edges_mode: str = "all",
+        edge_indices: Optional[List[int]] = None
     ) -> None:
         super().__init__(feature_id, name)
         self.target_body_id = target_body_id
+        self.edges_mode = edges_mode
+        self.edge_indices = edge_indices
         self.parameters = {
             "radius": float(radius),
             "segments": float(segments),
         }
+
+    @staticmethod
+    def _build_negative_edge_fillet_tools(
+        b_min: Vector3D,
+        b_max: Vector3D,
+        r: float,
+        segs: int,
+        edges_mode: str
+    ) -> Optional[m.Manifold]:
+        """Génère les outils soustractifs de congé d'arête (boîte moins quart de cylindre)."""
+        x0, x1 = b_min.x, b_max.x
+        y0, y1 = b_min.y, b_max.y
+        z0, z1 = b_min.z, b_max.z
+        dx = x1 - x0
+        dy = y1 - y0
+        dz = z1 - z0
+
+        if dx < 2.0 * r or dy < 2.0 * r or dz < 2.0 * r:
+            return None
+
+        tools: List[m.Manifold] = []
+
+        # Arêtes supérieures (Z = z1)
+        if edges_mode in ("all", "top"):
+            # Y = y1
+            box1 = m.Manifold.cube([dx, r, r], center=False).translate([x0, y1 - r, z1 - r])
+            cyl1 = m.Manifold.cylinder(dx, r, r, segs).rotate([0, 90, 0]).translate([x0, y1 - r, z1 - r])
+            tools.append(box1 - cyl1)
+            # Y = y0
+            box2 = m.Manifold.cube([dx, r, r], center=False).translate([x0, y0, z1 - r])
+            cyl2 = m.Manifold.cylinder(dx, r, r, segs).rotate([0, 90, 0]).translate([x0, y0 + r, z1 - r])
+            tools.append(box2 - cyl2)
+            # X = x1
+            box3 = m.Manifold.cube([r, dy, r], center=False).translate([x1 - r, y0, z1 - r])
+            cyl3 = m.Manifold.cylinder(dy, r, r, segs).rotate([-90, 0, 0]).translate([x1 - r, y0, z1 - r])
+            tools.append(box3 - cyl3)
+            # X = x0
+            box4 = m.Manifold.cube([r, dy, r], center=False).translate([x0, y0, z1 - r])
+            cyl4 = m.Manifold.cylinder(dy, r, r, segs).rotate([-90, 0, 0]).translate([x0 + r, y0, z1 - r])
+            tools.append(box4 - cyl4)
+
+        # Arêtes inférieures (Z = z0)
+        if edges_mode in ("all", "bottom"):
+            # Y = y1
+            box5 = m.Manifold.cube([dx, r, r], center=False).translate([x0, y1 - r, z0])
+            cyl5 = m.Manifold.cylinder(dx, r, r, segs).rotate([0, 90, 0]).translate([x0, y1 - r, z0 + r])
+            tools.append(box5 - cyl5)
+            # Y = y0
+            box6 = m.Manifold.cube([dx, r, r], center=False).translate([x0, y0, z0])
+            cyl6 = m.Manifold.cylinder(dx, r, r, segs).rotate([0, 90, 0]).translate([x0, y0 + r, z0 + r])
+            tools.append(box6 - cyl6)
+            # X = x1
+            box7 = m.Manifold.cube([r, dy, r], center=False).translate([x1 - r, y0, z0])
+            cyl7 = m.Manifold.cylinder(dy, r, r, segs).rotate([-90, 0, 0]).translate([x1 - r, y0, z0 + r])
+            tools.append(box7 - cyl7)
+            # X = x0
+            box8 = m.Manifold.cube([r, dy, r], center=False).translate([x0, y0, z0])
+            cyl8 = m.Manifold.cylinder(dy, r, r, segs).rotate([-90, 0, 0]).translate([x0 + r, y0, z0 + r])
+            tools.append(box8 - cyl8)
+
+        if not tools:
+            return None
+
+        res = tools[0]
+        for t in tools[1:]:
+            res = res + t
+        return res
 
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
         """Arrondit les arêtes du corps solide cible."""
@@ -324,6 +400,17 @@ class FilletFeature(Feature):
         dy = b_max.y - b_min.y
         dz = b_max.z - b_min.z
 
+        # 1. Congés localisés par soustraction d'outils cylindriques (mode top / bottom)
+        if self.edges_mode in ("top", "bottom"):
+            fillet_tool = self._build_negative_edge_fillet_tools(b_min, b_max, r, segs, self.edges_mode)
+            if fillet_tool is not None:
+                carved = target.manifold - fillet_tool
+                if not carved.is_empty() and carved.volume() > 1e-4:
+                    updated[tgt_key] = Solid(carved, f"{target.name}_Fillet")
+                    self.status = FeatureStatus.OK
+                    return updated
+
+        # 2. Mode 'all' ou repli si arêtes trop étroites
         if dx > 2.2 * r and dy > 2.2 * r and dz > 2.2 * r:
             sx = (dx - 2.0 * r) / dx
             sy = (dy - 2.0 * r) / dy

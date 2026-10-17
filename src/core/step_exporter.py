@@ -91,8 +91,33 @@ class STEPExporter:
             lines.append(f"#{bound_id}=FACE_OUTER_BOUND('',#{loop_id},.T.);")
             eid += 1
 
+            # Calcul du vecteur normal de la facette plane
+            v0 = vert_props[f[0]]
+            v1 = vert_props[f[1]]
+            v2 = vert_props[f[2]]
+            e1 = v1 - v0
+            e2 = v2 - v0
+            norm = np.cross(e1, e2)
+            norm_len = float(np.linalg.norm(norm))
+            if norm_len > 1e-9:
+                norm = norm / norm_len
+            else:
+                norm = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+
+            dir_z_id = eid
+            lines.append(f"#{dir_z_id}=DIRECTION('',({norm[0]:.6f},{norm[1]:.6f},{norm[2]:.6f}));")
+            eid += 1
+
+            axis_id = eid
+            lines.append(f"#{axis_id}=AXIS2_PLACEMENT_3D('',#{vert_eids[f[0]]},#{dir_z_id},$);")
+            eid += 1
+
+            surf_id = eid
+            lines.append(f"#{surf_id}=PLANE('',#{axis_id});")
+            eid += 1
+
             face_id = eid
-            lines.append(f"#{face_id}=FACE_SURFACE('',(#{bound_id}),$,.T.);")
+            lines.append(f"#{face_id}=FACE_SURFACE('',(#{bound_id}),#{surf_id},.T.);")
             face_eids.append(face_id)
             eid += 1
 

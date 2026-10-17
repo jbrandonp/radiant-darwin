@@ -13,6 +13,7 @@ from src.core.types import Vector3D, Point2D, FeatureStatus
 from src.core.geometry import Solid, make_box
 from src.core.feature import Feature
 from src.core.sketch import Sketch2D
+import manifold3d as m
 
 
 @dataclass
@@ -104,20 +105,68 @@ class SheetMetalPart:
     def generate_folded_solid(self) -> Solid:
         """
         Génère le corps 3D plié correspondant à la pièce finie.
+        Intègre les congés de courbure cylindriques réalistes aux lignes de pliage.
         """
-        t = self.rule.thickness_mm
-        # Corps de base plat
-        main_solid = make_box(self.base_width, self.base_length, t, center=False, name="SheetMetal_Base")
+        t = max(0.01, self.rule.thickness_mm)
+        r = max(0.0, self.rule.bend_radius_mm)
+        w = max(0.1, self.base_width)
 
-        # Ajouter chaque rebord plié
+        if not self.bends:
+            return make_box(w, self.base_length, t, center=False, name="SheetMetal_Base")
+
         current_y = self.base_length
+
+        if r > 0.01:
+            yc = current_y - t - r
+            zc = t + r
+            if yc <= 0.0:
+                # Plaque trop courte pour insérer le rayon de courbure : repli sur arêtes vives
+                main_solid = make_box(w, self.base_length, t, center=False, name="SheetMetal_Base")
+                for idx, bend in enumerate(self.bends):
+                    h = bend.flange_length_mm
+                    flange_solid = make_box(w, t, h, center=False, name=f"Flange_{idx+1}")
+                    flange_solid = flange_solid.translate(Vector3D(0.0, current_y - t, t))
+                    main_solid = main_solid.union(flange_solid)
+                return main_solid
+
+            # 1. Base plate tronquée jusqu'à la tangence du pli
+            main_solid = make_box(w, yc, t, center=False, name="SheetMetal_Base")
+
+            # 2. Raccordement en quart de cylindre creux tangentiel
+            n_segs = 16
+            angles = np.linspace(-np.pi / 2.0, 0.0, n_segs)
+            outer_pts = [[float(yc + (r + t) * np.cos(a)), float(zc + (r + t) * np.sin(a))] for a in angles]
+            inner_pts = [[float(yc + r * np.cos(a)), float(zc + r * np.sin(a))] for a in reversed(angles)]
+            profile = outer_pts + inner_pts
+
+            cs = m.CrossSection([profile])
+            mat = np.array([
+                [0.0, 0.0, 1.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0]
+            ], dtype=np.float64)
+            bend_manifold = m.Manifold.extrude(cs, w).transform(mat[:3, :])
+            bend_solid = Solid(bend_manifold, "Bend_Arc")
+            main_solid = main_solid.union(bend_solid)
+
+            # 3. Flange vertical raccordé
+            for idx, bend in enumerate(self.bends):
+                h = bend.flange_length_mm
+                flange_h = max(1.0, h - (r + t))
+                flange_solid = make_box(w, t, flange_h, center=False, name=f"Flange_{idx+1}")
+                flange_solid = flange_solid.translate(Vector3D(0.0, current_y - t, zc))
+                main_solid = main_solid.union(flange_solid)
+
+            return main_solid
+
+        # Repli pour rayon de courbure nul
+        main_solid = make_box(w, self.base_length, t, center=False, name="SheetMetal_Base")
         for idx, bend in enumerate(self.bends):
             h = bend.flange_length_mm
-            # Rebord plié à 90 degrés selon Z
-            flange_solid = make_box(self.base_width, t, h, center=False, name=f"Flange_{idx+1}")
+            flange_solid = make_box(w, t, h, center=False, name=f"Flange_{idx+1}")
             flange_solid = flange_solid.translate(Vector3D(0.0, current_y - t, t))
             main_solid = main_solid.union(flange_solid)
-
         return main_solid
 
     def generate_flat_pattern(self) -> FlatPattern:

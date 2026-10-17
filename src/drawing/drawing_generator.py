@@ -310,6 +310,69 @@ class TechnicalDrawingGenerator:
                 return True
         return False
 
+    @classmethod
+    def _clip_and_append_edge(
+        cls,
+        sheet: TechnicalSheet,
+        p0: np.ndarray,
+        p1: np.ndarray,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        view_dir: np.ndarray,
+        front_faces: List[_ProjectedTriangle],
+        enable_hlr: bool
+    ) -> None:
+        """Découpe adaptativement l'arête en segments visibles et cachés avec pré-filtrage spatial."""
+        if not enable_hlr or not front_faces:
+            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=False))
+            return
+
+        min_ex = min(x1, x2)
+        max_ex = max(x1, x2)
+        min_ey = min(y1, y2)
+        max_ey = max(y1, y2)
+
+        candidates = [
+            tri for tri in front_faces
+            if not (max_ex < tri.min_u - 1e-2 or min_ex > tri.max_u + 1e-2 or max_ey < tri.min_v - 1e-2 or min_ey > tri.max_v + 1e-2)
+        ]
+
+        if not candidates:
+            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=False))
+            return
+
+        # Échantillonnage en 4 sous-segments pour découpage précis
+        num_steps = 4
+        sub_visibilities: List[bool] = []
+        for s in range(num_steps):
+            t_mid = (s + 0.5) / float(num_steps)
+            sub_p = (1.0 - t_mid) * p0 + t_mid * p1
+            sub_u = (1.0 - t_mid) * x1 + t_mid * x2
+            sub_v = (1.0 - t_mid) * y1 + t_mid * y2
+            hidden = cls._is_point_occluded(sub_p, sub_u, sub_v, view_dir, candidates)
+            sub_visibilities.append(hidden)
+
+        # Regroupement des sous-segments contigus de même visibilité
+        start_step = 0
+        while start_step < num_steps:
+            current_hidden = sub_visibilities[start_step]
+            end_step = start_step + 1
+            while end_step < num_steps and sub_visibilities[end_step] == current_hidden:
+                end_step += 1
+
+            t_start = start_step / float(num_steps)
+            t_end = end_step / float(num_steps)
+
+            seg_x1 = (1.0 - t_start) * x1 + t_start * x2
+            seg_y1 = (1.0 - t_start) * y1 + t_start * y2
+            seg_x2 = (1.0 - t_end) * x1 + t_end * x2
+            seg_y2 = (1.0 - t_end) * y1 + t_end * y2
+
+            sheet.lines.append(DrawingLine2D(seg_x1, seg_y1, seg_x2, seg_y2, is_hidden=current_hidden))
+            start_step = end_step
+
     def _project_view(
         self,
         vertices: np.ndarray,
@@ -377,13 +440,7 @@ class TechnicalDrawingGenerator:
             x2 = center_x + (float(p1[axis_h]) - mean_h) * scale
             y2 = center_y + (float(p1[axis_v]) - mean_v) * scale
 
-            is_hidden = False
-            if enable_hlr and front_faces:
-                is_hidden = self._is_point_occluded(
-                    (p0 + p1) * 0.5, (x1 + x2) * 0.5, (y1 + y2) * 0.5, view_dir, front_faces
-                )
-
-            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=is_hidden))
+            self._clip_and_append_edge(sheet, p0, p1, x1, y1, x2, y2, view_dir, front_faces, enable_hlr)
 
     def _project_isometric_view(
         self,
@@ -457,13 +514,7 @@ class TechnicalDrawingGenerator:
             x2 = center_x + (p1_x - mean_x) * scale
             y2 = center_y + (p1_y - mean_y) * scale
 
-            is_hidden = False
-            if enable_hlr and front_faces:
-                is_hidden = self._is_point_occluded(
-                    (p0 + p1) * 0.5, (x1 + x2) * 0.5, (y1 + y2) * 0.5, view_dir, front_faces
-                )
-
-            sheet.lines.append(DrawingLine2D(x1, y1, x2, y2, is_hidden=is_hidden))
+            self._clip_and_append_edge(sheet, p0, p1, x1, y1, x2, y2, view_dir, front_faces, enable_hlr)
 
     @staticmethod
     def _draw_section_contour(

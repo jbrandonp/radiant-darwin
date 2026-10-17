@@ -153,6 +153,38 @@ def test_multi_body_assembly_solver_and_collisions() -> None:
     assert collisions[0][2] > 0.0  # Volume d'interférence positif
 
 
+def test_assembly_instance_preserves_full_3d_rotation() -> None:
+    """Vérifie que AssemblyInstance.get_transformed_solid applique la rotation 3x3 et pas seulement la translation."""
+    box = make_box(20.0, 10.0, 10.0)
+    inst = AssemblyInstance("inst_rot", box, name="RotatedBox")
+
+    # Rotation de 90° autour de Z : X -> Y, Y -> -X
+    # [ 0, -1,  0, 10 ]
+    # [ 1,  0,  0, 20 ]
+    # [ 0,  0,  1,  0 ]
+    # [ 0,  0,  0,  1 ]
+    mat = np.eye(4, dtype=np.float64)
+    mat[0, 0] = 0.0
+    mat[0, 1] = -1.0
+    mat[1, 0] = 1.0
+    mat[1, 1] = 0.0
+    mat[0, 3] = 10.0
+    mat[1, 3] = 20.0
+    inst.transform_matrix = mat
+
+    transformed_solid = inst.get_transformed_solid()
+    b_min, b_max = transformed_solid.bounding_box()
+
+    # Dimensions originelles : DX=20, DY=10, DZ=10
+    # Après rotation 90° autour de Z : DX=10, DY=20, DZ=10
+    dx = b_max.x - b_min.x
+    dy = b_max.y - b_min.y
+    dz = b_max.z - b_min.z
+    assert abs(dx - 10.0) < 1e-3
+    assert abs(dy - 20.0) < 1e-3
+    assert abs(dz - 10.0) < 1e-3
+
+
 def test_cam_industrial_post_processors_haas_fanuc_heidenhain() -> None:
     """Vérifie la génération de code CNC pour contrôleurs Haas, Fanuc et Heidenhain."""
     engine = CAMEngine()

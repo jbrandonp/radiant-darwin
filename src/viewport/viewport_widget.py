@@ -351,6 +351,8 @@ class CADViewportWidget(QOpenGLWidget):
         self.cached_buffers.clear()
         self.selected_pick = None
         self.current_snap = None
+        self.renderer.cleanup_gl()
+
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Garantit la libération propre des ressources OpenGL lors de la fermeture de la vue."""

@@ -443,9 +443,12 @@ class Sketch2D:
         sketch_id: str,
         name: Union[str, PlaneType] = "Sketch",
         plane: PlaneType = PlaneType.XY,
-        offset_distance: float = 0.0
+        offset_distance: float = 0.0,
+        origin: Optional[Vector3D] = None,
+        normal: Optional[Vector3D] = None,
+        u_axis: Optional[Vector3D] = None
     ) -> None:
-        """Initialise une nouvelle esquisse sur le plan indiqué avec un éventuel décalage normal."""
+        """Initialise une nouvelle esquisse sur le plan indiqué ou sur un plan arbitraire 3D."""
         self.sketch_id: str = sketch_id
         if isinstance(name, PlaneType):
             self.plane: PlaneType = name
@@ -457,6 +460,36 @@ class Sketch2D:
         self.entities: List[SketchEntity] = []
         self.dimensions: List[SketchDimension] = []
         self._counter: int = 0
+
+        # Système de coordonnées local 3D arbitraire (permet d'esquisser sur n'importe quelle face orientée)
+        if origin is not None and normal is not None and u_axis is not None:
+            self.origin: Vector3D = origin
+            self.normal: Vector3D = normal.normalized()
+            self.u_axis: Vector3D = u_axis.normalized()
+            self.v_axis: Vector3D = self.normal.cross(self.u_axis).normalized()
+            self.is_arbitrary_plane: bool = True
+        else:
+            self.is_arbitrary_plane = False
+            if self.plane == PlaneType.XY:
+                self.origin = Vector3D(0.0, 0.0, self.offset_distance)
+                self.normal = Vector3D(0.0, 0.0, 1.0)
+                self.u_axis = Vector3D(1.0, 0.0, 0.0)
+                self.v_axis = Vector3D(0.0, 1.0, 0.0)
+            elif self.plane == PlaneType.XZ:
+                self.origin = Vector3D(0.0, self.offset_distance, 0.0)
+                self.normal = Vector3D(0.0, 1.0, 0.0)
+                self.u_axis = Vector3D(1.0, 0.0, 0.0)
+                self.v_axis = Vector3D(0.0, 0.0, 1.0)
+            elif self.plane == PlaneType.YZ:
+                self.origin = Vector3D(self.offset_distance, 0.0, 0.0)
+                self.normal = Vector3D(1.0, 0.0, 0.0)
+                self.u_axis = Vector3D(0.0, 1.0, 0.0)
+                self.v_axis = Vector3D(0.0, 0.0, 1.0)
+            else:
+                self.origin = Vector3D(0.0, 0.0, self.offset_distance)
+                self.normal = Vector3D(0.0, 0.0, 1.0)
+                self.u_axis = Vector3D(1.0, 0.0, 0.0)
+                self.v_axis = Vector3D(0.0, 1.0, 0.0)
 
     def add_line(self, p1: Point2D, p2: Point2D, is_construction: bool = False) -> SketchLine:
         """Ajoute un segment de ligne à l'esquisse (FreeCAD Sketcher Line)."""
@@ -563,33 +596,158 @@ class Sketch2D:
         """Retourne uniquement les entités de construction (d'aide/référence) ignorées par les opérations solides."""
         return [e for e in self.entities if e.is_construction]
 
-    def get_primary_profile(self) -> Optional[List[Point2D]]:
+    @staticmethod
+    def _find_and_pop_next_segment(
+        tip: Point2D,
+        remaining: List[Tuple[Point2D, Point2D]],
+        tol_sq: float
+    ) -> Optional[Point2D]:
+        """Trouve et retire le prochain segment connecté au point d'extrémité."""
+        for i, seg in enumerate(remaining):
+            d0 = (seg[0].u - tip.u) ** 2 + (seg[0].v - tip.v) ** 2
+            if d0 < tol_sq:
+                remaining.pop(i)
+                return seg[1]
+            d1 = (seg[1].u - tip.u) ** 2 + (seg[1].v - tip.v) ** 2
+            if d1 < tol_sq:
+                remaining.pop(i)
+                return seg[0]
+        return None
+
+    @classmethod
+    def _chain_segments_into_loops(
+        cls,
+        segments: List[Tuple[Point2D, Point2D]],
+        tol: float = 1e-4
+    ) -> List[List[Point2D]]:
+        """Chaîne des segments de droite et arcs 2D contigus en boucles fermées polygonales."""
+        if not segments:
+            return []
+        remaining = list(segments)
+        loops: List[List[Point2D]] = []
+        tol_sq = tol * tol
+        max_iters = len(remaining) * len(remaining)
+        it = 0
+
+        while remaining and it < max_iters:
+            it += 1
+            curr_seg = remaining.pop(0)
+            chain: List[Point2D] = [curr_seg[0], curr_seg[1]]
+
+            while remaining:
+                next_pt = cls._find_and_pop_next_segment(chain[-1], remaining, tol_sq)
+                if next_pt is None:
+                    break
+                chain.append(next_pt)
+                d_close = (chain[-1].u - chain[0].u) ** 2 + (chain[-1].v - chain[0].v) ** 2
+                if len(chain) >= 4 and d_close < tol_sq:
+                    break
+
+            d_close = (chain[-1].u - chain[0].u) ** 2 + (chain[-1].v - chain[0].v) ** 2
+            if len(chain) >= 4 and d_close < tol_sq:
+                loops.append(chain[:-1])
+            elif len(chain) >= 3 and not remaining:
+                loops.append(chain)
+
+        return loops
+
+    def get_all_closed_profiles(self) -> List[List[Point2D]]:
         """
-        Extrait le premier profil fermé réel (non de construction) valide pour l'extrusion 3D.
-        Retourne None si l'esquisse ne contient aucun profil valide.
+        Extrait tous les contours fermés de l'esquisse :
+        - Formes directes (polygones, rectangles, cercles, rainures)
+        - Chaînes de segments de lignes (SketchLine) et d'arcs assemblés en boucle fermée
         """
         solids = self.get_solid_entities()
         if not solids:
-            return None
+            return []
+
+        direct_loops: List[List[Point2D]] = []
+        segments: List[Tuple[Point2D, Point2D]] = []
+
         for entity in solids:
-            points = entity.get_points()
-            if len(points) >= 3:
-                return points
-        return None
+            pts = entity.get_points()
+            if isinstance(entity, SketchLine) and len(pts) == 2:
+                segments.append((pts[0], pts[1]))
+            elif isinstance(entity, SketchArc) and len(pts) >= 2:
+                for k in range(len(pts) - 1):
+                    segments.append((pts[k], pts[k + 1]))
+            elif len(pts) >= 3:
+                direct_loops.append(pts)
+
+        chained_loops = self._chain_segments_into_loops(segments)
+        return direct_loops + chained_loops
+
+    def get_primary_profile(self) -> Optional[List[Point2D]]:
+        """
+        Extrait le profil principal fermé réel pour l'extrusion 3D.
+        Sélectionne le contour extérieur ayant la plus grande surface (Shoelace formula).
+        """
+        all_loops = self.get_all_closed_profiles()
+        if not all_loops:
+            return None
+
+        best_loop: Optional[List[Point2D]] = None
+        best_area = -1.0
+
+        for loop in all_loops:
+            if len(loop) < 3:
+                continue
+            area = 0.0
+            for i in range(len(loop)):
+                j = (i + 1) % len(loop)
+                area += loop[i].u * loop[j].v - loop[j].u * loop[i].v
+            area = abs(area) * 0.5
+            if area > best_area:
+                best_area = area
+                best_loop = loop
+
+        return best_loop
+
+    def get_profile_with_holes(self) -> Tuple[Optional[List[Point2D]], List[List[Point2D]]]:
+        """
+        Extrait le contour extérieur principal et l'ensemble des perçages/îlots intérieurs.
+        Permet l'extrusion directe de plaques ajourées ou pièces évidées en une seule passe.
+        """
+        all_loops = self.get_all_closed_profiles()
+        if not all_loops:
+            return None, []
+
+        best_idx = -1
+        best_area = -1.0
+
+        for idx, loop in enumerate(all_loops):
+            if len(loop) < 3:
+                continue
+            area = 0.0
+            for i in range(len(loop)):
+                j = (i + 1) % len(loop)
+                area += loop[i].u * loop[j].v - loop[j].u * loop[i].v
+            area = abs(area) * 0.5
+            if area > best_area:
+                best_area = area
+                best_idx = idx
+
+        if best_idx < 0:
+            return None, []
+
+        outer = all_loops[best_idx]
+        holes = [loop for idx, loop in enumerate(all_loops) if idx != best_idx and len(loop) >= 3]
+        return outer, holes
 
     def is_closed_profile(self) -> bool:
         """Indique si l'esquisse possède au moins un contour fermé valide pour extrusion/révolution."""
         return self.get_primary_profile() is not None
 
     def to_3d_coordinates(self, pt2d: Point2D) -> Vector3D:
-        """Projette un point 2D local d'esquisse dans le repère 3D global selon le plan et le décalage normal."""
-        if self.plane == PlaneType.XY:
-            return Vector3D(pt2d.u, pt2d.v, self.offset_distance)
-        elif self.plane == PlaneType.XZ:
-            return Vector3D(pt2d.u, self.offset_distance, pt2d.v)
-        elif self.plane == PlaneType.YZ:
-            return Vector3D(self.offset_distance, pt2d.u, pt2d.v)
-        return Vector3D(pt2d.u, pt2d.v, self.offset_distance)
+        """Projette un point 2D local d'esquisse dans le repère 3D global selon le repère local du plan."""
+        return self.origin.add(self.u_axis.scale(pt2d.u)).add(self.v_axis.scale(pt2d.v))
+
+    def to_2d_coordinates(self, pt3d: Vector3D) -> Point2D:
+        """Projette un point 3D global sur le repère local 2D (u, v) de l'esquisse."""
+        diff = pt3d.subtract(self.origin)
+        u = float(diff.x * self.u_axis.x + diff.y * self.u_axis.y + diff.z * self.u_axis.z)
+        v = float(diff.x * self.v_axis.x + diff.y * self.v_axis.y + diff.z * self.v_axis.z)
+        return Point2D(u, v)
 
     def add_arc(
         self,

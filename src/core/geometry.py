@@ -21,13 +21,38 @@ class Solid:
         self,
         internal_manifold: Optional[m.Manifold] = None,
         name: str = "Solid",
-        solid_name: Optional[str] = None
+        solid_name: Optional[str] = None,
+        material_name: str = "Acier Inoxydable 304"
     ) -> None:
-        """Initialise le solide avec une instance Manifold (ou vide par défaut)."""
+        """Initialise le solide avec une instance Manifold (ou vide par défaut) et un matériau."""
         self._manifold: m.Manifold = internal_manifold if internal_manifold is not None else m.Manifold()
         self.name: str = solid_name if solid_name is not None else name
         self.color: ColorRGBA = ColorRGBA(0.72, 0.76, 0.82, 1.0)  # Gris aluminium Fusion 360
+        self.material_name: str = material_name
         self._cached_buffer: Optional[MeshBuffer] = None
+
+    def calculate_mass_grams(self, density_g_cm3: Optional[float] = None) -> float:
+        """Calcule la masse du solide en grammes selon le matériau physique associé."""
+        if density_g_cm3 is not None:
+            return float((max(0.0, self.volume()) / 1000.0) * density_g_cm3)
+        densities: Dict[str, float] = {
+            "Acier Inoxydable 304": 8.00,
+            "Aluminium 6061-T6": 2.70,
+            "Acier Carbone C45": 7.85,
+            "Titane Grade 5 (Ti-6Al-4V)": 4.43,
+            "Laiton CuZn39Pb3": 8.50,
+            "Plastique PLA (Impression 3D)": 1.24,
+            "Plastique ABS": 1.04,
+            "Cuivre Pur C10100": 8.96,
+            "Fonte Grise EN-GJL-250": 7.20,
+            "Bronze CuSn8": 8.80,
+            "Polycarbonate PC": 1.20,
+            "Nylon PA6": 1.14,
+            "Fibre de Carbone CFRP": 1.55,
+            "Inconel 718": 8.19
+        }
+        density = densities.get(self.material_name, 8.00)
+        return float((max(0.0, self.volume()) / 1000.0) * density)
 
     @property
     def manifold(self) -> m.Manifold:
@@ -560,17 +585,21 @@ def extrude_polygon(
     symmetric: bool = False,
     taper_angle: float = 0.0,
     twist_degrees: float = 0.0,
-    name: str = "Extrude"
+    name: str = "Extrude",
+    holes: Optional[Sequence[Sequence[Point2D]]] = None,
+    custom_frame: Optional[Tuple[Vector3D, Vector3D, Vector3D, Vector3D]] = None
 ) -> Solid:
     """
-    Extrude un contour 2D fermé pour créer un solide 3D avec support des options avancées FreeCAD :
-    - points : liste ordonnée des sommets du polygone 2D
+    Extrude un contour 2D fermé pour créer un solide 3D avec support des options avancées :
+    - points : liste ordonnée des sommets du polygone extérieur
     - height : distance d'extrusion normale au plan
     - plane : plan d'esquisse de référence (XY, XZ ou YZ)
-    - plane_offset : décalage le long de l'axe normal au plan (Datum Plane)
-    - symmetric : extrusion symétrique par rapport au plan d'esquisse (Pad symétrique FreeCAD)
-    - taper_angle : angle de dépouille (draft angle) en degrés (>0 évasé, <0 rétréci)
-    - twist_degrees : angle de torsion hélicoïdale de la face supérieure en degrés
+    - plane_offset : décalage le long de l'axe normal au plan
+    - symmetric : extrusion symétrique par rapport au plan
+    - taper_angle : angle de dépouille en degrés
+    - twist_degrees : angle de torsion hélicoïdale en degrés
+    - holes : liste de contours intérieurs pour créer des perçages / évidements en une passe
+    - custom_frame : repère 3D local arbitraire (origin, normal, u_axis, v_axis) pour esquisse sur face
     """
     if len(points) < 3:
         raise ValueError("Un polygone d'extrusion nécessite au moins 3 points.")
@@ -580,21 +609,53 @@ def extrude_polygon(
     cv = sum(pt.v for pt in points) / float(len(points))
 
     has_advanced = (abs(taper_angle) > 1e-4) or (abs(twist_degrees) > 1e-4)
-
     if has_advanced:
         solid_manifold = _build_advanced_manifold(points, abs_h, cu, cv, taper_angle, twist_degrees)
     else:
-        poly_coords: List[List[float]] = [[pt.u, pt.v] for pt in points]
-        cs = m.CrossSection([poly_coords])
+        polys = _build_cross_section_polygons(points, holes)
+        cs = m.CrossSection(polys, m.FillRule.EvenOdd)
         solid_manifold = m.Manifold.extrude(cs, abs_h)
 
-    if symmetric:
-        solid_manifold = solid_manifold.translate([0.0, 0.0, -abs_h / 2.0])
-    elif height < 0.0:
-        solid_manifold = solid_manifold.translate([0.0, 0.0, -abs_h])
-
-    solid_manifold = _apply_plane_orientation(solid_manifold, plane, plane_offset)
+    solid_manifold = _apply_z_shift(solid_manifold, height, symmetric, abs_h)
+    solid_manifold = _orient_solid(solid_manifold, plane, plane_offset, custom_frame)
     return Solid(solid_manifold, name)
+
+
+def _build_cross_section_polygons(
+    points: Sequence[Point2D],
+    holes: Optional[Sequence[Sequence[Point2D]]] = None
+) -> List[List[List[float]]]:
+    """Prépare la liste des polygones extérieure et intérieurs pour Manifold3D."""
+    all_polys: List[List[List[float]]] = [[[pt.u, pt.v] for pt in points]]
+    if not holes:
+        return all_polys
+    for hole in holes:
+        if len(hole) >= 3:
+            all_polys.append([[pt.u, pt.v] for pt in hole])
+    return all_polys
+
+
+def _apply_z_shift(solid: m.Manifold, height: float, symmetric: bool, abs_h: float) -> m.Manifold:
+    """Ajuste le décalage Z pour l'extrusion symétrique ou vers le bas."""
+    if symmetric:
+        return solid.translate([0.0, 0.0, -abs_h / 2.0])
+    if height < 0.0:
+        return solid.translate([0.0, 0.0, -abs_h])
+    return solid
+
+
+def _orient_solid(
+    solid: m.Manifold,
+    plane: PlaneType,
+    plane_offset: float,
+    custom_frame: Optional[Tuple[Vector3D, Vector3D, Vector3D, Vector3D]]
+) -> m.Manifold:
+    """Positionne le solide dans le repère global ou local arbitraire."""
+    if custom_frame is not None:
+        orig, norm, u_ax, v_ax = custom_frame
+        mat = np.column_stack([u_ax.to_array(), v_ax.to_array(), norm.to_array(), orig.to_array()])
+        return solid.transform(mat[:3, :])
+    return _apply_plane_orientation(solid, plane, plane_offset)
 
 
 def _extract_sharp_edges(

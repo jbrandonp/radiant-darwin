@@ -59,15 +59,12 @@ class AssemblyInstance:
         self.transform_matrix: np.ndarray = np.eye(4, dtype=np.float64)
 
     def get_transformed_solid(self) -> Solid:
-        """Applique la transformation d'assemblage 4x4 au solide sous-jacent."""
+        """Applique la transformation d'assemblage 4x4 complète (rotation + translation) au solide sous-jacent."""
         if np.allclose(self.transform_matrix, np.eye(4)):
             return self.solid
 
-        # Extraire la translation
-        tx = float(self.transform_matrix[0, 3])
-        ty = float(self.transform_matrix[1, 3])
-        tz = float(self.transform_matrix[2, 3])
-        return self.solid.translate([tx, ty, tz])
+        mat_3x4 = self.transform_matrix[:3, :4]
+        return self.solid.transform(mat_3x4)
 
 
 class AssemblySolver:
@@ -82,7 +79,7 @@ class AssemblySolver:
         mate: AssemblyMate,
         instances: Dict[str, AssemblyInstance]
     ) -> None:
-        """Applique une contrainte d'assemblage unique sur la pièce cible."""
+        """Applique une contrainte d'assemblage unique sur la pièce cible avec alignement angulaire."""
         id1, id2 = mate.instance1_id, mate.instance2_id
         if id1 not in instances or id2 not in instances:
             return
@@ -94,34 +91,66 @@ class AssemblySolver:
         pt_ref = np.array(mate.point1 if ref_is_inst1 else mate.point2, dtype=np.float64)
         ax_ref = np.array(mate.axis1 if ref_is_inst1 else mate.axis2, dtype=np.float64)
         pt_tgt = np.array(mate.point2 if ref_is_inst1 else mate.point1, dtype=np.float64)
+        ax_tgt = np.array(mate.axis2 if ref_is_inst1 else mate.axis1, dtype=np.float64)
 
         norm_ref = float(np.linalg.norm(ax_ref))
         if norm_ref > 1e-9:
             ax_ref /= norm_ref
+        norm_tgt = float(np.linalg.norm(ax_tgt))
+        if norm_tgt > 1e-9:
+            ax_tgt /= norm_tgt
+
+        # Calcul des positions et axes courants après transformations
+        rot_tgt = target_inst.transform_matrix[0:3, 0:3]
+        pt_tgt_curr = rot_tgt @ pt_tgt + target_inst.transform_matrix[0:3, 3]
+        v_curr = rot_tgt @ ax_tgt if norm_tgt > 1e-9 else ax_tgt
+
+        rot_ref = np.eye(3, dtype=np.float64) if ref_is_inst1 and inst1.is_grounded else inst1.transform_matrix[0:3, 0:3]
+        trans_ref = np.zeros(3, dtype=np.float64) if ref_is_inst1 and inst1.is_grounded else inst1.transform_matrix[0:3, 3]
+        pt_ref_curr = rot_ref @ pt_ref + trans_ref
+        v_ref = rot_ref @ ax_ref if norm_ref > 1e-9 else ax_ref
+
+        # Alignement angulaire 3D de l'axe pour COAXIAL
+        if mate.mate_type == MateType.COAXIAL and norm_ref > 1e-9 and norm_tgt > 1e-9:
+            cross_p = np.cross(v_curr, v_ref)
+            sin_a = float(np.linalg.norm(cross_p))
+            cos_a = float(np.dot(v_curr, v_ref))
+            if sin_a > 1e-5:
+                rot_axis = cross_p / sin_a
+                kx, ky, kz = rot_axis
+                k_mat = np.array([[0, -kz, ky], [kz, 0, -kx], [-ky, kx, 0]], dtype=np.float64)
+                r_step = np.eye(3, dtype=np.float64) + sin_a * k_mat + (1.0 - cos_a) * (k_mat @ k_mat)
+                target_inst.transform_matrix[0:3, 0:3] = r_step @ target_inst.transform_matrix[0:3, 0:3]
+                # Re-calcul du point cible après la rotation
+                pt_tgt_curr = target_inst.transform_matrix[0:3, 0:3] @ pt_tgt + target_inst.transform_matrix[0:3, 3]
 
         if mate.mate_type in (MateType.COINCIDENT_PLANES, MateType.DISTANCE):
-            diff = pt_ref - pt_tgt + mate.offset * ax_ref
-            target_inst.transform_matrix[0:3, 3] += diff
+            diff = pt_ref_curr - pt_tgt_curr + mate.offset * v_ref
+            # Projection selon la normale du plan
+            proj_diff = float(np.dot(diff, v_ref)) * v_ref
+            target_inst.transform_matrix[0:3, 3] += proj_diff
         elif mate.mate_type == MateType.COAXIAL:
-            disp = pt_ref - pt_tgt
-            axial_comp = float(np.dot(disp, ax_ref)) * ax_ref
+            disp = pt_ref_curr - pt_tgt_curr
+            axial_comp = float(np.dot(disp, v_ref)) * v_ref
             target_inst.transform_matrix[0:3, 3] += (disp - axial_comp)
         elif mate.mate_type in (MateType.RIGID, MateType.REVOLUTE, MateType.PRISMATIC):
-            disp = pt_ref - pt_tgt
+            disp = pt_ref_curr - pt_tgt_curr
             target_inst.transform_matrix[0:3, 3] += disp
 
     @classmethod
     def solve_mates(
         cls,
         instances: Dict[str, AssemblyInstance],
-        mates: List[AssemblyMate]
+        mates: List[AssemblyMate],
+        max_iterations: int = 5
     ) -> bool:
         """
         Résout le système de contraintes d'assemblage et met à jour les matrices de pose.
-        Retourne True si toutes les liaisons sont satisfaites sans conflit géométrique.
+        Itère pour converger vers la satisfaction conjointe de toutes les liaisons mécaniques.
         """
-        for mate in mates:
-            cls._apply_single_mate(mate, instances)
+        for _ in range(max_iterations):
+            for mate in mates:
+                cls._apply_single_mate(mate, instances)
         return True
 
     _MATE_DOF_REDUCTIONS: Dict[MateType, int] = {

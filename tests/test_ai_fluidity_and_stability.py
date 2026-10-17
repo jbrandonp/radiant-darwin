@@ -274,6 +274,19 @@ for i in range(5000):
     assert "Délai d'exécution dépassé" in res.message
 
 
+def test_script_engine_watchdog_aborts_pure_infinite_loop() -> None:
+    """Vérifie qu'une boucle infinie pure (while True: pass) ne gèle pas le thread et est interrompue par le watchdog."""
+    doc = CADDocument("Script Infinite Loop Doc")
+    code_infinite = """
+x = 0
+while True:
+    x += 1
+"""
+    res = CADScriptEngine.execute_script(doc, code_infinite, timeout_seconds=0.05)
+    assert res.success is False
+    assert "Délai d'exécution dépassé" in res.message or "Timeout" in res.message
+
+
 # =========================================================================
 # 8. Tests Intégration MCPStdioServer (Ping & Cancel)
 # =========================================================================

@@ -5,7 +5,7 @@ et le trièdre des axes orthonormés (X=rouge, Y=vert, Z=bleu).
 """
 
 from __future__ import annotations
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Optional
 import numpy as np
 from OpenGL import GL
 from OpenGL.GLU import gluPerspective, gluLookAt
@@ -16,6 +16,36 @@ from src.viewport.ray_picking import PickResult, PickedEntityType
 from src.viewport.viewport_shading import ViewportShadingManager, ShadingMode
 from src.viewport.snap_engine import MagneticSnapEngine, SnapResult
 from src.viewport.transform_gizmo import TransformGizmo
+
+
+class VboMeshEntry:
+    """Tampon mémoire résident GPU (VBO) pour un maillage volumique."""
+
+    def __init__(
+        self,
+        vbo_verts: int,
+        vbo_normals: int,
+        vbo_faces: int,
+        face_count: int,
+        vbo_edges: Optional[int] = None,
+        edge_count: int = 0
+    ) -> None:
+        self.vbo_verts: int = vbo_verts
+        self.vbo_normals: int = vbo_normals
+        self.vbo_faces: int = vbo_faces
+        self.face_count: int = face_count
+        self.vbo_edges: Optional[int] = vbo_edges
+        self.edge_count: int = edge_count
+
+    def delete_gl(self) -> None:
+        """Libère explicitement les tampons VBO de la VRAM GPU."""
+        try:
+            bufs = [self.vbo_verts, self.vbo_normals, self.vbo_faces]
+            if self.vbo_edges is not None:
+                bufs.append(self.vbo_edges)
+            GL.glDeleteBuffers(len(bufs), bufs)
+        except Exception:
+            pass
 
 
 class GLRenderer:
@@ -32,9 +62,11 @@ class GLRenderer:
         self.shading_manager: ViewportShadingManager = ViewportShadingManager()
         self.snap_engine: MagneticSnapEngine = MagneticSnapEngine()
         self.transform_gizmo: TransformGizmo = TransformGizmo()
+        self._vbo_cache: Dict[int, Tuple[int, VboMeshEntry]] = {}
         self._grid_minor_pts: Optional[np.ndarray] = None
         self._grid_major_pts: Optional[np.ndarray] = None
         self._rebuild_grid_geometry()
+
 
     def _rebuild_grid_geometry(self) -> None:
         """Précalcule les coordonnées 3D de la grille sous forme de tampons NumPy optimisés."""
@@ -237,8 +269,53 @@ class GLRenderer:
             GL.glVertex3f(float(pt.x + n.x * 15.0), float(pt.y + n.y * 15.0), float(pt.z + n.z * 15.0))
             GL.glEnd()
 
+    def _get_or_create_vbo(self, buffer: MeshBuffer) -> Optional[VboMeshEntry]:
+        """Alloue ou récupère le tampon VBO GPU pour le maillage."""
+        try:
+            buf_id = id(buffer)
+            cached = self._vbo_cache.get(buf_id)
+            if cached is not None and cached[0] == len(buffer.faces):
+                return cached[1]
+
+            if not hasattr(GL, "glGenBuffers") or not hasattr(GL, "glBindBuffer"):
+                return None
+
+            vbo_verts, vbo_normals, vbo_faces = GL.glGenBuffers(3)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo_verts)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, buffer.vertices.nbytes, buffer.vertices, GL.GL_STATIC_DRAW)
+
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo_normals)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, buffer.normals.nbytes, buffer.normals, GL.GL_STATIC_DRAW)
+
+            faces_flat = buffer.faces.flatten().astype(np.uint32)
+            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, vbo_faces)
+            GL.glBufferData(GL.GL_ELEMENT_ARRAY_BUFFER, faces_flat.nbytes, faces_flat, GL.GL_STATIC_DRAW)
+
+            vbo_edges: Optional[int] = None
+            edge_count: int = 0
+            if buffer.edge_vertices is not None and len(buffer.edge_vertices) > 0:
+                vbo_edges = int(GL.glGenBuffers(1))
+                GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo_edges)
+                GL.glBufferData(GL.GL_ARRAY_BUFFER, buffer.edge_vertices.nbytes, buffer.edge_vertices, GL.GL_STATIC_DRAW)
+                edge_count = len(buffer.edge_vertices)
+
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, 0)
+
+            entry = VboMeshEntry(int(vbo_verts), int(vbo_normals), int(vbo_faces), len(buffer.faces), vbo_edges, edge_count)
+            self._vbo_cache[buf_id] = (len(buffer.faces), entry)
+            return entry
+        except Exception:
+            return None
+
+    def cleanup_gl(self) -> None:
+        """Libère l'ensemble des tampons VBO de la mémoire GPU lors de la fermeture."""
+        for _, entry in self._vbo_cache.values():
+            entry.delete_gl()
+        self._vbo_cache.clear()
+
     def _draw_shaded_mesh(self, buffer: MeshBuffer) -> None:
-        """Dessine les faces du maillage avec éclairage, normales et reflet spéculaire."""
+        """Dessine les faces du maillage avec éclairage, normales et VBO GPU."""
         if buffer.is_empty():
             return
 
@@ -256,39 +333,62 @@ class GLRenderer:
         GL.glMaterialfv(GL.GL_FRONT_AND_BACK, GL.GL_SPECULAR, [0.35, 0.35, 0.40, 1.0])
         GL.glMaterialf(GL.GL_FRONT_AND_BACK, GL.GL_SHININESS, 32.0)
 
-        GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
-        GL.glEnableClientState(GL.GL_NORMAL_ARRAY)
+        vbo = self._get_or_create_vbo(buffer) if not has_v_colors else None
+        if vbo is not None:
+            GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
+            GL.glEnableClientState(GL.GL_NORMAL_ARRAY)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo.vbo_verts)
+            GL.glVertexPointer(3, GL.GL_FLOAT, 0, None)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo.vbo_normals)
+            GL.glNormalPointer(GL.GL_FLOAT, 0, None)
+            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, vbo.vbo_faces)
+            GL.glDrawElements(GL.GL_TRIANGLES, vbo.face_count * 3, GL.GL_UNSIGNED_INT, None)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, 0)
+            GL.glDisableClientState(GL.GL_NORMAL_ARRAY)
+            GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
+        else:
+            GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
+            GL.glEnableClientState(GL.GL_NORMAL_ARRAY)
+            GL.glVertexPointer(3, GL.GL_FLOAT, 0, buffer.vertices)
+            GL.glNormalPointer(GL.GL_FLOAT, 0, buffer.normals)
+            GL.glDrawElements(
+                GL.GL_TRIANGLES,
+                len(buffer.faces) * 3,
+                GL.GL_UNSIGNED_INT,
+                buffer.faces.flatten()
+            )
+            GL.glDisableClientState(GL.GL_NORMAL_ARRAY)
+            GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
 
-        GL.glVertexPointer(3, GL.GL_FLOAT, 0, buffer.vertices)
-        GL.glNormalPointer(GL.GL_FLOAT, 0, buffer.normals)
-
-        GL.glDrawElements(
-            GL.GL_TRIANGLES,
-            len(buffer.faces) * 3,
-            GL.GL_UNSIGNED_INT,
-            buffer.faces.flatten()
-        )
-
-        GL.glDisableClientState(GL.GL_NORMAL_ARRAY)
-        GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
         if has_v_colors:
             GL.glDisableClientState(GL.GL_COLOR_ARRAY)
             GL.glDisable(GL.GL_COLOR_MATERIAL)
 
     def _draw_mesh_edges(self, buffer: MeshBuffer) -> None:
-        """Dessine les lignes de contour vives du solide."""
+        """Dessine les lignes de contour vives du solide via VBO ou client arrays."""
         if buffer.is_empty():
             return
 
         GL.glColor4f(0.12, 0.12, 0.15, 0.90)  # Noir / Gris très sombre contrasté
         GL.glLineWidth(1.5)
 
+        vbo = self._get_or_create_vbo(buffer)
+
         # Tracé via edge_vertices directs (paires de points 3D pour chaque arête)
         if buffer.edge_vertices is not None and len(buffer.edge_vertices) > 0:
-            GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
-            GL.glVertexPointer(3, GL.GL_FLOAT, 0, buffer.edge_vertices)
-            GL.glDrawArrays(GL.GL_LINES, 0, len(buffer.edge_vertices))
-            GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
+            if vbo is not None and vbo.vbo_edges is not None:
+                GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
+                GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo.vbo_edges)
+                GL.glVertexPointer(3, GL.GL_FLOAT, 0, None)
+                GL.glDrawArrays(GL.GL_LINES, 0, vbo.edge_count)
+                GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+                GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
+            else:
+                GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
+                GL.glVertexPointer(3, GL.GL_FLOAT, 0, buffer.edge_vertices)
+                GL.glDrawArrays(GL.GL_LINES, 0, len(buffer.edge_vertices))
+                GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
             return
 
         if len(buffer.edges) == 0:
@@ -296,6 +396,7 @@ class GLRenderer:
 
         GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
         GL.glVertexPointer(3, GL.GL_FLOAT, 0, buffer.vertices)
+
 
         GL.glDrawElements(
             GL.GL_LINES,

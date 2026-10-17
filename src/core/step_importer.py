@@ -61,6 +61,10 @@ class STEPImporter:
     les surfaces quadriques, les boucles d'arêtes et assemble le solide B-Rep étanche.
     """
 
+    def __init__(self) -> None:
+        self.had_fallback: bool = False
+        self.last_warning: Optional[str] = None
+
     def import_step(self, filepath_or_content: str) -> STEPGeometricContext:
         """
         Importe un fichier .step / .stp ou une chaîne de caractères STEP
@@ -557,10 +561,153 @@ class STEPImporter:
             brep.add_shell(shell)
 
     @staticmethod
+    def _is_point_in_triangle_2d(
+        p: Tuple[float, float],
+        a: Tuple[float, float],
+        b: Tuple[float, float],
+        c: Tuple[float, float]
+    ) -> bool:
+        """Vérifie si un point p(u, v) est strictement à l'intérieur du triangle abc (en 2D)."""
+        det = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+        if abs(det) < 1e-9:
+            return False
+        inv_det = 1.0 / det
+        u = ((p[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (p[1] - a[1])) * inv_det
+        v = ((b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1])) * inv_det
+        return u > 1e-6 and v > 1e-6 and (u + v) < (1.0 - 1e-6)
+
+    @staticmethod
+    def _project_polygon_3d_to_2d(
+        pts_3d: Sequence[Sequence[float]]
+    ) -> List[Tuple[float, float]]:
+        """
+        Projette les sommets 3D d'un polygone sur le plan principal 2D le plus adapté
+        selon la normale de Newell de la boucle.
+        """
+        n = len(pts_3d)
+        if n < 3:
+            return [(float(p[0]), float(p[1])) for p in pts_3d]
+
+        nx = 0.0
+        ny = 0.0
+        nz = 0.0
+        for i in range(n):
+            j = (i + 1) % n
+            p0 = pts_3d[i]
+            p1 = pts_3d[j]
+            nx += (float(p0[1]) - float(p1[1])) * (float(p0[2]) + float(p1[2]))
+            ny += (float(p0[2]) - float(p1[2])) * (float(p0[0]) + float(p0[2]))
+            nz += (float(p0[0]) - float(p1[0])) * (float(p0[1]) + float(p1[1]))
+
+        abs_x, abs_y, abs_z = abs(nx), abs(ny), abs(nz)
+        if abs_z >= abs_x and abs_z >= abs_y:
+            return [(float(p[0]), float(p[1])) for p in pts_3d]
+        elif abs_y >= abs_x and abs_y >= abs_z:
+            return [(float(p[0]), float(p[2])) for p in pts_3d]
+        else:
+            return [(float(p[1]), float(p[2])) for p in pts_3d]
+
+    @staticmethod
+    def _calculate_signed_area_2d(pts_2d: List[Tuple[float, float]]) -> float:
+        """Calcule l'aire signée du polygone 2D pour vérifier son orientation."""
+        signed_area = 0.0
+        n = len(pts_2d)
+        for i in range(n):
+            j = (i + 1) % n
+            signed_area += pts_2d[i][0] * pts_2d[j][1] - pts_2d[j][0] * pts_2d[i][1]
+        return signed_area
+
+    @classmethod
+    def _is_ear_candidate(
+        cls,
+        pts_2d: List[Tuple[float, float]],
+        active_indices: List[int],
+        prev_idx: int,
+        curr_idx: int,
+        next_idx: int
+    ) -> bool:
+        """Vérifie si le sommet curr_idx forme une oreille orientée sans sommet intérieur."""
+        p_prev = pts_2d[prev_idx]
+        p_curr = pts_2d[curr_idx]
+        p_next = pts_2d[next_idx]
+
+        cross = (p_curr[0] - p_prev[0]) * (p_next[1] - p_curr[1]) - (p_curr[1] - p_prev[1]) * (p_next[0] - p_curr[0])
+        if cross <= 1e-9:
+            return False
+
+        for other_idx in active_indices:
+            if other_idx in (prev_idx, curr_idx, next_idx):
+                continue
+            if cls._is_point_in_triangle_2d(pts_2d[other_idx], p_prev, p_curr, p_next):
+                return False
+        return True
+
+    @classmethod
+    def _triangulate_polygon_ear_clipping_2d(
+        cls,
+        pts_2d: List[Tuple[float, float]],
+        vert_indices: List[int]
+    ) -> List[List[int]]:
+        """
+        Triangule un polygone 2D simple (convexe ou concave) par élimination d'oreilles (Ear Clipping).
+        Garantit l'absence d'auto-intersection et de triangles extérieurs sur les faces concaves.
+        """
+        n = len(pts_2d)
+        if n < 3:
+            return []
+        if n == 3:
+            return [[vert_indices[0], vert_indices[1], vert_indices[2]]]
+
+        signed_area = cls._calculate_signed_area_2d(pts_2d)
+        active_indices = list(range(n))
+        if signed_area < 0.0:
+            active_indices.reverse()
+
+        triangles: List[List[int]] = []
+        max_iterations = n * n
+        iteration = 0
+
+        while len(active_indices) > 3 and iteration < max_iterations:
+            iteration += 1
+            ear_found = False
+            m_len = len(active_indices)
+            for i in range(m_len):
+                prev_idx = active_indices[(i - 1) % m_len]
+                curr_idx = active_indices[i]
+                next_idx = active_indices[(i + 1) % m_len]
+
+                if cls._is_ear_candidate(pts_2d, active_indices, prev_idx, curr_idx, next_idx):
+                    triangles.append([
+                        vert_indices[prev_idx],
+                        vert_indices[curr_idx],
+                        vert_indices[next_idx]
+                    ])
+                    active_indices.pop(i)
+                    ear_found = True
+                    break
+
+            if not ear_found:
+                break
+
+        if len(active_indices) == 3:
+            triangles.append([
+                vert_indices[active_indices[0]],
+                vert_indices[active_indices[1]],
+                vert_indices[active_indices[2]]
+            ])
+        elif len(active_indices) > 3:
+            i0 = vert_indices[active_indices[0]]
+            for k in range(1, len(active_indices) - 1):
+                triangles.append([i0, vert_indices[active_indices[k]], vert_indices[active_indices[k + 1]]])
+
+        return triangles
+
+    @classmethod
     def _triangulate_brep_faces(
+        cls,
         brep: NexusBRep
     ) -> Tuple[List[List[float]], List[List[int]], int]:
-        """Échantillonne et triangule les boucles de frontières des faces B-Rep."""
+        """Échantillonne et triangule les boucles de frontières des faces B-Rep avec Ear Clipping 2D."""
         triangles: List[List[int]] = []
         all_verts: List[List[float]] = []
         vert_lookup: Dict[Tuple[float, float, float], int] = {}
@@ -572,28 +719,20 @@ class STEPImporter:
                 continue
             valid_poly_count += 1
 
-            k0 = (round(float(pts[0][0]), 5), round(float(pts[0][1]), 5), round(float(pts[0][2]), 5))
-            if k0 not in vert_lookup:
-                vert_lookup[k0] = len(all_verts)
-                all_verts.append([float(pts[0][0]), float(pts[0][1]), float(pts[0][2])])
-            idx0 = vert_lookup[k0]
+            face_vert_indices: List[int] = []
+            for p in pts:
+                k = (round(float(p[0]), 5), round(float(p[1]), 5), round(float(p[2]), 5))
+                if k not in vert_lookup:
+                    vert_lookup[k] = len(all_verts)
+                    all_verts.append([float(p[0]), float(p[1]), float(p[2])])
+                face_vert_indices.append(vert_lookup[k])
 
-            for j in range(1, len(pts) - 1):
-                p1, p2 = pts[j], pts[j + 1]
-                k1 = (round(float(p1[0]), 5), round(float(p1[1]), 5), round(float(p1[2]), 5))
-                if k1 not in vert_lookup:
-                    vert_lookup[k1] = len(all_verts)
-                    all_verts.append([float(p1[0]), float(p1[1]), float(p1[2])])
-                idx1 = vert_lookup[k1]
+            pts_2d = cls._project_polygon_3d_to_2d(pts)
+            face_triangles = cls._triangulate_polygon_ear_clipping_2d(pts_2d, face_vert_indices)
 
-                k2 = (round(float(p2[0]), 5), round(float(p2[1]), 5), round(float(p2[2]), 5))
-                if k2 not in vert_lookup:
-                    vert_lookup[k2] = len(all_verts)
-                    all_verts.append([float(p2[0]), float(p2[1]), float(p2[2])])
-                idx2 = vert_lookup[k2]
-
-                if idx0 != idx1 and idx1 != idx2 and idx2 != idx0:
-                    triangles.append([idx0, idx1, idx2])
+            for tri in face_triangles:
+                if tri[0] != tri[1] and tri[1] != tri[2] and tri[2] != tri[0]:
+                    triangles.append(tri)
 
         return all_verts, triangles, valid_poly_count
 
@@ -623,6 +762,7 @@ class STEPImporter:
     ) -> m.Manifold:
         """
         Construit un corps Manifold3D étanche à partir de la topologie B-Rep ou des polygones analysés.
+        Privilégie le maillage exact, puis l'enveloppe convexe réelle, et en dernier recours le repli englobant.
         """
         all_verts, triangles, valid_poly_count = self._triangulate_brep_faces(brep)
 
@@ -637,6 +777,33 @@ class STEPImporter:
             except (ValueError, RuntimeError, IndexError):
                 mani = None
 
+        # 1. Enveloppe convexe étanche basée sur les sommets réels du B-Rep
+        if len(all_verts) >= 4:
+            try:
+                vert_array = np.array(all_verts, dtype=np.float32)
+                hull = m.Manifold.hull_points(vert_array)
+                if not hull.is_empty() and hull.volume() > 1e-4:
+                    self.had_fallback = True
+                    self.last_warning = "Reconstruction B-Rep non étanche : enveloppe convexe exacte générée."
+                    return hull
+            except (ValueError, RuntimeError, IndexError):
+                pass
+
+        # 2. Enveloppe convexe basée sur l'ensemble des points cartésiens du fichier
+        if cartesian_points and len(cartesian_points) >= 4:
+            try:
+                pts_array = np.array(list(cartesian_points.values()), dtype=np.float32)
+                hull = m.Manifold.hull_points(pts_array)
+                if not hull.is_empty() and hull.volume() > 1e-4:
+                    self.had_fallback = True
+                    self.last_warning = "Reconstruction B-Rep échouée : enveloppe convexe des points cartésiens générée."
+                    return hull
+            except (ValueError, RuntimeError, IndexError):
+                pass
+
+        # 3. Dernier recours : boîte englobante tracée
+        self.had_fallback = True
+        self.last_warning = "Géométrie STEP non étanche : volume de repli englobant généré."
         return self._build_manifold_fallback_from_points(cartesian_points)
 
     def import_to_cad_solid(self, filepath_or_content: str) -> Optional[Solid]:
@@ -653,11 +820,18 @@ class STEPImporter:
         context = self.import_step(filepath_or_content)
         solid = self.import_to_nexus_solid(filepath_or_content)
         filepath = filepath_or_content if os.path.exists(filepath_or_content) else "in-memory.step"
+        meta = {
+            "faces_count": str(len(context.faces)),
+            "solids_count": str(len(context.solids)),
+            "is_fallback": "true" if self.had_fallback else "false",
+        }
+        if self.last_warning:
+            meta["fallback_warning"] = self.last_warning
         return STEPModel(
             filepath=filepath,
             schema_version=context.schema_name,
             solid=solid,
-            metadata={"faces_count": str(len(context.faces)), "solids_count": str(len(context.solids))},
+            metadata=meta,
             pmi_annotations=context.pmi_annotations,
             context=context
         )

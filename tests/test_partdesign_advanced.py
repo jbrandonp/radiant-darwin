@@ -190,3 +190,37 @@ def test_fidget_interval_tree_pruning_rules() -> None:
     assert pruned_d is not None
     assert pruned_d.op == CSGOpType.CONSTANT
     assert pruned_d.params == (8.0,)
+
+
+def test_localized_top_edge_fillet_preserves_planar_bottom() -> None:
+    """Vérifie que le congé d'arête en mode 'top' arrondit le dessus sans modifier la face inférieure."""
+    from src.core.geometry import make_box
+    from src.core.operations.surfaces import FilletFeature
+    from src.core.types import FeatureStatus
+
+    box = make_box(30.0, 30.0, 20.0, center=False)
+    bodies = {"box_1": box}
+
+    fillet = FilletFeature(
+        feature_id="f_top",
+        name="TopFillet",
+        target_body_id="box_1",
+        radius=2.0,
+        edges_mode="top"
+    )
+    res = fillet.evaluate(bodies, {})
+    assert fillet.status == FeatureStatus.OK
+    assert "box_1" in res
+
+    filleted_solid = res["box_1"]
+    assert filleted_solid.volume() < box.volume()
+    assert filleted_solid.volume() > 0.95 * box.volume()
+    assert filleted_solid.is_watertight() is True
+
+    # Le bas de la boîte doit rester exactement à Z = 0.0 sans aucun rétrécissement
+    b_min, b_max = filleted_solid.bounding_box()
+    assert b_min.z == pytest.approx(0.0, abs=1e-3)
+    assert b_min.x == pytest.approx(0.0, abs=1e-3)
+    assert b_min.y == pytest.approx(0.0, abs=1e-3)
+    assert b_max.z == pytest.approx(20.0, abs=1e-3)
+

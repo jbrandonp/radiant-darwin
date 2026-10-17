@@ -309,8 +309,8 @@ class ExtrudeFeature(Feature):
             return dict(existing_bodies)
 
         sketch = sketches[self.sketch_id]
-        profile = sketch.get_primary_profile()
-        if not profile or len(profile) < 3:
+        outer_profile, holes = sketch.get_profile_with_holes()
+        if not outer_profile or len(outer_profile) < 3:
             self.status = FeatureStatus.ERROR
             return dict(existing_bodies)
 
@@ -322,15 +322,21 @@ class ExtrudeFeature(Feature):
         taper = float(self.parameters.get("taper_angle", getattr(self, "taper_angle", 0.0)))
         twist = float(self.parameters.get("twist_degrees", getattr(self, "twist_degrees", 0.0)))
 
+        custom_frame = None
+        if getattr(sketch, "is_arbitrary_plane", False):
+            custom_frame = (sketch.origin, sketch.normal, sketch.u_axis, sketch.v_axis)
+
         new_solid = extrude_polygon(
-            profile,
+            outer_profile,
             dist,
             plane=sketch.plane,
             plane_offset=sketch.offset_distance,
             symmetric=sym,
             taper_angle=taper,
             twist_degrees=twist,
-            name=self.name
+            name=self.name,
+            holes=holes if holes else None,
+            custom_frame=custom_frame
         )
         self.status = FeatureStatus.OK
         return _apply_boolean_operation(existing_bodies, new_solid, self.operation, self.body_id, self.target_body_id)

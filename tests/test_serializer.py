@@ -83,3 +83,52 @@ def test_save_and_load_patterns_and_mirror() -> None:
         assert isinstance(reloaded_mirror, MirrorFeature)
         assert reloaded_mirror.mirror_plane == PlaneType.XZ
         assert reloaded_mirror.join_with_source is False
+
+
+def test_atomic_save_and_schema_versioning() -> None:
+    """Vérifie l'écriture atomique (.tmp -> rename) et la présence du versioning de schéma."""
+    import json
+    doc = CADDocument("Atomic Schema Test")
+    box = BoxFeature("b1", "Base", width=10.0, height=10.0, depth=10.0)
+    doc.add_feature(box)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        proj_path = os.path.join(tmp_dir, "atomic_test.cadproj")
+        assert ProjectSerializer.save_project(doc, proj_path)
+
+        # Vérifier que le fichier temporaire n'existe plus
+        assert not os.path.exists(f"{proj_path}.tmp")
+        assert os.path.exists(proj_path)
+
+        # Vérifier le schéma JSON
+        with open(proj_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data.get("schema_version") == "2.4"
+        assert data.get("format_version") == "1.0"
+        assert "CAD Studio" in data.get("generator", "")
+
+
+def test_save_and_load_body_materials() -> None:
+    """Vérifie la persistance des matériaux physiques et le recalcul exact de la masse."""
+    doc = CADDocument("Material Persistence Test")
+    box = BoxFeature("b1", "Bloc Titane", width=10.0, height=10.0, depth=10.0)
+    doc.add_feature(box)
+
+    # 10x10x10 mm = 1000 mm3 = 1 cm3
+    # Titane Grade 5 (Ti-6Al-4V) : densité = 4.43 g/cm3 -> masse = 4.43 g
+    mat_key = "Titane Grade 5 (Ti-6Al-4V)"
+    doc.set_body_material(box.body_id, mat_key)
+    assert doc.bodies[box.body_id].material_name == mat_key
+    assert pytest.approx(doc.bodies[box.body_id].calculate_mass_grams(), rel=1e-2) == 4.43
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        proj_path = os.path.join(tmp_dir, "material_test.cadproj")
+        assert ProjectSerializer.save_project(doc, proj_path)
+
+        reloaded = ProjectSerializer.load_project(proj_path)
+        assert reloaded is not None
+        assert box.body_id in reloaded.bodies
+        reloaded_body = reloaded.bodies[box.body_id]
+        assert reloaded_body.material_name == mat_key
+        assert pytest.approx(reloaded_body.calculate_mass_grams(), rel=1e-2) == 4.43
+

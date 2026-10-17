@@ -10,7 +10,7 @@ import os
 from typing import Optional, List
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QDockWidget,
-    QFileDialog, QMessageBox, QStatusBar, QLabel
+    QFileDialog, QMessageBox, QStatusBar, QLabel, QInputDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
@@ -97,6 +97,7 @@ class CADMainWindow(QMainWindow):
 
         # Gestionnaire transactionnel d'annulation/rétablissement (Undo/Redo)
         self.undo_redo_manager: UndoRedoManager = UndoRedoManager(self.document)
+        self.document.register_error_listener(self._on_document_build_error)
         self._undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self, self._on_action_undo)
         self._redo_shortcut = QShortcut(QKeySequence("Ctrl+Y"), self, self._on_action_redo)
         self._redo_shift_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._on_action_redo)
@@ -126,6 +127,23 @@ class CADMainWindow(QMainWindow):
         self.param_table.set_parameter("longueur_base", "80.0", "mm", "Longueur platine de base")
         self.param_table.set_parameter("rayon_pliage", "2.0", "mm", "Rayon intérieur de pliage")
         self.param_table.set_parameter("rebord_hauteur", "25.0", "mm", "Hauteur du rebord plié")
+
+    def _init_spreadsheet_defaults(self) -> None:
+        """Initialise les cellules du tableur paramétrique à partir de la table de paramètres."""
+        row = 1
+        for name, param in self.param_table.parameters.items():
+            ref = f"A{row}"
+            self.spreadsheet_engine.set_cell(ref, str(param.expression))
+            try:
+                self.spreadsheet_engine.set_alias(ref, name)
+            except ValueError:
+                pass
+            row += 1
+
+    def _on_spreadsheet_cell_changed(self, key: str, value: float) -> None:
+        """Synchronise les modifications du tableur avec la table des paramètres du document."""
+        if key in self.param_table.parameters:
+            self.param_table.set_parameter(key, str(value))
 
     def _setup_ui(self) -> None:
         """Organise l'agencement des panneaux et widgets."""
@@ -180,6 +198,20 @@ class CADMainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.modifier_dock)
         self.tabifyDockWidget(self.copilot_dock, self.modifier_dock)
 
+        # 8. Tableur Paramétrique (Parametric Spreadsheet)
+        from src.ui.spreadsheet_widget import SpreadsheetWidget, ParametricSpreadsheet
+        self.spreadsheet_engine = ParametricSpreadsheet()
+        self._init_spreadsheet_defaults()
+        self.spreadsheet_engine.add_listener(self._on_spreadsheet_cell_changed)
+        self.spreadsheet_widget = SpreadsheetWidget(self.spreadsheet_engine)
+        self.spreadsheet_dock = QDockWidget("Tableur Paramétrique 📊", self)
+        self.spreadsheet_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea)
+        qt_sheet = self.spreadsheet_widget.get_widget()
+        if qt_sheet:
+            self.spreadsheet_dock.setWidget(qt_sheet)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.spreadsheet_dock)
+        self.tabifyDockWidget(self.modifier_dock, self.spreadsheet_dock)
+
         # Serveur IA local (REST / JSON-RPC / MCP)
         try:
             self.ai_server = CADAIServer(self.copilot_widget.bridge, host="127.0.0.1", port=8765)
@@ -187,7 +219,7 @@ class CADMainWindow(QMainWindow):
         except Exception:
             self.ai_server = None
 
-        self.resizeDocks([self.browser_dock, self.props_dock, self.copilot_dock, self.modifier_dock], [260, 260, 280, 280], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.browser_dock, self.props_dock, self.copilot_dock, self.modifier_dock, self.spreadsheet_dock], [260, 260, 280, 280, 280], Qt.Orientation.Horizontal)
 
         # Barre d'état professionnelle avec badges d'information
         self.status_bar = QStatusBar()
@@ -355,6 +387,7 @@ class CADMainWindow(QMainWindow):
                 self.document.register_change_listener(self.viewport.on_document_changed)
                 self.document.register_change_listener(self.timeline.refresh)
                 self.document.register_change_listener(self.browser.refresh)
+                self.document.register_error_listener(self._on_document_build_error)
                 self.viewport.on_document_changed()
                 self.timeline.refresh()
                 self.browser.refresh()
@@ -363,10 +396,18 @@ class CADMainWindow(QMainWindow):
                     self.copilot_widget.set_document(new_doc)
                 QMessageBox.information(self, "Projet Ouvert", f"Projet chargé avec succès :\n{new_doc.name} ({len(new_doc.features)} opérations)")
 
+    def _on_document_build_error(self, message: str, feature: Feature) -> None:
+        """Avertit visuellement l'utilisateur dans la barre d'état et le statut lors d'une erreur d'opération."""
+        self.status_bar.showMessage(f"⚠️ {message}", 6000)
+        self.status_label.setText(f"Échec opération '{feature.name}'")
+
     # --- Gestionnaire Transactionnel d'Annulation / Rétablissement ---
     def _add_feature_with_undo(self, feat: Feature) -> None:
         """Ajoute une feature au document et enregistre l'action dans la pile d'annulation."""
         self.undo_redo_manager.execute_command(AddFeatureCommand(feat))
+        self.viewport.update()
+        self.timeline.refresh()
+        self.browser.refresh()
 
     def _on_action_undo(self) -> None:
         """Annule la dernière action de modélisation (Ctrl+Z)."""
@@ -426,7 +467,7 @@ class CADMainWindow(QMainWindow):
                 flange_length=flange,
                 k_factor=0.44
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
             self.active_sheet_metal = feat.get_sheet_metal_part()
             self.active_flat_pattern = self.active_sheet_metal.generate_flat_pattern()
             self.status_bar.showMessage(f"Pièce de tôlerie créée : {w}x{l} mm (t={t} mm)", 4000)
@@ -541,7 +582,7 @@ class CADMainWindow(QMainWindow):
             w, h, d, center, op, target = dlg.get_values()
             self._feature_seq += 1
             feat = BoxFeature(f"feat_{self._feature_seq}", f"Boîte {self._feature_seq}", w, h, d, center, op, target)
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_create_cylinder(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -550,7 +591,7 @@ class CADMainWindow(QMainWindow):
             rad, h, op, target = dlg.get_values()
             self._feature_seq += 1
             feat = CylinderFeature(f"feat_{self._feature_seq}", f"Cylindre {self._feature_seq}", rad, h, 36, op, target)
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_create_sphere(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -559,7 +600,7 @@ class CADMainWindow(QMainWindow):
             rad, op, target = dlg.get_values()
             self._feature_seq += 1
             feat = SphereFeature(f"feat_{self._feature_seq}", f"Sphère {self._feature_seq}", rad, 36, op, target)
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_create_cone(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -577,7 +618,7 @@ class CADMainWindow(QMainWindow):
                 operation=vals["operation"],
                 target_body_id=vals["target_body_id"]
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_create_torus(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -594,7 +635,7 @@ class CADMainWindow(QMainWindow):
                 operation=vals["operation"],
                 target_body_id=vals["target_body_id"]
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_create_wedge(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -615,7 +656,7 @@ class CADMainWindow(QMainWindow):
                 operation=op if isinstance(op, BooleanOperation) else BooleanOperation.NEW_BODY,
                 target_body_id=str(tgt) if tgt is not None else None
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_create_pipe(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -636,7 +677,7 @@ class CADMainWindow(QMainWindow):
                 operation=op if isinstance(op, BooleanOperation) else BooleanOperation.NEW_BODY,
                 target_body_id=str(tgt) if tgt is not None else None
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_extrude(self) -> None:
         if not self.document.sketches:
@@ -649,7 +690,7 @@ class CADMainWindow(QMainWindow):
             s_id, dist, op, target = dlg.get_values()
             self._feature_seq += 1
             feat = ExtrudeFeature(f"feat_{self._feature_seq}", f"Extrusion {self._feature_seq}", s_id, dist, op, target)
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_revolve(self) -> None:
         if not self.document.sketches:
@@ -662,7 +703,7 @@ class CADMainWindow(QMainWindow):
             s_id, angle, op, target = dlg.get_values()
             self._feature_seq += 1
             feat = RevolveFeature(f"feat_{self._feature_seq}", f"Révolution {self._feature_seq}", s_id, angle, 48, op, target)
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_hole(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -688,7 +729,7 @@ class CADMainWindow(QMainWindow):
                 csink_dia=cs_d,
                 csink_angle=cs_a
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_shell(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -700,7 +741,7 @@ class CADMainWindow(QMainWindow):
             target, thick = dlg.get_values()
             self._feature_seq += 1
             feat = ShellFeature(f"feat_{self._feature_seq}", f"Évidement {thick}mm", target, thick)
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_pattern(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -708,7 +749,7 @@ class CADMainWindow(QMainWindow):
             return
         self._feature_seq += 1
         feat = LinearPatternFeature(f"feat_{self._feature_seq}", f"Répétition {self._feature_seq}", bodies[0], count_x=2, spacing_x=50.0)
-        self.document.add_feature(feat)
+        self._add_feature_with_undo(feat)
         self.status_bar.showMessage("Répétition linéaire appliquée", 3000)
 
     def _on_action_combine(self) -> None:
@@ -721,7 +762,7 @@ class CADMainWindow(QMainWindow):
             target, tool, op = dlg.get_values()
             self._feature_seq += 1
             feat = BooleanFeature(f"feat_{self._feature_seq}", f"Combiner {self._feature_seq}", target, tool, op)
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_loft(self) -> None:
         if not self.document.sketches:
@@ -748,7 +789,7 @@ class CADMainWindow(QMainWindow):
                 operation=bool_op,
                 target_body_id=tgt_str
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_sweep(self) -> None:
         sketch_ids = list(self.document.sketches.keys())
@@ -772,7 +813,7 @@ class CADMainWindow(QMainWindow):
                 operation=bool_op,
                 target_body_id=tgt_str
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_fillet(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -790,7 +831,7 @@ class CADMainWindow(QMainWindow):
                 radius=float(vals["radius"]),
                 segments=int(float(vals["segments"]))
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_chamfer(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -808,7 +849,7 @@ class CADMainWindow(QMainWindow):
                 distance=float(vals["distance"]),
                 edges_mode=str(vals["edges_mode"])
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_draft(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -826,7 +867,7 @@ class CADMainWindow(QMainWindow):
                 draft_angle_deg=float(vals["draft_angle"]),
                 pull_axis=str(vals["pull_axis"])
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
 
     def _on_action_press_pull(self) -> None:
         """Active l'opération de modélisation directe Press-Pull Fusion 360 (Touche Q)."""
@@ -859,7 +900,7 @@ class CADMainWindow(QMainWindow):
                 length=float(vals["length"]),
                 has_washer=bool(vals.get("has_washer", False))
             )
-            self.document.add_feature(feat)
+            self._add_feature_with_undo(feat)
             self.status_bar.showMessage(f"Composant standard ISO {feat.name} ajouté", 3000)
 
     def _on_action_measure(self) -> None:
@@ -1048,22 +1089,53 @@ class CADMainWindow(QMainWindow):
     def _on_action_material_info(self) -> None:
         bodies = self.document.bodies
         if not bodies:
+            QMessageBox.information(self, "Matériaux", "Aucun corps existant à inspecter.")
             return
-        first_body = list(bodies.values())[0]
-        mat = MATERIAL_LIBRARY["Acier Inoxydable 304"]
-        mass_g = MaterialCalculator.calculate_mass_grams(first_body.volume(), mat)
-        com = MaterialCalculator.calculate_center_of_mass(first_body)
-        QMessageBox.information(
-            self, "Propriétés Physiques",
-            f"Matériau : {mat.name} ({mat.category})\n"
-            f"Densité : {mat.density_g_cm3} g/cm³\n"
-            f"Module d'Young : {mat.young_modulus_gpa} GPa\n"
-            f"Limite d'élasticité : {mat.yield_strength_mpa} MPa\n"
-            f"----------------------------------------\n"
-            f"Volume : {first_body.volume():.1f} mm³\n"
-            f"Masse calculée : {mass_g:.2f} g ({mass_g/1000:.3f} kg)\n"
-            f"Centre de gravité : X={com.x:.1f}, Y={com.y:.1f}, Z={com.z:.1f}"
+
+        body_ids = list(bodies.keys())
+        selected_body_id = body_ids[0]
+        if len(body_ids) > 1:
+            chosen_id, ok = QInputDialog.getItem(
+                self, "Sélection du Corps", "Choisissez le corps à inspecter/affecter :",
+                body_ids, 0, False
+            )
+            if not ok or not chosen_id:
+                return
+            selected_body_id = chosen_id
+
+        current_mat_name = self.document.get_body_material(selected_body_id)
+        mat_keys = list(MATERIAL_LIBRARY.keys())
+        curr_idx = mat_keys.index(current_mat_name) if current_mat_name in mat_keys else 0
+
+        chosen_mat, ok = QInputDialog.getItem(
+            self, f"Affecter un Matériau - {selected_body_id}",
+            "Sélectionnez le matériau physique d'ingénierie :",
+            mat_keys, curr_idx, False
         )
+        if ok and chosen_mat:
+            self.document.set_body_material(selected_body_id, chosen_mat)
+            target_body = self.document.bodies[selected_body_id]
+            mat = MATERIAL_LIBRARY[chosen_mat]
+            mass_g = MaterialCalculator.calculate_mass_grams(target_body.volume(), mat)
+            com = MaterialCalculator.calculate_center_of_mass(target_body)
+            QMessageBox.information(
+                self, f"Propriétés Physiques - {selected_body_id}",
+                f"Matériau : {mat.name} ({mat.category})\n"
+                f"Densité : {mat.density_g_cm3} g/cm³ ({mat.density_kg_m3:.0f} kg/m³)\n"
+                f"Module d'élasticité (Young) : {mat.young_modulus_gpa} GPa\n"
+                f"Coefficient de Poisson : {mat.poisson_ratio}\n"
+                f"Limite d'élasticité Re : {mat.yield_strength_mpa} MPa\n"
+                f"Résistance traction Rm : {mat.ultimate_strength_mpa} MPa\n"
+                f"Conductivité thermique : {mat.thermal_conductivity} W/(m·K)\n"
+                f"----------------------------------------\n"
+                f"Volume : {target_body.volume():.1f} mm³\n"
+                f"Masse calculée : {mass_g:.2f} g ({mass_g / 1000.0:.4f} kg)\n"
+                f"Centre de gravité : X={com.x:.2f}, Y={com.y:.2f}, Z={com.z:.2f}"
+            )
+            self.status_bar.showMessage(
+                f"Matériau '{chosen_mat}' affecté à '{selected_body_id}' (Masse: {mass_g:.2f} g)",
+                4000
+            )
 
     def _on_action_run_fea(self) -> None:
         bodies = self.document.get_active_body_ids()
@@ -1199,7 +1271,10 @@ class CADMainWindow(QMainWindow):
 
         if to_remove:
             for fid in to_remove:
-                self.document.remove_feature(fid)
+                self.undo_redo_manager.execute_command(RemoveFeatureCommand(fid))
+            self.viewport.update()
+            self.timeline.refresh()
+            self.browser.refresh()
         else:
             if body_id in self.document.bodies:
                 del self.document.bodies[body_id]

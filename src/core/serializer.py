@@ -561,13 +561,19 @@ class FeatureDeserializerRegistry:
 class ProjectSerializer:
     """Gestionnaire de haut niveau pour la sauvegarde et le chargement de projet paramétrique."""
 
-    @staticmethod
-    def save_project(document: CADDocument, filepath: str) -> bool:
+    SCHEMA_VERSION: str = "2.4"
+    FORMAT_VERSION: str = "1.0"
+
+    @classmethod
+    def save_project(cls, document: CADDocument, filepath: str) -> bool:
         """Sérialise le document complet sous forme de fichier JSON .cadproj ou .cadz compressé."""
         data: Dict[str, JSONValue] = {
-            "format_version": "1.0",
+            "format_version": cls.FORMAT_VERSION,
+            "schema_version": cls.SCHEMA_VERSION,
+            "generator": "CAD Studio / Radiant Darwin",
             "name": document.name,
             "rollback_index": document.rollback_index,
+            "body_materials": getattr(document, "body_materials", {}),
             "sketches": [],
             "features": []
         }
@@ -583,7 +589,7 @@ class ProjectSerializer:
             f_dict = ProjectSerializer._serialize_feature(feat)
             cast_features.append(f_dict)
 
-        # 3. Écriture sur disque (support du format compressé .cadz)
+        # 3. Écriture atomique sécurisée sur disque (support du format compressé .cadz)
         return ProjectSerializer._write_to_disk(data, filepath)
 
     _DIRECT_SERIALIZE_ATTRS: Tuple[str, ...] = (
@@ -646,14 +652,30 @@ class ProjectSerializer:
 
     @staticmethod
     def _write_to_disk(data: Dict[str, JSONValue], filepath: str) -> bool:
-        """Écrit les données JSON brutes ou zippées."""
-        if filepath.lower().endswith(".cadz"):
-            with zipfile.ZipFile(filepath, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr("project.json", json.dumps(data, indent=2, ensure_ascii=False))
-        else:
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        return True
+        """
+        Écrit les données JSON brutes ou zippées de manière atomique.
+        Utilise un fichier temporaire suivi d'un renommage atomique via os.replace()
+        pour prévenir toute corruption de fichier en cas de coupure ou plantage.
+        """
+        tmp_filepath = f"{filepath}.tmp"
+        try:
+            if filepath.lower().endswith(".cadz"):
+                with zipfile.ZipFile(tmp_filepath, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                    zf.writestr("project.json", json.dumps(data, indent=2, ensure_ascii=False))
+            else:
+                with open(tmp_filepath, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+
+            os.replace(tmp_filepath, filepath)
+            return True
+        except Exception:
+            if os.path.exists(tmp_filepath):
+                try:
+                    os.remove(tmp_filepath)
+                except OSError:
+                    pass
+            raise
+
 
     @classmethod
     def load_project(cls, filepath: str) -> Optional[CADDocument]:
@@ -686,7 +708,12 @@ class ProjectSerializer:
                         feat.is_suppressed = bool(f_data.get("is_suppressed", False))
                         doc.features.append(feat)
 
-            # 3. Positionner le curseur de rollback et reconstruire la géométrie
+            # 3. Restaurer les matériaux affectés aux corps solides
+            raw_materials = data.get("body_materials", {})
+            if isinstance(raw_materials, dict):
+                doc.body_materials = {str(k): str(v) for k, v in raw_materials.items()}
+
+            # 4. Positionner le curseur de rollback et reconstruire la géométrie
             raw_rollback = data.get("rollback_index")
             doc.rollback_index = raw_rollback if isinstance(raw_rollback, int) else len(doc.features) - 1
             doc.rebuild()

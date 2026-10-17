@@ -408,27 +408,93 @@ class SpreadsheetWidget:
         """Initialise les composants Qt si la bibliothèque est présente."""
         self._qt_widget = QWidget()
         layout = QVBoxLayout(self._qt_widget)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         # Barre supérieure : Cellule active, Alias, Formule
         top_bar = QHBoxLayout()
         self.cell_label = QLabel("A1 :")
+        self.cell_label.setFixedWidth(45)
         self.alias_edit = QLineEdit()
         self.alias_edit.setPlaceholderText("Alias (ex: RayonBase)")
         self.formula_edit = QLineEdit()
         self.formula_edit.setPlaceholderText("Formule ou valeur (ex: =10*2)")
-        apply_btn = QPushButton("Appliquer")
+        self.apply_btn = QPushButton("Appliquer")
 
         top_bar.addWidget(self.cell_label)
         top_bar.addWidget(self.alias_edit)
-        top_bar.addWidget(self.formula_edit)
-        top_bar.addWidget(apply_btn)
+        top_bar.addWidget(self.formula_edit, 1)
+        top_bar.addWidget(self.apply_btn)
         layout.addLayout(top_bar)
 
         # Grille tabulaire
         self.table = QTableWidget(self.model.rows, self.model.cols)
         col_headers = [cell_coords_to_name(1, c)[:-1] for c in range(self.model.cols)]
         self.table.setHorizontalHeaderLabels(col_headers)
+        row_headers = [str(r + 1) for r in range(self.model.rows)]
+        self.table.setVerticalHeaderLabels(row_headers)
         layout.addWidget(self.table)
+
+        self._current_cell_ref: str = "A1"
+        self.table.currentCellChanged.connect(self._on_cell_selection_changed)
+        self.apply_btn.clicked.connect(self._on_apply_clicked)
+        self.formula_edit.returnPressed.connect(self._on_apply_clicked)
+        self.alias_edit.returnPressed.connect(self._on_apply_clicked)
+
+        self.refresh_table()
+
+    def _on_cell_selection_changed(self, row: int, col: int, _p_row: int, _p_col: int) -> None:
+        """Met à jour les champs d'édition lors de la sélection d'une cellule."""
+        if row < 0 or col < 0:
+            return
+        ref = cell_coords_to_name(row + 1, col)
+        self._current_cell_ref = ref
+        self.cell_label.setText(f"{ref} :")
+        self.formula_edit.setText(self.model.get_cell_raw(ref))
+        cell = self.model.cells.get(ref)
+        self.alias_edit.setText(cell.alias if cell and cell.alias else "")
+
+    def _on_apply_clicked(self) -> None:
+        """Applique la formule et l'alias saisis pour la cellule active."""
+        ref = self._current_cell_ref
+        formula = self.formula_edit.text().strip()
+        alias = self.alias_edit.text().strip()
+
+        if formula:
+            self.model.set_cell(ref, formula)
+        if alias:
+            try:
+                self.model.set_alias(ref, alias)
+            except ValueError:
+                pass
+        self.refresh_table()
+
+    def refresh_table(self) -> None:
+        """Rafraîchit l'affichage de l'ensemble des cellules de la grille."""
+        if not PYSIDE_AVAILABLE or self.table is None:
+            return
+        self.table.blockSignals(True)
+        for ref, cell in self.model.cells.items():
+            try:
+                row, col = name_to_cell_coords(ref)
+                r_idx = row - 1
+                c_idx = col
+                if 0 <= r_idx < self.model.rows and 0 <= c_idx < self.model.cols:
+                    item = self.table.item(r_idx, c_idx)
+                    if not item:
+                        item = QTableWidgetItem()
+                        self.table.setItem(r_idx, c_idx, item)
+                    if cell.has_error:
+                        item.setText(f"#ERR: {cell.error_message}")
+                    else:
+                        val = cell.computed_value
+                        display = f"{val:.2f}" if abs(val - round(val)) > 1e-4 else f"{int(round(val))}"
+                        if cell.alias:
+                            display += f" [{cell.alias}]"
+                        item.setText(display)
+            except Exception:
+                continue
+        self.table.blockSignals(False)
 
     def get_widget(self) -> Optional[QWidget]:
         """Retourne le widget Qt pour intégration dans la fenêtre principale."""

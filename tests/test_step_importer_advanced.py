@@ -196,3 +196,49 @@ def test_step_importer_triangulate_and_fallback() -> None:
     box = STEPImporter._build_manifold_fallback_from_points(cart_pts)
     assert box is not None
     assert box.volume() > 0.0
+
+
+def test_step_importer_ear_clipping_concave_and_hull_fallback() -> None:
+    """Vérifie la triangulation par Ear Clipping d'un polygone concave en L et le repli enveloppe convexe."""
+    import numpy as np
+    from src.core.nexus_kernel.brep_topology import NexusBRep, NexusFace, NexusWire, NexusPlaneSurface
+
+    # Contour en L concave (6 sommets)
+    pts_l = [
+        np.array([0.0, 0.0, 0.0]),
+        np.array([20.0, 0.0, 0.0]),
+        np.array([20.0, 10.0, 0.0]),
+        np.array([10.0, 10.0, 0.0]),
+        np.array([10.0, 20.0, 0.0]),
+        np.array([0.0, 20.0, 0.0]),
+    ]
+    brep = NexusBRep("ConcaveBRep")
+    surf = NexusPlaneSurface("Pl", np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+    wire = NexusWire("WireL", [])
+    wire.sample_points = lambda n=64: pts_l
+    face = NexusFace("FL", surf, wire)
+    brep.add_face(face)
+
+    verts, tris, count = STEPImporter._triangulate_brep_faces(brep)
+    assert count == 1
+    assert len(verts) == 6
+    # Un polygone à 6 sommets simple se décompose en 6 - 2 = 4 triangles
+    assert len(tris) == 4
+
+    # Test reconstruction avec repli convexe
+    importer = STEPImporter()
+    assert importer.had_fallback is False
+    cart_pts = {
+        1: np.array([0.0, 0.0, 0.0]),
+        2: np.array([10.0, 0.0, 0.0]),
+        3: np.array([0.0, 10.0, 0.0]),
+        4: np.array([0.0, 0.0, 10.0]),
+    }
+    # Un B-Rep avec une seule face n'est pas un solide fermé (3 facettes requises au min)
+    # L'importateur doit générer l'enveloppe convexe et activer had_fallback sans planter
+    res_solid = importer._construct_manifold_from_brep(brep, cart_pts, {})
+    assert res_solid is not None
+    assert res_solid.volume() > 0.0
+    assert importer.had_fallback is True
+    assert "convexe" in importer.last_warning.lower()
+

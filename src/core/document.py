@@ -38,8 +38,12 @@ class CADDocument:
         self.rollback_index: int = -1
         self._counter: int = 0
         self._on_change_callbacks: List[Callable[[], None]] = []
+        self._on_error_callbacks: List[Callable[[str, Feature], None]] = []
+        self.last_error: Optional[str] = None
+        self.build_errors: List[str] = []
         # Cache des instantanés d'étapes (Timeline checkpoint snapshots) pour rejeu O(1)
         self._timeline_snapshots: Dict[int, Dict[str, Solid]] = {}
+        self.body_materials: Dict[str, str] = {}
         self._bus_connected: bool = True
 
     @contextmanager
@@ -66,6 +70,10 @@ class CADDocument:
         """Enregistre un écouteur appelé à chaque modification du modèle."""
         self._on_change_callbacks.append(callback)
 
+    def register_error_listener(self, callback: Callable[[str, Feature], None]) -> None:
+        """Enregistre un écouteur notifié lors d'une erreur d'évaluation de feature."""
+        self._on_error_callbacks.append(callback)
+
     def _notify_change(self) -> None:
         """Notifie tous les écouteurs qu'une mise à jour a eu lieu."""
         for cb in self._on_change_callbacks:
@@ -85,9 +93,41 @@ class CADDocument:
         except (ImportError, AttributeError, RuntimeError):
             self._bus_connected = False
 
-    def invalidate_cache(self) -> None:
+    def _notify_error(self, message: str, feature: Feature) -> None:
+        """Notifie les écouteurs et le bus global d'une erreur d'évaluation géométrique."""
+        for cb in self._on_error_callbacks:
+            try:
+                cb(message, feature)
+            except Exception as e:
+                print(f"Erreur callback erreur document : {e}")
+
+        try:
+            from src.core.event_bus import global_event_bus, FeatureEvaluatedEvent
+            global_event_bus.publish(FeatureEvaluatedEvent(
+                feature_id=feature.feature_id,
+                feature_name=feature.name,
+                is_success=False,
+                error_message=message
+            ))
+        except (ImportError, AttributeError, RuntimeError):
+            pass
+
+    def invalidate_cache(self, from_index: Optional[int] = None) -> None:
         """Invalide les instantanés d'historique lors d'une modification paramétrique."""
-        self._timeline_snapshots.clear()
+        if from_index is None:
+            self._timeline_snapshots.clear()
+        else:
+            self.invalidate_from_index(from_index)
+
+    def invalidate_for_sketch(self, sketch_id: str) -> None:
+        """Invalide le cache uniquement à partir de la première opération dépendant de cette esquisse."""
+        first_idx: Optional[int] = None
+        for idx, feat in enumerate(self.features):
+            f_sk = getattr(feat, "sketch_id", None) or getattr(feat, "start_sketch_id", None) or getattr(feat, "profile_sketch_id", None)
+            if f_sk == sketch_id:
+                first_idx = idx
+                break
+        self.invalidate_cache(from_index=first_idx)
 
     def add_sketch(self, sketch: Sketch2D) -> None:
         """Ajoute une esquisse au document."""
@@ -195,7 +235,11 @@ class CADDocument:
             return feat.evaluate(bodies, self.sketches)
         except Exception as err:
             feat.status = FeatureStatus.ERROR
-            print(f"Erreur lors de l'évaluation de la feature {feat.name} ({feat.feature_id}) : {err}")
+            error_msg = f"Erreur lors de l'évaluation de la feature {feat.name} ({feat.feature_id}) : {err}"
+            print(error_msg)
+            self.last_error = error_msg
+            self.build_errors.append(error_msg)
+            self._notify_error(error_msg, feat)
             return bodies
 
     def rebuild(self) -> None:
@@ -229,8 +273,45 @@ class CADDocument:
                 current_bodies = self._evaluate_feature_step(self.features[idx], current_bodies)
                 self._timeline_snapshots[idx] = dict(current_bodies)
 
+            # Restituer les matériaux physiques enregistrés pour chaque corps
+            for b_id, mat_name in self.body_materials.items():
+                if b_id in current_bodies:
+                    current_bodies[b_id].material_name = mat_name
+
             self.bodies = current_bodies
             self._notify_change()
+
+    def set_body_material(self, body_id: str, material_name: str) -> None:
+        """Associe un matériau physique d'ingénierie à un corps solide spécifique."""
+        with self._lock:
+            self.body_materials[body_id] = material_name
+            if body_id in self.bodies:
+                self.bodies[body_id].material_name = material_name
+            self._notify_change()
+
+    def get_body_material(self, body_id: str) -> str:
+        """Récupère le nom du matériau physique associé au corps solide."""
+        return self.body_materials.get(body_id, "Acier Inoxydable 304")
+
+    def reorder_feature(self, from_index: int, to_index: int) -> bool:
+        """
+        Déplace une opération dans l'historique chronologique de la timeline.
+        Vérifie l'intégrité du DAG et réévalue l'historique séquentiel.
+        """
+        with self._lock:
+            n = len(self.features)
+            if from_index < 0 or from_index >= n or to_index < 0 or to_index >= n:
+                return False
+            if from_index == to_index:
+                return True
+
+            feat = self.features.pop(from_index)
+            self.features.insert(to_index, feat)
+
+            # Invalider le cache à partir du plus petit indice modifié
+            self.invalidate_from_index(min(from_index, to_index))
+            self.rebuild()
+            return True
 
     def get_all_mesh_buffers(self) -> List[MeshBuffer]:
         """Convertit tous les corps solides et instances d'assemblage en tampons maillés pour OpenGL."""

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Tuple, Dict, Optional
 import os
+import math
 import numpy as np
 
 from src.core.types import Vector3D
@@ -88,13 +89,107 @@ class IndustrialPostProcessor:
             estimated_time_seconds=total_time_s
         )
 
+    @staticmethod
+    def _is_planar_triplet(points: List[ToolpathPoint], i: int) -> bool:
+        """Vérifie si les 3 points consécutifs sont en avance travail sur le même plan Z."""
+        if points[i + 1].is_rapid or points[i + 2].is_rapid:
+            return False
+        p0, p1, p2 = points[i].pos, points[i + 1].pos, points[i + 2].pos
+        return (abs(p0.z - p1.z) < 1e-4) and (abs(p1.z - p2.z) < 1e-4)
+
+    @staticmethod
+    def _fit_arc_circle(p0: Vector3D, p1: Vector3D, p2: Vector3D) -> Optional[Tuple[str, float, float]]:
+        """Ajuste un arc de cercle 2D (G02/G03) passant par p0, p1, p2. Retourne (g_arc, i_rel, j_rel)."""
+        delta = 2.0 * (p0.x * (p1.y - p2.y) + p1.x * (p2.y - p0.y) + p2.x * (p0.y - p1.y))
+        if abs(delta) <= 1e-6:
+            return None
+
+        p0_sq = p0.x**2 + p0.y**2
+        p1_sq = p1.x**2 + p1.y**2
+        p2_sq = p2.x**2 + p2.y**2
+
+        cx = (p0_sq * (p1.y - p2.y) + p1_sq * (p2.y - p0.y) + p2_sq * (p0.y - p1.y)) / delta
+        cy = (p0_sq * (p2.x - p1.x) + p1_sq * (p0.x - p2.x) + p2_sq * (p1.x - p0.x)) / delta
+
+        r0 = math.hypot(p0.x - cx, p0.y - cy)
+        r1 = math.hypot(p1.x - cx, p1.y - cy)
+        r2 = math.hypot(p2.x - cx, p2.y - cy)
+
+        if not (0.5 <= r0 <= 5000.0) or abs(r1 - r0) >= 0.05 or abs(r2 - r0) >= 0.05:
+            return None
+
+        cross = (p1.x - p0.x) * (p2.y - p1.y) - (p1.y - p0.y) * (p2.x - p1.x)
+        g_arc = "G02" if cross < 0.0 else "G03"
+        return (g_arc, cx - p0.x, cy - p0.y)
+
+    @classmethod
+    def _format_blocks_with_arcs_and_comp(
+        cls,
+        points: List[ToolpathPoint],
+        tool: CNCTool,
+        t_num: int,
+        cutter_comp: str = "none",
+        enable_arcs: bool = False
+    ) -> List[str]:
+        """Formate les blocs de trajectoire avec détection d'arcs G02/G03 et compensation de rayon d'outil G41/G42."""
+        lines: List[str] = []
+        last_z = 50.0
+        feed = tool.feedrate_mm_min
+        plunge = tool.plunge_rate_mm_min
+        comp_active = False
+
+        i = 0
+        n_pts = len(points)
+        while i < n_pts:
+            pt = points[i]
+            p = pt.pos
+
+            if pt.is_rapid:
+                if comp_active:
+                    lines.append("G40 (DESACTIVATION COMPENSATION RAYON)")
+                    comp_active = False
+                lines.append(f"G00 X{p.x:.3f} Y{p.y:.3f} Z{p.z:.3f}")
+                last_z = p.z
+                i += 1
+                continue
+
+            if not comp_active and cutter_comp in ("left", "right"):
+                code_comp = "G41" if cutter_comp == "left" else "G42"
+                lines.append(f"{code_comp} D{t_num:02d} (COMPENSATION RAYON OUTIL)")
+                comp_active = True
+
+            f_val = plunge if p.z < last_z - 1e-4 else feed
+
+            arc_detected = False
+            if enable_arcs and i + 2 < n_pts and cls._is_planar_triplet(points, i):
+                arc_fit = cls._fit_arc_circle(points[i].pos, points[i + 1].pos, points[i + 2].pos)
+                if arc_fit is not None:
+                    g_arc, i_rel, j_rel = arc_fit
+                    p2 = points[i + 2].pos
+                    lines.append(f"{g_arc} X{p2.x:.3f} Y{p2.y:.3f} I{i_rel:.3f} J{j_rel:.3f} F{f_val:.1f}")
+                    last_z = p2.z
+                    i += 2
+                    arc_detected = True
+
+            if not arc_detected:
+                lines.append(f"G01 X{p.x:.3f} Y{p.y:.3f} Z{p.z:.3f} F{f_val:.1f}")
+                last_z = p.z
+                i += 1
+
+        if comp_active:
+            lines.append("G40 (DESACTIVATION COMPENSATION RAYON)")
+
+        return lines
+
     @classmethod
     def post_process_haas(
         cls,
         operations: List[ToolpathOperation],
         program_number: int = 1001,
         program_name: str = "USINAGE_PIECE",
-        work_coordinate: str = "G54"
+        work_coordinate: str = "G54",
+        enable_arcs: bool = False,
+        cutter_comp: str = "none"
     ) -> str:
         """Génère un programme ISO certifié pour centres d'usinage CNC Haas (NGC / Classic)."""
         lines: List[str] = [
@@ -121,19 +216,10 @@ class IndustrialPostProcessor:
                 f"G43 H{t_num:02d} Z50.0 M08 (COMPENSATION LONGUEUR + ARROSAGE)"
             ])
 
-            last_z = 50.0
-            feed = tool.feedrate_mm_min
-            plunge = tool.plunge_rate_mm_min
-
-            for pt in op.points:
-                p = pt.pos
-                if pt.is_rapid:
-                    lines.append(f"G00 X{p.x:.3f} Y{p.y:.3f} Z{p.z:.3f}")
-                else:
-                    f_val = plunge if p.z < last_z - 1e-4 else feed
-                    lines.append(f"G01 X{p.x:.3f} Y{p.y:.3f} Z{p.z:.3f} F{f_val:.1f}")
-                last_z = p.z
-
+            toolpath_blocks = cls._format_blocks_with_arcs_and_comp(
+                op.points, tool, t_num, cutter_comp=cutter_comp, enable_arcs=enable_arcs
+            )
+            lines.extend(toolpath_blocks)
             lines.append("M09 (ARRET ARROSAGE)")
             lines.append("G53 G00 Z0. (RETOUR HAUT)")
 
@@ -152,7 +238,9 @@ class IndustrialPostProcessor:
         operations: List[ToolpathOperation],
         program_number: int = 1,
         program_name: str = "PART_USINAGE",
-        work_coordinate: str = "G54"
+        work_coordinate: str = "G54",
+        enable_arcs: bool = False,
+        cutter_comp: str = "none"
     ) -> str:
         """Génère un programme conforme au standard Fanuc 0i/31i."""
         lines: List[str] = [
@@ -176,18 +264,10 @@ class IndustrialPostProcessor:
                 f"G43 H{t_num:02d} Z50.0 M08"
             ])
 
-            last_z = 50.0
-            feed = tool.feedrate_mm_min
-            plunge = tool.plunge_rate_mm_min
-
-            for pt in op.points:
-                p = pt.pos
-                if pt.is_rapid:
-                    lines.append(f"G00 X{p.x:.3f} Y{p.y:.3f} Z{p.z:.3f}")
-                else:
-                    f_val = plunge if p.z < last_z - 1e-4 else feed
-                    lines.append(f"G01 X{p.x:.3f} Y{p.y:.3f} Z{p.z:.3f} F{f_val:.1f}")
-                last_z = p.z
+            toolpath_blocks = cls._format_blocks_with_arcs_and_comp(
+                op.points, tool, t_num, cutter_comp=cutter_comp, enable_arcs=enable_arcs
+            )
+            lines.extend(toolpath_blocks)
 
             lines.append("M09")
             lines.append("G28 G91 Z0.")

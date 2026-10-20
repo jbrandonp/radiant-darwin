@@ -434,7 +434,7 @@ class MCPStdioServer:
         try:
             with urllib.request.urlopen(req, timeout=1.5) as resp:
                 if resp.status == 200:
-                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    resp_data = json.loads(resp.read(67_108_864).decode("utf-8"))
                     res_body = resp_data.get("result", {})
                     content_list = res_body.get("content", [])
                     is_err = bool(res_body.get("isError", False))

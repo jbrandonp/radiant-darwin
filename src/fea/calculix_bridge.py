@@ -180,7 +180,7 @@ class CalculixSimulationDeck:
             frd_path = os.path.join(working_dir, f"{self.job_name}.frd")
             if os.path.isfile(frd_path):
                 with open(frd_path, "r", encoding="utf-8", errors="ignore") as f:
-                    frd_content = f.read()
+                    frd_content = f.read(67_108_864)
                 return CalculixResultParser().parse_full_results(frd_content)
         except Exception:
             return None

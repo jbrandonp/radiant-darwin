@@ -270,10 +270,10 @@ class FEASimulator:
                 content = ""
                 if os.path.exists(frd_file):
                     with open(frd_file, "r", encoding="utf-8", errors="ignore") as f:
-                        content = f.read()
+                        content = f.read(67_108_864)
                 elif os.path.exists(dat_file):
                     with open(dat_file, "r", encoding="utf-8", errors="ignore") as f:
-                        content = f.read()
+                        content = f.read(67_108_864)
 
                 if content:
                     parser = CalculixResultParser()

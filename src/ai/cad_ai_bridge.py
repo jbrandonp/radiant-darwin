@@ -246,7 +246,7 @@ class CADAIBridge:
             try:
                 with urllib.request.urlopen(req, timeout=3.0) as resp:
                     if resp.status == 200:
-                        data = json.loads(resp.read().decode("utf-8"))
+                        data = json.loads(resp.read(67_108_864).decode("utf-8"))
                         code_resp = str(data.get("response", ""))
                         clean_code = re.sub(r"```python|```", "", code_resp).strip()
                         if clean_code:

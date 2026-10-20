@@ -242,7 +242,7 @@ class SurfaceSurfaceIntersectionSolver:
         norm_proj = float(np.linalg.norm(proj_n))
         if norm_proj < 1e-12:
             return None
-        rad_u = proj_n / norm_proj
+        rad_u = proj_n / max(norm_proj, 1e-12)
         rad_v = np.cross(a, rad_u)
 
         def ellipse_curve(t: float) -> np.ndarray:

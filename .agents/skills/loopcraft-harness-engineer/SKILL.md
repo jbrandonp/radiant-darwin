@@ -6,7 +6,8 @@ description: >-
 
 # 🔁 Loopcraft & Self-Healing Harness Engineer (SOTA Octobre 2026)
 
-> **Inspirations :** Addy Osmani (Loop Engineering & Loopcraft), Simon Willison (Eval-Driven Harnesses), Mitchell Hashimoto (Deterministic State Transitions)  
+> **Inspirations :** Boris Cherny (créateur de *Claude Code* chez Anthropic), Peter Steinberger (*OpenClaw*, OpenAI), Addy Osmani (*Loop Engineering* & *Own the Outer Loop*), Simon Willison (*Progressive Skills & Evals*), Mitchell Hashimoto (*Deterministic State Transitions*)  
+> **Axiome Fondateur (Cherny & Steinberger) :** *"You shouldn't be prompting coding agents anymore. You should be designing loops that prompt your agents. Prompts burn, skills compound."*  
 > **Standard :** Agentic Engineering Framework 2026  
 > **Rôle :** Architecte des boucles de feedback autonomes, des harnais de tests auto-réparateurs et de la gouvernance de code par rétroaction déterministe.
 
@@ -14,7 +15,9 @@ description: >-
 
 ## 🎯 Déclenchement & Cas d'Usage
 Active ce skill pour :
-- **Boucles d'auto-guérison (Self-Healing Loops)** : Résolution autonome de bugs, régression de tests, ou dette technique complexe sans supervision humaine constante.
+- **Boucles d'auto-guérison (Self-Healing Loops)** : Résolution autonome de bugs, régression de tests, ou dette technique complexe sans supervision humaine constante (jusqu'à 8 itérations bornées).
+- **Architecture de Boucle Interne vs Boucle Externe (Inner vs Outer Loop)** : L'agent pilote la boucle interne (plan -> code -> test -> diagnostic -> fix), tandis que le développeur pilote la boucle externe (objectifs, Quality Gates ISO 25010, score CMI, goût architectural).
+- **Multiplexage & Essaims d'Agents Parallèles** : Découplage des tâches de refactorisation ou d'investigation via des environnements de travail étanches (`git worktree`) sans conflit d'écriture.
 - **Harnais d'Évaluation & Evals Déterministes** : Mise en place de suites d'évaluation programmatiques fournissant un signal clair (binaire ou quantifié) à l'agent.
 - **Gouvernance de Quality Gate** : Respect strict des 5 piliers ISO/IEC 25010 (Analysabilité, Modularité, Testabilité, Typage, Robustesse) et du plafond SonarQube de complexité cognitive ($\le 25$).
 - **Classification Automatique des Erreurs** : Analyse systématique de `stdout`/`stderr` et routage précis vers la cause racine sans tâtonnement aléatoire.
@@ -28,10 +31,10 @@ Active ce skill pour :
          ▲                                                               │
          │                                                               ▼
 [5. AUDIT & LOG] <── (Pass) ── [4. HARNESS VERIFICATION] ◄───────────────┘
-                                       │
-                                    (Fail)
-                                       │
-                        (Up to 8 bounded iterations)
+                                        │
+                                     (Fail)
+                                        │
+                         (Up to 8 bounded iterations)
 ```
 
 ### Étape 1 : Observation & Classification d'Erreur
@@ -59,11 +62,14 @@ Exécuter la vérification en cascade :
 # 1. Test unitaire ciblé
 .venv\Scripts\python.exe -m pytest tests/test_cible.py
 
-# 2. Visiteur de typage statique strict (Zero-Any)
-.venv\Scripts\python.exe scripts/strict_typing_visitor.py src/chemin/fichier_modifie.py
+# 2. Audit de typage strict (zéro Any)
+.venv\Scripts\python.exe scripts/strict_typing_visitor.py
 
-# 3. Analyseur de complexité cognitive & Quality Gate
-.venv\Scripts\python.exe scripts/industrial_audit_engine.py
+# 3. Audit de complexité cognitive (CC <= 25)
+.venv\Scripts\python.exe scripts/codescene_analyzer.py
+
+# 4. Audit de sécurité SAST
+.venv\Scripts\python.exe scripts/security_sast_visitor.py
 ```
 - **Si échec** : Analyser le message d'erreur exact, déterminer pourquoi l'hypothèse a échoué (backtracking explicite), et itérer (jusqu'à **8 itérations maximum** avant d'appeler l'utilisateur à l'aide).
 - **Si succès** : Passer à l'étape 5.
@@ -75,6 +81,26 @@ Exécuter la vérification en cascade :
   - Métriques d'audit
 - Créer un commit Conventional Commits : `fix(scope): description` ou `feat(scope): description`.
 - Créer le tag git d'audit correspondant `audit-vN`.
+
+---
+
+## ⚡ Patrons Avancés de Loop Engineering (Cherny & Steinberger 2026)
+
+### 1. "Prompts Burn, Skills Compound"
+- Les instructions données dans une invite brute (prompt) disparaissent avec la session ou polluent le contexte RAM.
+- Toute correction structurelle, règle d'architecture ou nouveau workflow doit être cristallisé sous forme de **Skill modulaire** avec en-tête YAML léger ou consigné dans la mémoire vivante (`AI_ASSISTANT.md`). Chaque bug résolu devient un capital technique permanent.
+
+### 2. Multiplexage d'Agents & Isolation par Git Worktrees
+- Pour exécuter des audits massifs ou des refactorisations parallèles sans écraser les fichiers en cours d'édition :
+  ```bash
+  # Créer un arbre de travail Git isolé pour un sous-agent d'investigation
+  git worktree add ../radiant-audit-branch -b audit/fea-depth
+  ```
+- L'agent travaille dans un bac à sable hermétique, exécute ses tests, puis fusionne ou soumet ses résultats sans polluer la branche active.
+
+### 3. La Boucle Ralph Wiggum (Persistance Déterministe)
+- Définition d'un signal d'arrêt booléen clair : l'agent réitère de manière continue tant que `exit_code != 0`.
+- Éviter la dérive de contexte par rafraîchissement périodique : si la boucle dépasse 4 itérations, compacter l'historique en ne conservant que l'invariant brisé et la dernière trace d'erreur.
 
 ---
 

@@ -104,6 +104,19 @@ Exécuter la vérification en cascade :
 
 ---
 
+## 🧰 Outils & Références d'Accompagnement
+- **Orchestrateur de Cycle Loopcraft** : [`scripts/run_loopcraft_cycle.py`](scripts/run_loopcraft_cycle.py) — exécute la cascade complète des barrières (typage, complexité, SAST, tests) et classifie les erreurs en 5 catégories.
+- **Antisèche Opérationnelle** : [`references/loopcraft_cheatsheet.md`](references/loopcraft_cheatsheet.md) — commandes d'isolation par `git worktree`, taxonomie des 5 erreurs et patrons Ralph Wiggum.
+
+---
+
+## ⚠️ Anti-Patrons & Pièges Fréquents
+1. **L'évaluation à l'aveugle (Blind Hallucination)** : Prétendre qu'un bogue est corrigé sans avoir exécuté le test dans le terminal réel avec code de retour 0.
+2. **Le churn volumétrique destructeur** : Réécrire 200 lignes de code d'un fichier stable quand une correction chirurgicale de 3 lignes suffit, risquant d'introduire de nouvelles régressions.
+3. **La dérive de contexte en boucle infinie** : Continuer à tenter des modifications aléatoires au-delà de 8 itérations sans s'arrêter pour documenter l'impasse et demander un arbitrage architectural.
+
+---
+
 ## 🛡️ Règles de Survie en Mode Autonome
 
 1. **Aucune Excuse, Analyse Factuelle** : En cas d'erreur de test, ne jamais s'excuser. Analyser immédiatement la trace d'appel (`traceback`), identifier la ligne exacte et la valeur des variables incriminées.

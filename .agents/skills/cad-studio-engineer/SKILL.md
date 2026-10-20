@@ -58,6 +58,20 @@ Active ce skill pour toute tâche relative à :
 
 ---
 
+## 🧰 Outils & Références d'Accompagnement
+- **Vérificateur Topologique Déterministe** : [`scripts/verify_mesh_manifold.py`](scripts/verify_mesh_manifold.py) — contrôle l'étanchéité, l'absence d'arêtes non-variétales et l'invariant d'Euler $\chi = 2$.
+- **Guide d'Intégration PySide6 / Manifold3D** : [`references/manifold3d_pyside6_patterns.md`](references/manifold3d_pyside6_patterns.md) — patrons de thread-worker typés sans `object` et VBO OpenGL.
+
+---
+
+## ⚠️ Anti-Patrons & Pièges Fréquents
+1. **L'illusion du Minkowski global sur congé (Fillet)** : Ne jamais appliquer une somme de Minkowski sphérique globale qui altère toutes les dimensions du solide pour arrondir une seule arête sélectionnée.
+2. **L'oubli de la garde epsilon sur les normales de coupe** : Toujours diviser par `max(norm_proj, 1e-12)` pour prévenir toute exception `ZeroDivisionError` sur les facettes effilées (*slivers*).
+3. **Le piège du STEP "STL Déguisé" (`FACETED_BREP`)** : Ne pas sérialiser les triangles du maillage avec des surfaces nulles `$`. Préférer les surfaces analytiques (`PLANE`, `CYLINDRICAL_SURFACE`) compatibles SolidWorks/Mastercam.
+4. **La désynchronisation Mesh CSG / B-Rep** : Toute opération booléenne sur le maillage Manifold3D doit répercuter le graphe topologique des arêtes et faces dans `NexusBRep`.
+
+---
+
 ## 📋 Protocole d'Exécution en 5 Étapes
 
 ### Étape 1 : Cartographie d'Invariants & Spécification Préalable (Spec-First)

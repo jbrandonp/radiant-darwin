@@ -73,6 +73,19 @@ Parmi les candidats ayant validé 100% des oracles :
 
 ---
 
+## 🧰 Outils & Références d'Accompagnement
+- **Harnais de Synthèse & Oracles** : [`scripts/synthesize_and_verify.py`](scripts/synthesize_and_verify.py) — exécute le filtrage AST statique sandbox et le contrôle par les 4 oracles géométriques formels.
+- **Spécification Mathématique des Oracles** : [`references/oracles_specification.md`](references/oracles_specification.md) — intégration de volume par Gauss-Ostrogradski et invariance d'Euler $\chi = 2$.
+
+---
+
+## ⚠️ Anti-Patrons & Pièges Fréquents
+1. **L'illusion du "Single-Shot" probabiliste** : Faire confiance à un script généré du premier coup sans le faire passer au crible d'oracles mathématiques formels.
+2. **L'exécution de code sans isolation AST** : Lancer un `exec()` ou `eval()` sur du code généré par l'IA sans avoir validé l'AST au préalable contre les imports hostiles (`subprocess`, `os`, `socket`).
+3. **Le solide à normales inversées (Volume Négatif)** : Considérer un maillage valide uniquement sur le critère de fermeture topologique, alors que ses normales sont tournées vers l'intérieur ($\text{Vol} < 0$).
+
+---
+
 ## 🛡️ Règles d'Or
 1. **L'IA Propose, l'Oracle Dispose** : Une génération n'a aucune valeur tant qu'un oracle mathématique indépendant n'a pas validé ses invariants.
 2. **Élimine le "Prompt-and-Pray"** : Remplacer l'espoir par la recherche dynamique dans l'espace des programmes au moment de l'exécution.

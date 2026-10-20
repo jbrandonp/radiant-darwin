@@ -87,3 +87,16 @@ Active ce skill pour :
 ### Phase 4 : Contrôle Qualité de Sortie (Watertight Check)
 - Vérifier que le solide généré n'est pas vide et possède un volume positif.
 - Si nécessaire, invoquer `ShapeFixer.heal_solid(res.solid)` pour refermer d'éventuelles micro-fissures de calcul.
+
+---
+
+## 🧰 Outils & Références d'Accompagnement
+- **Validateur AST de Script IA** : [`scripts/validate_cad_prompt_ast.py`](scripts/validate_cad_prompt_ast.py) — contrôle l'ancrage dans les primitives CAO autorisées et bloque les méthodes privées.
+- **Guide d'Ancrage Neurosymbolique** : [`references/neurosymbolic_patterns.md`](references/neurosymbolic_patterns.md) — patrons d'arbre d'entités, DSL et transactions atomiques avec rollback.
+
+---
+
+## ⚠️ Anti-Patrons & Pièges Fréquents
+1. **L'appel direct aux méthodes privées internes** : Tenter d'invoquer `doc._destroy_all()` ou `doc._raw_manifold` au lieu d'utiliser l'API publique (`doc.add_box()`, `doc.cut()`).
+2. **L'omission de transaction atomique** : Modifier l'arbre du document directement sans `AtomicTransactionScope`, laissant une pièce corrompue dans l'interface si l'opération finale échoue.
+3. **Le piège du "Text-to-Mesh" sans arbre paramétrique** : Générer un maillage de polygones non paramétrique au lieu d'un script d'opérations géométriques réversibles.

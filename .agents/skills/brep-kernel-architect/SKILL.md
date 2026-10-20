@@ -76,6 +76,19 @@ Pour trouver l'intersection entre deux surfaces implicites ou paramétriques $S_
 
 ---
 
+## 🧰 Outils & Références d'Accompagnement
+- **Vérificateur d'Invariants B-Rep** : [`scripts/verify_brep_invariants.py`](scripts/verify_brep_invariants.py) — vérifie la réciprocité des demi-arêtes jumelles (`e.twin.twin == e`), la fermeture cyclique des boucles de face et la caractéristique d'Euler.
+- **Guide Topologique BRepGraph** : [`references/brep_graph_topology.md`](references/brep_graph_topology.md) — relations de connectivité, demi-arêtes et formule généralisée $V - E + F - (L - F) = 2(S - G)$.
+
+---
+
+## ⚠️ Anti-Patrons & Pièges Fréquents
+1. **L'arête "Papillon" (Non-Manifold Edge)** : Une arête topologique partagée par 3 faces ou plus détruit l'orientabilité et fait échouer les opérations booléennes.
+2. **La singularité polaire des quadriques** : Aux pôles d'une sphère ou d'un cône, la dérivée partielle s'annule ($\partial S / \partial u = 0$). Remplacer l'évaluation cartésienne naïve par des carreaux de Coons ou un découpage polaire adapté.
+3. **Le pas fixe en intersection de surfaces (SSI)** : Un pas de marche constant saute par-dessus les petites boucles d'intersection fermées. Le pas doit obligatoirement s'adapter à la courbure $h \propto 1/\kappa$.
+
+---
+
 ## 📋 Checklist de Validation B-Rep
 
 - [ ] L'enveloppe extérieure forme un `CLOSED_SHELL` étanche (0 arête frontière ouverte).

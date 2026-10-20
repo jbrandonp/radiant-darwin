@@ -66,6 +66,12 @@ Toute nouvelle fonctionnalité ou refactorisation doit être spécifiée selon c
 
 ---
 
+## 🧰 Outils & Références d'Accompagnement
+- **Auditeur de Spécifications Formelles** : [`scripts/audit_feature_contract.py`](scripts/audit_feature_contract.py) — vérifie la complétude des 4 quadrants dans les documents de spécification.
+- **Modèle de Spécification Formelle** : [`templates/cad_spec_contract_template.md`](templates/cad_spec_contract_template.md) — gabarit contractuel standardisé pour définir les invariants, gardes et tests.
+
+---
+
 ## 🚫 Anti-Patterns à Proscrire Impérativement
 
 1. **Le "Vibe Coding" à l'Aveugle** : Générer 200 lignes de code Python en espérant que ça fonctionne sans avoir défini les équations mathématiques de la transformation.

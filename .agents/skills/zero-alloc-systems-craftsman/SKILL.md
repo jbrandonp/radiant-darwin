@@ -93,6 +93,19 @@ Dans le viewport PyOpenGL :
 
 ---
 
+## 🧰 Outils & Références d'Accompagnement
+- **Profiler Mémoire Zéro-Allocation** : [`scripts/profile_zero_alloc.py`](scripts/profile_zero_alloc.py) — mesure déterministe des deltas d'allocation heap et vérification de contiguïté C des matrices NumPy.
+- **Guide Haute Performance Mémoire** : [`references/zero_alloc_guide.md`](references/zero_alloc_guide.md) — hiérarchie des caches processeur, protocoles de tampons et streaming VBO GPU.
+
+---
+
+## ⚠️ Anti-Patrons & Pièges Fréquents
+1. **Le faux zéro-copie de l'indexation avancée (Fancy Indexing)** : `arr[mask]` ou `arr[[0, 1, 2]]` crée toujours une copie mémoire complète en NumPy. Seul le slicing régulier (`arr[::2]`) produit une vue sans allocation.
+2. **La fuite native par clôture Qt (Lambda Leak)** : Capturer un pointeur d'objet C++ Manifold3D dans un slot Qt sans déconnexion explicite maintient l'objet vivant indéfiniment en RAM.
+3. **La réallocation de tampons OpenGL dans `paintGL`** : Appeler `glGenBuffers` ou `glBufferData` à chaque rafraîchissement d'écran provoque des saccades d'affichage (*frame drops*) et sature la mémoire du pilote.
+
+---
+
 ## 🛡️ Règles d'Or pour le Développeur
 1. **Pense au Cache L1/L2 du Processeur** : La mémoire séquentielle et contiguë est 100 à 200 fois plus rapide que la traversée de pointeurs dispersés en mémoire vive.
 2. **Évite les Conversions Implicites** : Attention aux conversions `float64` vers `float32` qui dupliquent silencieusement un tableau NumPy entier.

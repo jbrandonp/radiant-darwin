@@ -44,6 +44,11 @@ $$V - E + F - H = 2(1 - g)$$
   $$\text{twin}(\text{twin}(h)) = h$$
 - Deux faces adjacentes traversant la même arête $E$ doivent obligatoirement parcourir l'arête en sens inverse pour garantir des normales extérieures cohérentes.
 
+### 4. Paradigmes Scientifiques Récents de B-Rep IA (SIGGRAPH 2024 / Autodesk)
+- **SolidGen (IBR - Indexed B-Rep)** : Synthèse autorégressive séquentielle d'entités topologiques ($V \to E \to F$) garantissant la validité par masquage d'attention causal.
+- **BrepGen (SIGGRAPH 2024)** : Représentation arborescente hiérarchique de géométrie latente diffusée de haut en bas, avec fusion de nœuds dupliqués pour reconstituer la topologie B-Rep étanche sans approximation polygonale.
+- **DualBrep (Flow Matching Continu)** : Formulation dans le domaine euclidien continu unifiant le champ de distance signée (SDF pour la forme globale) et le champ de distance non signée de Voronoi (UDF pour les éléments de surface) avec reconstruction neuronale étanche.
+
 ---
 
 ## 🛠️ Boîte à Outils Algorithmique

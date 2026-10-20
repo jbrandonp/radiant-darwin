@@ -36,6 +36,10 @@ $$h_{\text{scallop}} = R - \sqrt{R^2 - \frac{s^2}{4}} \approx \frac{s^2}{8 R}$$
 - Pour une rugosité visée $Ra \le 0.8\,\mu\text{m}$, le pas latéral doit satisfaire :
 $$s \le \sqrt{32 \cdot R \cdot Ra}$$
 
+### 3. Planification à Jerk Minimal & Espaces SMM (Recherche 2024-2026)
+- **Lissage à Jerk Minimal ($J = \dddot{X}$)** : L'accélération et le jerk angulaire ($\dot{\boldsymbol{\omega}}$) sont minimisés par programmation quadratique par morceaux le long des splines d'usinage, réduisant les vibrations de crête de plus de 22% sur les pièces à parois minces.
+- **Espaces Découplés Maître-Esclave (SMM)** : Découplage de la position du point de contact (TCP) et de l'axe d'inclinaison sur des courbes de Bézier duales avec condition de monotonie de courbure pour éliminer les marques de broutage (*micro-chatter*).
+
 ---
 
 ## 🧰 Outils & Références d'Accompagnement

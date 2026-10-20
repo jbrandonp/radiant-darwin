@@ -33,6 +33,10 @@ $$\sigma_{\text{vM}} = \sqrt{\frac{1}{2}\left[(\sigma_{xx} - \sigma_{yy})^2 + (\
 - Comparée à la limite d'élasticité du matériau $R_e$ pour obtenir le coefficient de sécurité minimal :
 $$s = \frac{R_e}{\max(\sigma_{\text{vM}})}$$
 
+### 3. Analyse Isogéométrique B-Rep (IBRA, Thomas J.R. Hughes) & Couplage Nitsche (Recherche 2024-2026)
+- **Analyse Isogéométrique Directe B-Rep (IBRA)** : Utilise directement les fonctions de base B-Splines / NURBS de la CAO comme fonctions de forme variationnelles pour résoudre l'élasticité linéaire, éliminant totalement l'étape de discrétisation en maillage tétraédrique et les erreurs d'approximation de frontière géométrique.
+- **Couplage Faible de Nitsche pour Faces Raccordées** : Raccordement continu variationnel à travers les découpes et interfaces multi-patchs non-conformes sans introduire de multiplicateurs de Lagrange additionnels, préservant la symétrie et la positivité stricte de la matrice globale $\mathbf{K}$.
+
 ---
 
 ## 🧰 Outils & Références d'Accompagnement

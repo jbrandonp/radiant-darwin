@@ -39,7 +39,22 @@ Active ce skill pour toute tâche relative à :
    - Les calculs géométriques lourds (TPMS, FEA, maillage volumique, tessellation) s'exécutent hors du thread UI via `WorkerPool` / `QThreadPool`.
    - Tout accès concurrent au `CADDocument` est protégé par les verrous transactionnels `read_transaction()` et `write_transaction()`.
 5. **Conservation de l'Énergie & Non-Régression** :
-   - Chaque modification doit préserver 100% de la suite de tests (841+ tests passants).
+   - Chaque modification doit préserver 100% de la suite de tests (848 tests passants).
+
+---
+
+## 🔬 Théorèmes Scientifiques de Résolution Géométrique 2D (CAD Journal 2024-2026)
+
+### 1. Théorème de Laman & Rigidité Structurelle 2D
+Un graphe d'esquisse paramétrique à $n$ sommets et $m$ contraintes dimensionnelles est génériquement bien contraint si et seulement si :
+$$m = 2n - 3 \quad \text{et} \quad \forall V' \subseteq V, \; m(V') \le 2|V'| - 3$$
+- Permet une détection immédiate en temps polynomial des degrés de liberté sans inverser la matrice jacobienne complète.
+
+### 2. Décomposition Bipartite de Dulmage-Mendelsohn (D-M)
+Partitionne le système d'équations géométriques en 3 composantes irréductibles :
+1. **Sous-contrainte** : Degrés de liberté résiduels identifiés pour manipulation interactive à la souris.
+2. **Bien-contrainte** : Blocs carrés réguliers résolus de manière découplée par Levenberg-Marquardt.
+3. **Sur-contrainte** : Détection des équations redondantes ou contradictoires pour diagnostic visuel immédiat dans l'arbre d'esquisse.
 
 ---
 

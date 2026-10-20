@@ -36,6 +36,14 @@ Pour un alésage de diamètre nominal $D$ avec tolérance $[D_{\min}, D_{\max}]$
 - Si l'alésage réel usiné a un diamètre $D_{\text{actuel}} > D_{\min}$, la tolérance de position admissible s'élargit du bonus :
 $$t_{\text{admissible}} = t_0 + (D_{\text{actuel}} - D_{\min})$$
 
+### 3. Empilement de Tolérances 1D/3D (Tolerance Stack-up ASME Y14.5-2018)
+- **Modèle du Pire des Cas (Worst-Case / Arithmetic Stack-up)** :
+  $$T_{\text{wc}} = \sum_{i=1}^n |c_i| \cdot T_i$$
+  Garantit 100% d'interchangeabilité mécanique sans aucun rebut en production.
+- **Modèle Statistique RSS (Root-Sum-Square)** :
+  $$T_{\text{rss}} = \sqrt{\sum_{i=1}^n (c_i \cdot T_i)^2}$$
+  Pour les processus à capabilité maîtrisée ($C_p \ge 1.33$), réduit drastiquement les surcoûts d'usinage en prédisant une dispersion normale à $\pm 3\sigma$ (taux de non-conformité $< 0.27\%$).
+
 ---
 
 ## 🧰 Outils & Références d'Accompagnement

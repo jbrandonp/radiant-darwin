@@ -20,8 +20,8 @@
 | **Plafond Complexité par Fonction** | **0 fonction > 25** | ≤ 25 (SonarSource) | ✅ CONFORME |
 | **Tests Unitaires & Intégration** | **696 / 696 Validés** | 100% | ✅ SUCCÈS |
 | **Score de Mutation Testing** | **100.0%** (4/4 tués) | ≥ 80.0% | ✅ SOTA |
-| **Périmètre du Code Source** | **168 fichiers** (40,514 SLOC) | - | ℹ️ INFO |
-| **Complexité Cognitive Globale** | **10,783 points** (Moy: 64.2) | - | ℹ️ INFO |
+| **Périmètre du Code Source** | **2 fichiers** (650 SLOC) | - | ℹ️ INFO |
+| **Complexité Cognitive Globale** | **145 points** (Moy: 72.5) | - | ℹ️ INFO |
 
 ---
 
@@ -29,7 +29,7 @@
 | Critère Qualité | Valeur Mesurée | Statut |
 | :--- | :---: | :---: |
 | Strict Static Typing (100% sans Any ni object) | 100.0% | ✅ PASS |
-| SAST Security Vulnerabilities (0 violation tolérée) | 0 violation(s) | ✅ PASS |
+| SAST Security Vulnerabilities (0 violation) | 0 violation(s) | ✅ PASS |
 | Architecture Cycles (0 dépendance circulaire) | 0 cycle(s) | ✅ PASS |
 | Function Cognitive Complexity Ceiling (<= 25) | 0 fonction(s) > 25 | ✅ PASS |
 | Test Statement Coverage (>= 80.0%) | 85.0% | ✅ PASS |
@@ -40,11 +40,8 @@
 ### 🔥 Top 5 Architectural Hotspots (CodeScene Churn × Complexité)
 | Fichier Source | Churn | Complexité Cog | Hotspot Index | SLOC |
 | :--- | :---: | :---: | :---: | :---: |
-| `src/core/step_importer.py` | 1677 | 563 | 944020 | 884 |
-| `src/core/serializer.py` | 2451 | 365 | 894591 | 686 |
-| `src/ui/main_window.py` | 1735 | 356 | 617681 | 1,213 |
-| `src/core/sketch.py` | 1496 | 345 | 516124 | 916 |
-| `src/solver/constraints_2d.py` | 1578 | 234 | 369327 | 700 |
+| `src/cam/toolpath.py` | 15 | 120 | 1800 | 400 |
+| `src/core/geometry.py` | 12 | 25 | 300 | 250 |
 
 ---
 

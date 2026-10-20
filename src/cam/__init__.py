@@ -35,6 +35,12 @@ from src.cam.volumetric_simulator import (
     VolumetricStockSimulator,
     CNCPostProcessorRegistry,
 )
+from src.cam.minimal_jerk_planner import (
+    Waypoint5Axis,
+    TrajectorySample,
+    TrajectoryPlanningResult,
+    MinimalJerkTrajectoryPlanner,
+)
 
 __all__ = [
     "ToolType",
@@ -62,4 +68,9 @@ __all__ = [
     "StockVoxelReport",
     "VolumetricStockSimulator",
     "CNCPostProcessorRegistry",
+    # Planification à Jerk Minimal SOTA 2026
+    "Waypoint5Axis",
+    "TrajectorySample",
+    "TrajectoryPlanningResult",
+    "MinimalJerkTrajectoryPlanner",
 ]

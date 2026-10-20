@@ -29,6 +29,12 @@ from src.solver.unified_solver import (
     SolverMode,
     UnifiedSketchSolver,
 )
+from src.solver.structural_rigidity import (
+    LamanRigidityResult,
+    LamanRigidityOracle,
+    DulmageMendelsohnResult,
+    DulmageMendelsohnPartitioner,
+)
 
 __all__ = [
     # Solveur non linéaire Levenberg-Marquardt
@@ -46,4 +52,9 @@ __all__ = [
     # Façade unifiée
     "SolverMode",
     "UnifiedSketchSolver",
+    # Rigidité structurelle et partitionnement SOTA 2026
+    "LamanRigidityResult",
+    "LamanRigidityOracle",
+    "DulmageMendelsohnResult",
+    "DulmageMendelsohnPartitioner",
 ]

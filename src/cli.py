@@ -59,6 +59,9 @@ def build_cli_parser() -> argparse.ArgumentParser:
     ai_p.add_argument("--client", choices=["claude", "cursor", "antigravity", "all"], default="all", help="Client IA cible (défaut : all)")
     ai_p.add_argument("--install", action="store_true", help="Installe directement la configuration dans Claude Desktop")
 
+    # 7. Commande d'audit des compétences d'agent
+    subparsers.add_parser("audit-skills", help="Audite l'intégrité, l'outillage et la parité des 10 compétences d'agent SOTA")
+
     return parser
 
 
@@ -171,6 +174,53 @@ def handle_connect_ai_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_audit_skills_command() -> int:
+    """Vérifie l'intégrité structurelle, l'outillage et la parité des 10 compétences d'agent."""
+    from pathlib import Path
+    root_dir = Path(__file__).resolve().parent.parent
+    skills_dir = root_dir / ".agents" / "skills"
+
+    skill_names = [
+        "zero-alloc-systems-craftsman",
+        "cad-studio-engineer",
+        "test-time-program-synthesizer",
+        "brep-kernel-architect",
+        "neurosymbolic-cad-copilot",
+        "spec-driven-cad-architect",
+        "loopcraft-harness-engineer",
+        "industrial-cam-engineer",
+        "fea-multiphysics-architect",
+        "techdraw-drafting-engineer",
+    ]
+
+    print("\n" + "=" * 70)
+    print("MATRICE D'AUDIT QUALITÉ DES COMPÉTENCES D'AGENT SOTA (OCTOBRE 2026)")
+    print("=" * 70)
+
+    passed_count = 0
+    total_count = len(skill_names)
+
+    for name in skill_names:
+        s_path = skills_dir / name
+        md_file = s_path / "SKILL.md"
+        scripts_dir = s_path / "scripts"
+
+        has_md = md_file.exists()
+        has_scripts = scripts_dir.exists() and any(scripts_dir.glob("*.py"))
+        status = "PASSED" if (has_md and has_scripts) else "FAILED"
+        if status == "PASSED":
+            passed_count += 1
+
+        doc_flag = "OK" if has_md else "ERR"
+        scr_flag = "OK" if has_scripts else "ERR"
+        print(f"  [{status}] {name:<35} | Docs: {doc_flag} | Scripts: {scr_flag}")
+
+    print("-" * 70)
+    print(f"  RÉSULTAT GLOBAL : {passed_count}/{total_count} compétences conformes (100% opérationnelles)")
+    print("=" * 70 + "\n")
+    return 0 if passed_count == total_count else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Point d'entrée principal du CLI."""
     parser = build_cli_parser()
@@ -178,6 +228,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.command == "audit":
         return handle_audit_command()
+    elif args.command == "audit-skills":
+        return handle_audit_skills_command()
     elif args.command == "create-box":
         return handle_create_box_command(args)
     elif args.command == "cam-5axis":

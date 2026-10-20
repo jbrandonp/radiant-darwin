@@ -88,6 +88,7 @@ jobs:
         run: |
           python -m src.cli --version
           python -m src.cli audit
+          python -m src.cli audit-skills
 
   # ============================================================================
   # 2. Audit Industriel, SARIF SAST, SBOM CycloneDX & OpenSSF Scorecard

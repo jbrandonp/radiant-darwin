@@ -400,7 +400,15 @@ class FilletFeature(Feature):
         dy = b_max.y - b_min.y
         dz = b_max.z - b_min.z
 
-        # 1. Congés localisés par soustraction d'outils cylindriques (mode top / bottom)
+        # 1. Congés localisés sur arêtes spécifiques si edge_indices est fourni
+        if self.edge_indices is not None and len(self.edge_indices) > 0:
+            res_solid = self._apply_edge_indices_fillet(target, r, segs, self.edge_indices)
+            if res_solid is not None:
+                updated[tgt_key] = res_solid
+                self.status = FeatureStatus.OK
+                return updated
+
+        # 2. Congés localisés par soustraction d'outils cylindriques (mode top / bottom)
         if self.edges_mode in ("top", "bottom"):
             fillet_tool = self._build_negative_edge_fillet_tools(b_min, b_max, r, segs, self.edges_mode)
             if fillet_tool is not None:
@@ -410,7 +418,7 @@ class FilletFeature(Feature):
                     self.status = FeatureStatus.OK
                     return updated
 
-        # 2. Mode 'all' ou repli si arêtes trop étroites
+        # 3. Mode 'all' ou repli si arêtes trop étroites
         if dx > 2.2 * r and dy > 2.2 * r and dz > 2.2 * r:
             sx = (dx - 2.0 * r) / dx
             sy = (dy - 2.0 * r) / dy
@@ -429,6 +437,63 @@ class FilletFeature(Feature):
         self.status = FeatureStatus.OK
         return updated
 
+    @staticmethod
+    def _apply_edge_indices_fillet(
+        target: Solid,
+        r: float,
+        segs: int,
+        edge_indices: Sequence[int]
+    ) -> Optional[Solid]:
+        """Arrondit des arêtes topologiques spécifiques du maillage."""
+        buf = target.to_mesh_buffer()
+        if buf.is_empty() or buf.edge_vertices is None or len(buf.edge_vertices) < 2:
+            return None
+
+        tools: List[m.Manifold] = []
+        n_edges = len(buf.edge_vertices) // 2
+
+        # Coin carré moins quart de disque tangent
+        box_cs = m.CrossSection.square([r + 0.01, r + 0.01], center=False).translate([-0.01, -0.01])
+        circle_cs = m.CrossSection.circle(r, segs).translate([r, r])
+        fillet_cs = box_cs - circle_cs
+
+        for idx in edge_indices:
+            if idx < 0 or idx >= n_edges:
+                continue
+            p0 = buf.edge_vertices[2 * idx]
+            p1 = buf.edge_vertices[2 * idx + 1]
+            vec = p1 - p0
+            l_edge = float(np.linalg.norm(vec))
+            if l_edge < 1e-4:
+                continue
+
+            tool = m.Manifold.extrude(fillet_cs, l_edge + 0.2).translate([0.0, 0.0, -0.1])
+            uz = vec / l_edge
+            up_ref = np.array([0.0, 0.0, 1.0]) if abs(uz[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+            ux = np.cross(uz, up_ref)
+            norm_ux = float(np.linalg.norm(ux))
+            if norm_ux > 1e-6:
+                ux /= norm_ux
+            uy = np.cross(uz, ux)
+
+            mat_3x4 = [
+                [float(ux[0]), float(uy[0]), float(uz[0]), float(p0[0])],
+                [float(ux[1]), float(uy[1]), float(uz[1]), float(p0[1])],
+                [float(ux[2]), float(uy[2]), float(uz[2]), float(p0[2])]
+            ]
+            tools.append(tool.transform(mat_3x4))
+
+        if not tools:
+            return None
+
+        combined = tools[0]
+        for t in tools[1:]:
+            combined = combined + t
+        carved = target.manifold - combined
+        if carved.is_empty() or carved.volume() < 1e-4:
+            return None
+        return Solid(carved, f"{target.name}_Fillet")
+
 
 class ChamferFeature(Feature):
     """
@@ -442,11 +507,13 @@ class ChamferFeature(Feature):
         name: str = "Chamfer",
         target_body_id: str = "",
         distance: float = 2.0,
-        edges_mode: str = "all"
+        edges_mode: str = "all",
+        edge_indices: Optional[List[int]] = None
     ) -> None:
         super().__init__(feature_id, name)
         self.target_body_id = target_body_id
         self.edges_mode = edges_mode
+        self.edge_indices = edge_indices
         self.parameters = {
             "distance": float(distance),
         }
@@ -461,6 +528,15 @@ class ChamferFeature(Feature):
 
         target = updated[tgt_key]
         d = max(0.01, float(self.parameters.get("distance", 2.0)))
+
+        # 1. Biseaux sur arêtes topologiques spécifiques si edge_indices est fourni
+        if self.edge_indices is not None and len(self.edge_indices) > 0:
+            res_solid = self._apply_edge_indices_chamfer(target, d, self.edge_indices)
+            if res_solid is not None:
+                updated[tgt_key] = res_solid
+                self.status = FeatureStatus.OK
+                return updated
+
         b_min, b_max = target.bounding_box()
         x0, x1 = b_min.x, b_max.x
         y0, y1 = b_min.y, b_max.y
@@ -499,6 +575,60 @@ class ChamferFeature(Feature):
         updated[tgt_key] = chamfered
         self.status = FeatureStatus.OK
         return updated
+
+    @staticmethod
+    def _apply_edge_indices_chamfer(
+        target: Solid,
+        d: float,
+        edge_indices: Sequence[int]
+    ) -> Optional[Solid]:
+        """Applique des biseaux sur des arêtes topologiques spécifiques du maillage."""
+        buf = target.to_mesh_buffer()
+        if buf.is_empty() or buf.edge_vertices is None or len(buf.edge_vertices) < 2:
+            return None
+
+        tools: List[m.Manifold] = []
+        n_edges = len(buf.edge_vertices) // 2
+
+        # Section transversale de biseau triangulaire
+        cutter_cs = m.CrossSection([[[-0.01, -0.01], [d, -0.01], [-0.01, d]]])
+
+        for idx in edge_indices:
+            if idx < 0 or idx >= n_edges:
+                continue
+            p0 = buf.edge_vertices[2 * idx]
+            p1 = buf.edge_vertices[2 * idx + 1]
+            vec = p1 - p0
+            l_edge = float(np.linalg.norm(vec))
+            if l_edge < 1e-4:
+                continue
+
+            tool = m.Manifold.extrude(cutter_cs, l_edge + 0.2).translate([0.0, 0.0, -0.1])
+            uz = vec / l_edge
+            up_ref = np.array([0.0, 0.0, 1.0]) if abs(uz[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+            ux = np.cross(uz, up_ref)
+            norm_ux = float(np.linalg.norm(ux))
+            if norm_ux > 1e-6:
+                ux /= norm_ux
+            uy = np.cross(uz, ux)
+
+            mat_3x4 = [
+                [float(ux[0]), float(uy[0]), float(uz[0]), float(p0[0])],
+                [float(ux[1]), float(uy[1]), float(uz[1]), float(p0[1])],
+                [float(ux[2]), float(uy[2]), float(uz[2]), float(p0[2])]
+            ]
+            tools.append(tool.transform(mat_3x4))
+
+        if not tools:
+            return None
+
+        combined = tools[0]
+        for t in tools[1:]:
+            combined = combined + t
+        carved = target.manifold - combined
+        if carved.is_empty() or carved.volume() < 1e-4:
+            return None
+        return Solid(carved, f"{target.name}_Chamfer")
 
 
 class DraftFeature(Feature):

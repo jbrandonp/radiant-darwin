@@ -224,3 +224,29 @@ def test_localized_top_edge_fillet_preserves_planar_bottom() -> None:
     assert b_min.y == pytest.approx(0.0, abs=1e-3)
     assert b_max.z == pytest.approx(20.0, abs=1e-3)
 
+
+def test_specific_edge_fillet_and_chamfer() -> None:
+    """Vérifie l'arrondi et le chanfrein ciblé sur des arêtes topologiques spécifiques (edge_indices)."""
+    from src.core.geometry import make_box
+    from src.core.operations.surfaces import FilletFeature, ChamferFeature
+    from src.core.types import FeatureStatus
+
+    box = make_box(20.0, 20.0, 20.0, center=False)
+    bodies = {"b1": box}
+
+    # 1. Chanfrein sur arête 0 uniquement
+    chamfer = ChamferFeature("ch_edge", target_body_id="b1", distance=2.0, edge_indices=[0])
+    res_ch = chamfer.evaluate(bodies, {})
+    assert chamfer.status == FeatureStatus.OK
+    ch_solid = res_ch["b1"]
+    assert ch_solid.volume() < box.volume()
+    assert ch_solid.is_watertight() is True
+
+    # 2. Congé sur arête 0 uniquement
+    fillet = FilletFeature("fl_edge", target_body_id="b1", radius=2.0, edge_indices=[0])
+    res_fl = fillet.evaluate(bodies, {})
+    assert fillet.status == FeatureStatus.OK
+    fl_solid = res_fl["b1"]
+    assert fl_solid.volume() < box.volume()
+    assert fl_solid.is_watertight() is True
+

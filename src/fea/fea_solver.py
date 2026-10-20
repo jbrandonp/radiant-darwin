@@ -59,7 +59,10 @@ class FEASimulator:
         if len(base_pts) >= 4:
             dx = max(1.0, float(np.ptp(base_pts[:, 0])))
             dy = max(1.0, float(np.ptp(base_pts[:, 1])))
-            return max(1.0, dx * dy * 0.7854)
+            bbox_base_area = dx * dy
+            avg_area = vol_fallback / max(0.001, z_range)
+            shape_factor = min(1.0, max(0.2, avg_area / max(1.0, bbox_base_area)))
+            return max(1.0, bbox_base_area * shape_factor)
         return max(1.0, vol_fallback / max(0.001, z_range))
 
     def run_static_analysis(

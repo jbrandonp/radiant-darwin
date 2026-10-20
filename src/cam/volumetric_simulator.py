@@ -95,7 +95,8 @@ class VolumetricStockSimulator:
         self,
         start_pt: Tuple[float, float, float],
         end_pt: Tuple[float, float, float],
-        tool_diameter_mm: float
+        tool_diameter_mm: float,
+        tool_type: str = "ball"
     ) -> float:
         """
         Simule une passe de découpe linéaire et retourne le volume enlevé en cm³.
@@ -113,7 +114,7 @@ class VolumetricStockSimulator:
             p = (1.0 - t) * p0 + t * p1
             pts.append((float(p[0]), float(p[1]), float(p[2])))
 
-        self.simulate_toolpath_cut(pts, radius)
+        self.simulate_toolpath_cut(pts, radius, tool_type=tool_type)
         final_vol_cm3 = self.get_remaining_volume_cm3()
         return max(0.0, init_vol_cm3 - final_vol_cm3)
 
@@ -141,17 +142,44 @@ class VolumetricStockSimulator:
         kernel = (X ** 2 + Y ** 2 + Z ** 2) <= (r ** 2)
         return kernel, r_vox
 
-    def _carve_point(self, ix: int, iy: int, iz: int, r_vox: int, kernel: np.ndarray) -> None:
+    def _build_voxel_cylinder_kernel(
+        self,
+        r: float,
+        flute_length_mm: float = 0.0
+    ) -> Tuple[np.ndarray, int, int]:
+        """Précalcule le masque booléen 3D pour une fraise cylindrique plate (Flat End Mill)."""
+        r_vox = max(1, int(np.ceil(r / self.res)))
+        flute_len = max(self.res, flute_length_mm if flute_length_mm > 0.0 else r * 2.0)
+        h_vox = max(1, int(np.ceil(flute_len / self.res)))
+        xy_range = np.arange(-r_vox, r_vox + 1, dtype=np.float64) * self.res
+        z_range = np.arange(0, h_vox + 1, dtype=np.float64) * self.res
+        X, Y, Z = np.meshgrid(xy_range, xy_range, z_range, indexing="ij")
+        kernel = (X ** 2 + Y ** 2) <= (r ** 2)
+        return kernel, r_vox, h_vox
+
+    def _carve_point(
+        self,
+        ix: int,
+        iy: int,
+        iz: int,
+        r_vox: int,
+        kernel: np.ndarray,
+        h_vox: Optional[int] = None
+    ) -> None:
         """Découpe un point d'usinage vectorisé sans boucle scalaire Python."""
         i0, i1 = max(0, ix - r_vox), min(self.nx, ix + r_vox + 1)
         j0, j1 = max(0, iy - r_vox), min(self.ny, iy + r_vox + 1)
-        k0, k1 = max(0, iz - r_vox), min(self.nz, iz + r_vox + 1)
+        if h_vox is not None:
+            k0, k1 = max(0, iz), min(self.nz, iz + h_vox + 1)
+            kk0, kk1 = k0 - iz, k0 - iz + (k1 - k0)
+        else:
+            k0, k1 = max(0, iz - r_vox), min(self.nz, iz + r_vox + 1)
+            kk0, kk1 = k0 - (iz - r_vox), k0 - (iz - r_vox) + (k1 - k0)
         if i0 >= i1 or j0 >= j1 or k0 >= k1:
             return
 
         ki0, ki1 = i0 - (ix - r_vox), i0 - (ix - r_vox) + (i1 - i0)
         kj0, kj1 = j0 - (iy - r_vox), j0 - (iy - r_vox) + (j1 - j0)
-        kk0, kk1 = k0 - (iz - r_vox), k0 - (iz - r_vox) + (k1 - k0)
 
         self.grid[i0:i1, j0:j1, k0:k1] &= ~kernel[ki0:ki1, kj0:kj1, kk0:kk1]
 
@@ -180,20 +208,27 @@ class VolumetricStockSimulator:
     def simulate_toolpath_cut(
         self,
         points: List[Tuple[float, float, float]],
-        tool_radius_mm: float
+        tool_radius_mm: float,
+        tool_type: str = "ball",
+        flute_length_mm: float = 0.0
     ) -> None:
-        """Soustrait la matière le long de la trajectoire par balayage cylindrique vectorisé."""
+        """Soustrait la matière le long de la trajectoire par balayage vectorisé."""
         if not points:
             return
         r = float(tool_radius_mm)
-        kernel, r_vox = self._build_voxel_sphere_kernel(r)
+        if tool_type == "flat":
+            kernel, r_vox, h_vox = self._build_voxel_cylinder_kernel(r, flute_length_mm)
+            active_h: Optional[int] = h_vox
+        else:
+            kernel, r_vox = self._build_voxel_sphere_kernel(r)
+            active_h = None
         dense_points = self._interpolate_toolpath_points(points)
 
         for px, py, pz in dense_points:
             ix = int(np.round(px / self.res))
             iy = int(np.round(py / self.res))
             iz = int(np.round(pz / self.res))
-            self._carve_point(ix, iy, iz, r_vox, kernel)
+            self._carve_point(ix, iy, iz, r_vox, kernel, h_vox=active_h)
 
     def generate_report(self, collisions: Optional[List[str]] = None) -> StockVoxelReport:
         """Calcule le volume exact de copeaux enlevés et l'état final."""

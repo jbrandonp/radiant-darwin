@@ -64,3 +64,31 @@ def test_cam_facade_post_processor() -> None:
     ops: list[ToolpathOperation] = []
     metrics = IndustrialPostProcessor.calculate_metrics(ops)
     assert metrics.total_distance_mm == 0.0
+
+
+def test_cam_facade_volumetric_flat_and_ball_milling() -> None:
+    """Vérifie le balayage volumique pour fraise plate (flat end mill) et hémisphérique (ball)."""
+    sim = VolumetricStockSimulator(stock_size=(50.0, 50.0, 20.0), voxel_pitch_mm=2.0)
+    init_vol = sim.get_remaining_volume_cm3()
+
+    # Découpe plate (flat end mill)
+    cut_flat = sim.simulate_linear_cut(
+        start_pt=(5.0, 25.0, 15.0),
+        end_pt=(45.0, 25.0, 15.0),
+        tool_diameter_mm=10.0,
+        tool_type="flat"
+    )
+    assert cut_flat > 0.0
+    assert sim.get_remaining_volume_cm3() < init_vol
+
+    # Découpe hémisphérique (ball end mill)
+    mid_vol = sim.get_remaining_volume_cm3()
+    cut_ball = sim.simulate_linear_cut(
+        start_pt=(25.0, 5.0, 15.0),
+        end_pt=(25.0, 45.0, 15.0),
+        tool_diameter_mm=10.0,
+        tool_type="ball"
+    )
+    assert cut_ball > 0.0
+    assert sim.get_remaining_volume_cm3() < mid_vol
+

@@ -93,6 +93,19 @@ Dans le viewport PyOpenGL :
 
 ---
 
+## 🔬 Fondements Scientifiques des Architectures Mémoire (2024-2026)
+
+### 1. Disposition Structure of Arrays (SoA) vs Array of Structures (AoS)
+Dans le traitement géométrique intensif (traversée BVH, projection de sommets) :
+- **AoS ($[(X, Y, Z, N_x, N_y, N_z), ...]$)** pollue le cache L1 en chargeant des normales et attributs superflus lors du balayage des seules coordonnées spatiales.
+- **SoA ($\mathbf{X} = [x_0, x_1, ...], \mathbf{Y} = [y_0, y_1, ...], \mathbf{Z} = [z_0, z_1, ...]$)** permet un chargement direct dans les registres vectoriels SIMD 512-bits (AVX-512 / ARM Neon) sans surcoût de réalignement (*shuffle overhead*), saturant la bande passante maximale de la DRAM.
+
+### 2. Hiérarchies Spatiales Cache-Oblivious (Agencement de van Emde Boas)
+- Minimise les transferts de mémoire vers le cache avec une borne asymptotique optimale $Q(N) = O(N/B)$ pour un arbre spatial à $N$ nœuds sans nécessiter la calibration manuelle de la taille de ligne de cache $B$ ou de la capacité mémoire $M$.
+- Subdivise récursivement la hiérarchie de boîtes englobantes (BVH) en sous-arbres stockés de manière contiguë en mémoire vive, garantissant une traversée optimale sur l'ensemble des niveaux L1, L2, L3 et RAM.
+
+---
+
 ## 🧰 Outils & Références d'Accompagnement
 - **Profiler Mémoire Zéro-Allocation** : [`scripts/profile_zero_alloc.py`](scripts/profile_zero_alloc.py) — mesure déterministe des deltas d'allocation heap et vérification de contiguïté C des matrices NumPy.
 - **Guide Haute Performance Mémoire** : [`references/zero_alloc_guide.md`](references/zero_alloc_guide.md) — hiérarchie des caches processeur, protocoles de tampons et streaming VBO GPU.

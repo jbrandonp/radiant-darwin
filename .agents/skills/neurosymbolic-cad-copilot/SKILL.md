@@ -90,6 +90,18 @@ Active ce skill pour :
 
 ---
 
+## 🔬 Avancées Scientifiques de Synthèse CAO Neurosymbolique (CVPR & SIGGRAPH 2024-2026)
+
+### 1. Apprentissage par Renforcement Multi-Experts (CME-CAD, CVPR)
+- Combine un pré-entraînement supervisé multi-experts (MEFT) et un apprentissage par renforcement (MERL) évaluant la fidélité de reconstruction 3D sans approximation polygonale.
+- Utilise des oracles d'exécution symboliques (Manifold3D / B-Rep) comme signaux de récompense denses pour guider la génération de code paramétrique directement éditable.
+
+### 2. Séquençage par Pointeurs Topologiques (Pointer-CAD, CVPR)
+- Élimine les erreurs de discrétisation de coordonnées continues en modélisant les références d'esquisse et de protrusion comme des pointeurs discrets explicites dans le graphe d'entités.
+- Empêche les bifurcations topologiques catastrophiques lors des opérations d'extrusion et de révolution chaînées.
+
+---
+
 ## 🧰 Outils & Références d'Accompagnement
 - **Validateur AST de Script IA** : [`scripts/validate_cad_prompt_ast.py`](scripts/validate_cad_prompt_ast.py) — contrôle l'ancrage dans les primitives CAO autorisées et bloque les méthodes privées.
 - **Guide d'Ancrage Neurosymbolique** : [`references/neurosymbolic_patterns.md`](references/neurosymbolic_patterns.md) — patrons d'arbre d'entités, DSL et transactions atomiques avec rollback.

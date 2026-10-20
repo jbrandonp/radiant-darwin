@@ -73,6 +73,18 @@ Parmi les candidats ayant validé 100% des oracles :
 
 ---
 
+## 🔬 Fondements Scientifiques du Test-Time Compute (TTC 2024-2026)
+
+### 1. Lois d'Échelle au Test-Time & Recherche Arborescente MCTS
+- L'augmentation du budget de calcul à l'inférence via recherche arborescente de Monte Carlo (MCTS) ou Best-of-$N$ guidé par des modèles de récompense par étape (*Process Reward Models - PRMs*) surpasse systématiquement l'augmentation de la taille des paramètres pré-entraînés.
+- Utilise des oracles d'exécution géométrique comme signaux d'élagage anticipé pour tronquer les branches non admissibles dès l'étape d'esquisse sans évaluer la géométrie 3D complète.
+
+### 2. Réparation Inductive Guidée par Contre-Exemples (CEGIS)
+- *Counter-Example Guided Inductive Synthesis* : lorsqu'un programme échoue à un invariant, l'oracle isole la coordonnée ou le sous-graphe exact du contre-exemple.
+- L'erreur est injectée comme contrainte symbolique additionnelle dans le tour de génération suivant, garantissant la convergence monotone vers une solution conforme.
+
+---
+
 ## 🧰 Outils & Références d'Accompagnement
 - **Harnais de Synthèse & Oracles** : [`scripts/synthesize_and_verify.py`](scripts/synthesize_and_verify.py) — exécute le filtrage AST statique sandbox et le contrôle par les 4 oracles géométriques formels.
 - **Spécification Mathématique des Oracles** : [`references/oracles_specification.md`](references/oracles_specification.md) — intégration de volume par Gauss-Ostrogradski et invariance d'Euler $\chi = 2$.

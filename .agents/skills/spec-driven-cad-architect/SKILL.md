@@ -66,6 +66,19 @@ Toute nouvelle fonctionnalité ou refactorisation doit être spécifiée selon c
 
 ---
 
+## 🔬 Fondements Scientifiques du Calcul Géométrique Exact (EGC 2024-2026)
+
+### 1. Séparation Décision Combinatoire vs Construction Géométrique
+- En géométrie computationnelle moderne, les décisions combinatoires (prédicats topologiques : point intérieur/extérieur, orientation 3D) doivent être résolues avec une exactitude absolue, tandis que les constructions (coordonnées des points d'intersection) admettent une approximation d'intervalle contrôlée.
+- Cette distinction prévient les effondrements de topologie (bords ouverts, facettes non-manifold) dus aux approximations flottantes IEEE 754.
+
+### 2. Prédicats Adaptatifs Multi-Niveaux de Shewchuk
+- **Niveau 1 (Fast Path Flottant)** : Évaluation rapide en double précision standard avec borne d'erreur statique $\varepsilon$. Si $|\det(\mathbf{A})| > \varepsilon$, le signe est mathématiquement certain et la fonction retourne immédiatement ($>99\%$ des requêtes).
+- **Niveau 2 (Filtre d'Intervalles Dynamique)** : Encadrement par arithmétique d'intervalles $[a, b]$ si le déterminant approche de zéro.
+- **Niveau 3 (Arithmétique d'Expansion Exacte)** : Calcul sur sommes non évaluées de flottants pour déterminer le signe exact sans basculer sur des bibliothèques multiprécision lentes.
+
+---
+
 ## 🧰 Outils & Références d'Accompagnement
 - **Auditeur de Spécifications Formelles** : [`scripts/audit_feature_contract.py`](scripts/audit_feature_contract.py) — vérifie la complétude des 4 quadrants dans les documents de spécification.
 - **Modèle de Spécification Formelle** : [`templates/cad_spec_contract_template.md`](templates/cad_spec_contract_template.md) — gabarit contractuel standardisé pour définir les invariants, gardes et tests.

@@ -84,6 +84,23 @@ Exécuter la vérification en cascade :
 
 ---
 
+## 🔬 Fondements Scientifiques de l'Auto-Guérison Logicielle (APR 2024-2026)
+
+### 1. Tests Métamorphiques pour Noyaux Numériques
+- Dans les logiciels géométriques complexes (CAO, CFD, FEA), l'oracle de vérité terrain n'est pas toujours disponible sous forme de valeur exacte fermée.
+- La vérification repose sur des **relations métamorphiques** fondamentales :
+  - *Invariance par rotation* : $\text{Vol}(\mathcal{R}_\theta(S)) = \text{Vol}(S)$
+  - *Idempotence booléenne* : $S \cup S = S$ et $S \cap S = S$
+  - *Homogénéité dimensionnelle* : $\text{Vol}(k \cdot S) = k^3 \cdot \text{Vol}(S)$
+- Si une modification viole l'une de ces relations métamorphiques sur un maillage aléatoire, une régression numérique est immédiatement diagnostiquée.
+
+### 2. Réparation de Programmes Automatisée (APR) par Élimination de Régressions
+- Classification formelle des patchs candidats :
+  - *Patch Plausible* : Fait passer le test unitaire échoué mais peut introduire des régressions cachées.
+  - *Patch Correct* : Fait passer le test échoué ET préserve 100% de la matrice de couverture et du Quality Gate ISO 25010 sans régression.
+
+---
+
 ## ⚡ Patrons Avancés de Loop Engineering (Cherny & Steinberger 2026)
 
 ### 1. "Prompts Burn, Skills Compound"

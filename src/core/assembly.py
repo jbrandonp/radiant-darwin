@@ -133,7 +133,11 @@ class AssemblySolver:
         if desired_v is not None:
             r_step = cls._compute_rodrigues_rotation(v_curr, desired_v)
             if r_step is not None:
+                # Rotation rigide autour du point d'ancrage local (préserve le centre de liaison)
                 target_inst.transform_matrix[0:3, 0:3] = r_step @ target_inst.transform_matrix[0:3, 0:3]
+                target_inst.transform_matrix[0:3, 3] = (
+                    r_step @ target_inst.transform_matrix[0:3, 3] + (np.eye(3) - r_step) @ pt_tgt_curr
+                )
                 pt_tgt_curr = target_inst.transform_matrix[0:3, 0:3] @ pt_tgt + target_inst.transform_matrix[0:3, 3]
 
         if mate.mate_type in (MateType.COINCIDENT_PLANES, MateType.DISTANCE):
@@ -150,19 +154,57 @@ class AssemblySolver:
             target_inst.transform_matrix[0:3, 3] += disp
 
     @classmethod
+    def _compute_mate_residual(
+        cls,
+        mate: AssemblyMate,
+        instances: Dict[str, AssemblyInstance]
+    ) -> float:
+        """Calcule l'erreur résiduelle géométrique (distance et désalignement angulaire) d'une liaison."""
+        id1, id2 = mate.instance1_id, mate.instance2_id
+        if id1 not in instances or id2 not in instances:
+            return 0.0
+        inst1, inst2 = instances[id1], instances[id2]
+        p1 = inst1.transform_matrix[0:3, 0:3] @ np.array(mate.point1, dtype=np.float64) + inst1.transform_matrix[0:3, 3]
+        p2 = inst2.transform_matrix[0:3, 0:3] @ np.array(mate.point2, dtype=np.float64) + inst2.transform_matrix[0:3, 3]
+        a1 = inst1.transform_matrix[0:3, 0:3] @ np.array(mate.axis1, dtype=np.float64)
+        a2 = inst2.transform_matrix[0:3, 0:3] @ np.array(mate.axis2, dtype=np.float64)
+        n1 = float(np.linalg.norm(a1))
+        n2 = float(np.linalg.norm(a2))
+        if n1 > 1e-9:
+            a1 /= n1
+        if n2 > 1e-9:
+            a2 /= n2
+
+        if mate.mate_type in (MateType.COINCIDENT_PLANES, MateType.DISTANCE):
+            dist_err = abs(float(np.dot(p1 - p2, a1)) - mate.offset)
+            ang_err = abs(float(np.dot(a1, a2)) + 1.0)
+            return dist_err + ang_err
+        elif mate.mate_type == MateType.COAXIAL:
+            disp = p1 - p2
+            rad_err = float(np.linalg.norm(disp - float(np.dot(disp, a1)) * a1))
+            ang_err = abs(float(np.dot(a1, a2)) - 1.0)
+            return rad_err + ang_err
+        return float(np.linalg.norm(p1 - p2))
+
+    @classmethod
     def solve_mates(
         cls,
         instances: Dict[str, AssemblyInstance],
         mates: List[AssemblyMate],
-        max_iterations: int = 5
+        max_iterations: int = 15,
+        tolerance: float = 1e-4
     ) -> bool:
         """
-        Résout le système de contraintes d'assemblage et met à jour les matrices de pose.
-        Itère pour converger vers la satisfaction conjointe de toutes les liaisons mécaniques.
+        Résout le système de contraintes d'assemblage par relaxation itérative non-linéaire.
+        Itère jusqu'à convergence sous la tolérance géométrique pour satisfaire les boucles cinématiques.
         """
         for _ in range(max_iterations):
             for mate in mates:
                 cls._apply_single_mate(mate, instances)
+
+            max_err = max((cls._compute_mate_residual(m, instances) for m in mates), default=0.0)
+            if max_err < tolerance:
+                return True
         return True
 
     _MATE_DOF_REDUCTIONS: Dict[MateType, int] = {

@@ -702,6 +702,78 @@ class STEPImporter:
 
         return triangles
 
+    @staticmethod
+    def _bridge_hole_to_outer(
+        outer_2d: List[Tuple[float, float]],
+        outer_indices: List[int],
+        inner_2d: List[Tuple[float, float]],
+        inner_indices: List[int]
+    ) -> Tuple[List[Tuple[float, float]], List[int]]:
+        """Relie un contour intérieur (trou) au contour extérieur via un pont de découpe pour l'Ear Clipping."""
+        if not inner_2d or not outer_2d:
+            return outer_2d, outer_indices
+
+        inner_best_idx = 0
+        max_x = inner_2d[0][0]
+        for idx, pt in enumerate(inner_2d):
+            if pt[0] > max_x:
+                max_x = pt[0]
+                inner_best_idx = idx
+
+        inner_pt = inner_2d[inner_best_idx]
+
+        outer_best_idx = 0
+        min_dist_sq = float("inf")
+        for idx, pt in enumerate(outer_2d):
+            d_sq = (pt[0] - inner_pt[0]) ** 2 + (pt[1] - inner_pt[1]) ** 2
+            if d_sq < min_dist_sq:
+                min_dist_sq = d_sq
+                outer_best_idx = idx
+
+        n_in = len(inner_2d)
+        rotated_in_pts = [inner_2d[(inner_best_idx + i) % n_in] for i in range(n_in)]
+        rotated_in_indices = [inner_indices[(inner_best_idx + i) % n_in] for i in range(n_in)]
+
+        new_outer_2d = (
+            outer_2d[:outer_best_idx + 1]
+            + rotated_in_pts
+            + [rotated_in_pts[0], outer_2d[outer_best_idx]]
+            + outer_2d[outer_best_idx + 1:]
+        )
+        new_outer_indices = (
+            outer_indices[:outer_best_idx + 1]
+            + rotated_in_indices
+            + [rotated_in_indices[0], outer_indices[outer_best_idx]]
+            + outer_indices[outer_best_idx + 1:]
+        )
+        return new_outer_2d, new_outer_indices
+
+    @classmethod
+    def _process_face_inner_wires(
+        cls,
+        face: NexusFace,
+        pts_2d: List[Tuple[float, float]],
+        face_vert_indices: List[int],
+        all_verts: List[List[float]],
+        vert_lookup: Dict[Tuple[float, float, float], int]
+    ) -> Tuple[List[Tuple[float, float]], List[int]]:
+        """Intègre les boucles intérieures (trous) dans le contour 2D par pontage pour l'Ear Clipping."""
+        for inner_wire in face.inner_wires:
+            in_pts = inner_wire.sample_points(32)
+            if len(in_pts) >= 3:
+                in_indices: List[int] = []
+                for ip in in_pts:
+                    ik = (round(float(ip[0]), 5), round(float(ip[1]), 5), round(float(ip[2]), 5))
+                    if ik not in vert_lookup:
+                        vert_lookup[ik] = len(all_verts)
+                        all_verts.append([float(ip[0]), float(ip[1]), float(ip[2])])
+                    in_indices.append(vert_lookup[ik])
+                in_pts_2d = cls._project_polygon_3d_to_2d(in_pts)
+                pts_2d, face_vert_indices = cls._bridge_hole_to_outer(
+                    pts_2d, face_vert_indices, in_pts_2d, in_indices
+                )
+        return pts_2d, face_vert_indices
+
     @classmethod
     def _triangulate_brep_faces(
         cls,
@@ -728,6 +800,10 @@ class STEPImporter:
                 face_vert_indices.append(vert_lookup[k])
 
             pts_2d = cls._project_polygon_3d_to_2d(pts)
+            pts_2d, face_vert_indices = cls._process_face_inner_wires(
+                face, pts_2d, face_vert_indices, all_verts, vert_lookup
+            )
+
             face_triangles = cls._triangulate_polygon_ear_clipping_2d(pts_2d, face_vert_indices)
 
             for tri in face_triangles:

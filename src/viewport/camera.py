@@ -28,6 +28,21 @@ class CADCamera:
         self.fov_deg: float = 45.0
         self.near_plane: float = 0.5
         self.far_plane: float = 5000.0
+        self.is_orthographic: bool = False
+
+    def get_ortho_height(self) -> float:
+        """Calcule la hauteur du volume de vue orthographique en unités monde."""
+        half_fov_rad = np.radians(self.fov_deg * 0.5)
+        return float(2.0 * self.distance * np.tan(half_fov_rad))
+
+    def get_ortho_width(self, aspect_ratio: float) -> float:
+        """Calcule la largeur du volume de vue orthographique en unités monde."""
+        return self.get_ortho_height() * max(1e-4, float(aspect_ratio))
+
+    def toggle_projection_mode(self) -> bool:
+        """Bascule entre la vue perspective et la vue orthographique."""
+        self.is_orthographic = not self.is_orthographic
+        return self.is_orthographic
 
     def orbit(self, delta_yaw: float, delta_pitch: float) -> None:
         """Fait tourner la caméra autour de la cible."""
@@ -39,25 +54,8 @@ class CADCamera:
         if viewport_height <= 0:
             return
 
-        # Ajuster l'échelle selon la distance et la taille de la fenêtre
         scale = (self.distance * 0.002) * (600.0 / max(100.0, float(viewport_height)))
-
-        # Calculer les vecteurs droit et haut dans le repère de la caméra
-        yaw_rad = np.radians(self.yaw_deg)
-        pitch_rad = np.radians(self.pitch_deg)
-
-        forward = Vector3D(
-            float(np.cos(pitch_rad) * np.sin(yaw_rad)),
-            float(np.cos(pitch_rad) * np.cos(yaw_rad)),
-            float(np.sin(pitch_rad))
-        )
-        # Éviter la singularité du produit vectoriel au zénith/nadir (vues TOP et BOTTOM)
-        if abs(self.pitch_deg) > 85.0:
-            world_up = Vector3D(0.0, 1.0, 0.0) if self.pitch_deg > 0 else Vector3D(0.0, -1.0, 0.0)
-        else:
-            world_up = Vector3D(0.0, 0.0, 1.0)
-        right = forward.cross(world_up).normalized()
-        up = right.cross(forward).normalized()
+        _forward, right, up = self.get_camera_axes()
 
         offset_x = right.scale(-delta_screen_x * scale * 25.0)
         offset_y = up.scale(delta_screen_y * scale * 25.0)
@@ -120,17 +118,15 @@ class CADCamera:
         Calcule les trois vecteurs unitaires du repère caméra dans le monde :
         (forward_dir, right_dir, up_dir).
         forward_dir pointe de l'œil vers la cible.
+        Garantit une continuité géométrique sans singularité ni saut d'Euler.
         """
         eye = self.get_eye_position()
         forward = self.target.subtract(eye).normalized()
 
-        if abs(self.pitch_deg) > 85.0:
-            world_up = Vector3D(0.0, 1.0, 0.0) if self.pitch_deg > 0 else Vector3D(0.0, -1.0, 0.0)
-        else:
-            world_up = Vector3D(0.0, 0.0, 1.0)
-
-        right = forward.cross(world_up).normalized()
-        up = right.cross(forward).normalized()
+        yaw_rad = np.radians(self.yaw_deg)
+        # Vecteur droit horizontal continu orthogonal à la ligne de visée
+        right = Vector3D(float(np.cos(yaw_rad)), float(-np.sin(yaw_rad)), 0.0).normalized()
+        up = forward.cross(right).normalized()
         return (forward, right, up)
 
     def unproject_ray(
@@ -142,7 +138,7 @@ class CADCamera:
     ) -> Tuple[Vector3D, Vector3D]:
         """
         Convertit un clic écran 2D en rayon spatial 3D (Origine, Direction unitaire).
-        Permet le picking 3D interactif des faces, arêtes et sommets à la souris.
+        Gère à la fois la perspective (rayons coniques) et l'orthographique (rayons parallèles).
         """
         w = max(1.0, float(viewport_width))
         h = max(1.0, float(viewport_height))
@@ -150,15 +146,25 @@ class CADCamera:
         # Coordonnées normalisées [-1.0, +1.0]
         x_ndc = (2.0 * screen_x / w) - 1.0
         y_ndc = 1.0 - (2.0 * screen_y / h)
-
         aspect_ratio = w / h
+
+        forward, right, up = self.get_camera_axes()
+
+        if self.is_orthographic:
+            ortho_h = self.get_ortho_height()
+            ortho_w = self.get_ortho_width(aspect_ratio)
+            x_world = x_ndc * (ortho_w * 0.5)
+            y_world = y_ndc * (ortho_h * 0.5)
+            ray_origin = self.get_eye_position().add(right.scale(x_world)).add(up.scale(y_world))
+            ray_dir = forward
+            return (ray_origin, ray_dir)
+
         half_fov_rad = np.radians(self.fov_deg * 0.5)
         tan_half_fov = float(np.tan(half_fov_rad))
 
         x_cam = x_ndc * aspect_ratio * tan_half_fov
         y_cam = y_ndc * tan_half_fov
 
-        forward, right, up = self.get_camera_axes()
         ray_dir = forward.add(right.scale(x_cam)).add(up.scale(y_cam)).normalized()
         ray_origin = self.get_eye_position()
 

@@ -143,51 +143,75 @@ class CADValidator:
             quality_score_percent=final_score
         )
 
-    @staticmethod
-    def check_scene_interferences(bodies: Dict[str, Solid]) -> List[InterferenceReport]:
+    @classmethod
+    def check_scene_interferences(cls, bodies: Dict[str, Solid]) -> List[InterferenceReport]:
         """
-        Détecte les collisions et interférences physiques volumiques entre toutes les pièces de la scène.
+        Détecte les collisions/interférences physiques entre tous les corps solides d'un assemblage.
+        Utilise un algorithme spatial Sweep-and-Prune O(N log N) pour la phase large (Broadphase),
+        filtrant les faux positifs par volume d'englobement avant l'intersection exacte CSG (Narrowphase).
         """
+        entries = cls._collect_sorted_body_entries(bodies)
+        candidates = cls._find_broadphase_candidates(entries)
         reports: List[InterferenceReport] = []
-        body_keys = list(bodies.keys())
-        n = len(body_keys)
-
-        for i in range(n):
-            for j in range(i + 1, n):
-                id1 = body_keys[i]
-                id2 = body_keys[j]
-                s1 = bodies[id1]
-                s2 = bodies[id2]
-
-                if s1.is_empty() or s2.is_empty():
-                    continue
-
-                # 1. Test préliminaire rapide d'AABB (Bounding Box Broadphase)
-                min1, max1 = s1.bounding_box()
-                min2, max2 = s2.bounding_box()
-
-                overlap_x = (min1.x <= max2.x) and (max1.x >= min2.x)
-                overlap_y = (min1.y <= max2.y) and (max1.y >= min2.y)
-                overlap_z = (min1.z <= max2.z) and (max1.z >= min2.z)
-
-                if not (overlap_x and overlap_y and overlap_z):
-                    continue
-
-                # 2. Test volumique exact CSG Narrowphase : s1.intersection(s2)
-                inter_solid = s1.intersection(s2)
-                inter_vol = inter_solid.volume()
-
-                # Tolérance numérique pour éviter les simples contacts surfaciques (touching faces)
-                if inter_vol > 0.01:
-                    reports.append(InterferenceReport(
-                        body_1_id=id1,
-                        body_2_id=id2,
-                        has_collision=True,
-                        clash_volume_mm3=inter_vol,
-                        description=f"Interférence critique détectée entre '{id1}' et '{id2}' (Volume de collision: {inter_vol:.2f} mm³)."
-                    ))
-
+        for cand in candidates:
+            rep = cls._evaluate_narrowphase_clash(cand)
+            if rep is not None:
+                reports.append(rep)
         return reports
+
+    @classmethod
+    def _collect_sorted_body_entries(
+        cls, bodies: Dict[str, Solid]
+    ) -> List[Tuple[str, Solid, Vector3D, Vector3D]]:
+        """Extrait les boîtes englobantes et trie les solides le long de l'axe X pour le Sweep-and-Prune."""
+        valid_entries: List[Tuple[str, Solid, Vector3D, Vector3D]] = []
+        for b_id, solid in bodies.items():
+            if solid.is_empty():
+                continue
+            b_min, b_max = solid.bounding_box()
+            valid_entries.append((b_id, solid, b_min, b_max))
+        valid_entries.sort(key=lambda item: item[2].x)
+        return valid_entries
+
+    @classmethod
+    def _find_broadphase_candidates(
+        cls, entries: List[Tuple[str, Solid, Vector3D, Vector3D]]
+    ) -> List[Tuple[str, str, Solid, Solid]]:
+        """Identifie les paires de corps dont les AABB se chevauchent avec un volume significatif."""
+        candidates: List[Tuple[str, str, Solid, Solid]] = []
+        n = len(entries)
+        for i in range(n):
+            id_i, s_i, min_i, max_i = entries[i]
+            for j in range(i + 1, n):
+                id_j, s_j, min_j, max_j = entries[j]
+                if min_j.x > max_i.x:
+                    break
+                if not (min_i.y <= max_j.y and max_i.y >= min_j.y and min_i.z <= max_j.z and max_i.z >= min_j.z):
+                    continue
+                ov_x = min(max_i.x, max_j.x) - max(min_i.x, min_j.x)
+                ov_y = min(max_i.y, max_j.y) - max(min_i.y, min_j.y)
+                ov_z = min(max_i.z, max_j.z) - max(min_i.z, min_j.z)
+                if (ov_x * ov_y * ov_z) > 0.01:
+                    candidates.append((id_i, id_j, s_i, s_j))
+        return candidates
+
+    @classmethod
+    def _evaluate_narrowphase_clash(
+        cls, cand: Tuple[str, str, Solid, Solid]
+    ) -> Optional[InterferenceReport]:
+        """Effectue le calcul exact CSG Narrowphase pour quantifier le volume de matière en collision."""
+        id1, id2, s1, s2 = cand
+        inter_solid = s1.intersection(s2)
+        inter_vol = inter_solid.volume()
+        if inter_vol > 0.01:
+            return InterferenceReport(
+                body_1_id=id1,
+                body_2_id=id2,
+                has_collision=True,
+                clash_volume_mm3=inter_vol,
+                description=f"Interférence critique détectée entre '{id1}' et '{id2}' (Volume de collision: {inter_vol:.2f} mm³)."
+            )
+        return None
 
     @classmethod
     def get_scene_diagnostics(

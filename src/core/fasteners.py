@@ -52,15 +52,18 @@ class FastenerFeature(Feature):
         operation: BooleanOperation = BooleanOperation.NEW_BODY,
         target_body_id: Optional[str] = None,
         has_washer: bool = False,
-        thread_size: Optional[str] = None
+        thread_size: Optional[str] = None,
+        threaded: bool = True
     ) -> None:
         super().__init__(feature_id, name)
         self.fastener_type = "socket_screw" if fastener_type in ("socket_cap", "socket_screw") else fastener_type
         self.standard_size = thread_size if thread_size is not None else standard_size
         self.has_washer = has_washer
+        self.threaded = threaded
         self.parameters = {
             "length": float(length),
-            "has_washer": 1.0 if has_washer else 0.0
+            "has_washer": 1.0 if has_washer else 0.0,
+            "threaded": 1.0 if threaded else 0.0
         }
         self.operation = operation
         self.target_body_id = target_body_id
@@ -73,21 +76,29 @@ class FastenerFeature(Feature):
             "thread_size": self.standard_size,
             "standard_size": self.standard_size,
             "fastener_type": self.fastener_type,
-            "has_washer": self.has_washer
+            "has_washer": self.has_washer,
+            "threaded": self.threaded
         }
+
+    def _apply_single_param(self, name: str, val: Union[float, str, bool]) -> None:
+        """Assigne un paramètre individuel typé à la quincaillerie."""
+        if name == "length" and isinstance(val, (int, float)):
+            self.parameters["length"] = float(val)
+        elif name in ("thread_size", "standard_size") and isinstance(val, str):
+            self.standard_size = val
+        elif name == "fastener_type" and isinstance(val, str):
+            self.fastener_type = "socket_screw" if val in ("socket_cap", "socket_screw") else val
+        elif name == "has_washer" and isinstance(val, bool):
+            self.has_washer = val
+            self.parameters["has_washer"] = 1.0 if val else 0.0
+        elif name == "threaded" and isinstance(val, bool):
+            self.threaded = val
+            self.parameters["threaded"] = 1.0 if val else 0.0
 
     def set_parameters(self, new_params: Dict[str, Union[float, str, bool]]) -> None:
         """Met à jour les paramètres de la quincaillerie."""
         for name, val in new_params.items():
-            if name == "length" and isinstance(val, (int, float)):
-                self.parameters["length"] = float(val)
-            elif name in ("thread_size", "standard_size") and isinstance(val, str):
-                self.standard_size = val
-            elif name == "fastener_type" and isinstance(val, str):
-                self.fastener_type = "socket_screw" if val in ("socket_cap", "socket_screw") else val
-            elif name == "has_washer" and isinstance(val, bool):
-                self.has_washer = val
-                self.parameters["has_washer"] = 1.0 if val else 0.0
+            self._apply_single_param(name, val)
         self.status = FeatureStatus.OUTDATED
 
     def evaluate(self, existing_bodies: Dict[str, Solid], sketches: Dict[str, Sketch2D]) -> Dict[str, Solid]:
@@ -96,13 +107,13 @@ class FastenerFeature(Feature):
         solid: Solid
 
         if self.fastener_type == "socket_screw":
-            solid = create_socket_head_cap_screw(self.standard_size, l_val, self.name)
+            solid = create_socket_head_cap_screw(self.standard_size, l_val, self.name, threaded=self.threaded)
         elif self.fastener_type == "hex_nut":
-            solid = create_hex_nut(self.standard_size, self.name)
+            solid = create_hex_nut(self.standard_size, self.name, threaded=self.threaded)
         elif self.fastener_type == "washer":
             solid = create_washer(self.standard_size, self.name)
         else:
-            solid = create_hex_bolt(self.standard_size, l_val, self.name)
+            solid = create_hex_bolt(self.standard_size, l_val, self.name, threaded=self.threaded)
 
         if self.has_washer and self.fastener_type in ("hex_bolt", "socket_screw"):
             washer_solid = create_washer(self.standard_size, f"{self.name}_Rondelle")

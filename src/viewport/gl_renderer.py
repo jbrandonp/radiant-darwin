@@ -129,16 +129,27 @@ class GLRenderer:
 
         GL.glClearColor(self.bg_color_bottom[0], self.bg_color_bottom[1], self.bg_color_bottom[2], 1.0)
 
-    def resize_gl(self, width: int, height: int, camera: CADCamera) -> None:
-        """Met à jour la matrice de projection lors d'un redimensionnement."""
-        if height == 0:
-            height = 1
-        GL.glViewport(0, 0, width, height)
+    def setup_projection(self, width: int, height: int, camera: CADCamera) -> None:
+        """Configure la matrice de projection OpenGL (Perspective ou Orthographique)."""
+        h = max(1, height)
+        w = max(1, width)
+        GL.glViewport(0, 0, w, h)
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glLoadIdentity()
-        aspect = float(width) / float(height)
-        gluPerspective(camera.fov_deg, aspect, camera.near_plane, camera.far_plane)
+        aspect = float(w) / float(h)
+        if camera.is_orthographic:
+            ortho_h = camera.get_ortho_height()
+            ortho_w = camera.get_ortho_width(aspect)
+            half_w = ortho_w * 0.5
+            half_h = ortho_h * 0.5
+            GL.glOrtho(-half_w, half_w, -half_h, half_h, camera.near_plane, camera.far_plane)
+        else:
+            gluPerspective(camera.fov_deg, aspect, camera.near_plane, camera.far_plane)
         GL.glMatrixMode(GL.GL_MODELVIEW)
+
+    def resize_gl(self, width: int, height: int, camera: CADCamera) -> None:
+        """Met à jour la matrice de projection lors d'un redimensionnement."""
+        self.setup_projection(width, height, camera)
 
     def _draw_gradient_background(self, width: int, height: int) -> None:
         """Dessine un dégradé de fond vertical studio CAO élégant (style Fusion 360)."""
@@ -188,19 +199,21 @@ class GLRenderer:
     ) -> None:
         """Effectue le rendu complet de la scène 3D avec styles de rendu Blender et Fusion 360."""
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+        self.setup_projection(width, height, camera)
 
         # 0. Fond d'écran dégradé studio
         self._draw_gradient_background(width, height)
 
         GL.glLoadIdentity()
 
-        # Positionner la vue caméra
+        # Positionner la vue caméra avec le repère continu (évite la singularité du pôle)
         eye = camera.get_eye_position()
         target = camera.target
+        _forward, _right, up = camera.get_camera_axes()
         gluLookAt(
             eye.x, eye.y, eye.z,
             target.x, target.y, target.z,
-            0.0, 0.0, 1.0
+            up.x, up.y, up.z
         )
 
         # 1. Rendu de la grille et des axes

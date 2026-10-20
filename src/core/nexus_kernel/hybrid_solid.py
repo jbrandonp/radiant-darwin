@@ -60,8 +60,7 @@ class NexusSolid:
 
         faces: List[NexusFace] = []
         edge_map: Dict[Tuple[int, int], NexusEdge] = {}
-        max_faces = min(len(tri_verts), 256)
-        for f_idx in range(max_faces):
+        for f_idx in range(len(tri_verts)):
             idx0, idx1, idx2 = int(tri_verts[f_idx, 0]), int(tri_verts[f_idx, 1]), int(tri_verts[f_idx, 2])
             v0, v1, v2 = vertices[idx0], vertices[idx1], vertices[idx2]
 
@@ -143,37 +142,24 @@ class NexusSolid:
     # -------------------------------------------------------------------------
 
     def union(self, other: NexusSolid, name: Optional[str] = None) -> NexusSolid:
-        """Fusion booléenne robuste A ∪ B avec mise à jour du graphe B-Rep."""
+        """Fusion booléenne robuste A ∪ B avec mise à jour exacte du graphe B-Rep."""
         new_name = name or f"{self.name}_union_{other.name}"
         res_m = self._manifold + other._manifold
-        res_brep = NexusBRep(f"{new_name}_brep")
-        # Fusion des faces et sommets des deux corps
-        for v in self.brep.vertices.values():
-            res_brep.add_vertex(v)
-        for v in other.brep.vertices.values():
-            res_brep.add_vertex(v)
-        for f in self.brep.faces.values():
-            res_brep.add_face(f)
-        for f in other.brep.faces.values():
-            res_brep.add_face(f)
+        res_brep = self._build_brep_from_manifold(new_name, res_m)
         return NexusSolid(name=new_name, brep=res_brep, internal_manifold=res_m)
 
     def difference(self, other: NexusSolid, name: Optional[str] = None) -> NexusSolid:
-        """Soustraction booléenne robuste A - B."""
+        """Soustraction booléenne robuste A - B avec mise à jour exacte du graphe B-Rep."""
         new_name = name or f"{self.name}_cut_{other.name}"
         res_m = self._manifold - other._manifold
-        res_brep = NexusBRep(f"{new_name}_brep")
-        for v in self.brep.vertices.values():
-            res_brep.add_vertex(v)
-        for f in self.brep.faces.values():
-            res_brep.add_face(f)
+        res_brep = self._build_brep_from_manifold(new_name, res_m)
         return NexusSolid(name=new_name, brep=res_brep, internal_manifold=res_m)
 
     def intersection(self, other: NexusSolid, name: Optional[str] = None) -> NexusSolid:
-        """Intersection booléenne robuste A ∩ B."""
+        """Intersection booléenne robuste A ∩ B avec mise à jour exacte du graphe B-Rep."""
         new_name = name or f"{self.name}_intersect_{other.name}"
         res_m = self._manifold ^ other._manifold
-        res_brep = NexusBRep(f"{new_name}_brep")
+        res_brep = self._build_brep_from_manifold(new_name, res_m)
         return NexusSolid(name=new_name, brep=res_brep, internal_manifold=res_m)
 
     # -------------------------------------------------------------------------

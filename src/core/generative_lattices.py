@@ -11,6 +11,7 @@ Typage géométrique et topologique rigoureux.
 from __future__ import annotations
 from enum import Enum, auto
 from typing import List, Tuple, Optional, Callable
+import math
 import numpy as np
 import manifold3d as m
 
@@ -67,37 +68,58 @@ def make_octet_cell(cell_size: float, strut_radius: float) -> Solid:
     return Solid(cell_manifold, "OctetCell")
 
 
-def make_tpms_gyroid_cell(cell_size: float, wall_thickness: float, resolution: int = 12) -> Solid:
+def make_tpms_gyroid_cell(cell_size: float, wall_thickness: float, resolution: int = 14) -> Solid:
     """
-    Génère une cellule alvéolaire unitaire approchée de la surface minimale Gyroïde de Schoen.
-    Équation : sin(kx)*cos(ky) + sin(ky)*cos(kz) + sin(kz)*cos(kx) = 0.
+    Génère une cellule alvéolaire unitaire de la surface minimale Gyroïde de Schoen.
+    Équation exacte : sin(kx)*cos(ky) + sin(ky)*cos(kz) + sin(kz)*cos(kx) = 0.
+    Générée par Marching Tetrahedra (m.Manifold.level_set) avec épaisseur de paroi exacte.
     """
     s = max(2.0, float(cell_size))
     t = max(0.2, float(wall_thickness))
-    res = max(8, min(24, int(resolution)))
+    k = 2.0 * math.pi / s
+    tau = min(1.2, max(0.1, (t / s) * math.pi))
 
-    # Génération d'une structure orthogonale croisée à parois lissées reproduisant le comportement du Gyroïde
-    half_s = s / 2.0
-    cyl_rad = min(s * 0.45, max(t, s * 0.25))
+    def sdf_gyroid(x: float, y: float, z: float) -> float:
+        val = (math.sin(k * x) * math.cos(k * y) +
+               math.sin(k * y) * math.cos(k * z) +
+               math.sin(k * z) * math.cos(k * x))
+        return tau - abs(val)
 
-    c_x = m.Manifold.cylinder(s, cyl_rad, cyl_rad, res).rotate([0.0, 90.0, 0.0]).translate([0.0, half_s, half_s])
-    c_y = m.Manifold.cylinder(s, cyl_rad, cyl_rad, res).rotate([-90.0, 0.0, 0.0]).translate([half_s, 0.0, half_s])
-    c_z = m.Manifold.cylinder(s, cyl_rad, cyl_rad, res).translate([half_s, half_s, 0.0])
+    edge_len = s / max(8, min(24, int(resolution)))
+    bounds = [0.0, 0.0, 0.0, s, s, s]
+    gyroid_m = m.Manifold.level_set(sdf_gyroid, bounds, edge_len, 0.0)
 
-    inner_rad = max(0.1, cyl_rad - t)
-    c_x_in = m.Manifold.cylinder(s + 0.2, inner_rad, inner_rad, res).rotate([0.0, 90.0, 0.0]).translate([-0.1, half_s, half_s])
-    c_y_in = m.Manifold.cylinder(s + 0.2, inner_rad, inner_rad, res).rotate([-90.0, 0.0, 0.0]).translate([half_s, -0.1, half_s])
-    c_z_in = m.Manifold.cylinder(s + 0.2, inner_rad, inner_rad, res).translate([half_s, half_s, -0.1])
-
-    outer = m.Manifold.batch_boolean([c_x, c_y, c_z], m.OpType.Add)
-    inner = m.Manifold.batch_boolean([c_x_in, c_y_in, c_z_in], m.OpType.Add)
-    gyroid_cell = outer - inner
-
-    # Découpe pour borner strictement dans la boîte cubique unitaire
+    # Découpe pour borner strictement dans la boîte cubique unitaire [0, s]^3
     box_bound = m.Manifold.cube([s, s, s], False)
-    bounded_cell = gyroid_cell ^ box_bound
+    bounded_cell = gyroid_m ^ box_bound
 
     return Solid(bounded_cell, "GyroidCell")
+
+
+def make_tpms_schwarz_diamond_cell(cell_size: float, wall_thickness: float, resolution: int = 14) -> Solid:
+    """
+    Génère une cellule alvéolaire unitaire de la surface minimale Schwarz Diamond (D).
+    Équation : sin(kx)sin(ky)sin(kz) + sin(kx)cos(ky)cos(kz) + cos(kx)sin(ky)cos(kz) + cos(kx)cos(ky)sin(kz) = 0.
+    """
+    s = max(2.0, float(cell_size))
+    t = max(0.2, float(wall_thickness))
+    k = 2.0 * math.pi / s
+    tau = min(1.2, max(0.1, (t / s) * math.pi))
+
+    def sdf_diamond(x: float, y: float, z: float) -> float:
+        sx, cx = math.sin(k * x), math.cos(k * x)
+        sy, cy = math.sin(k * y), math.cos(k * y)
+        sz, cz = math.sin(k * z), math.cos(k * z)
+        val = sx * sy * sz + sx * cy * cz + cx * sy * cz + cx * cy * sz
+        return tau - abs(val)
+
+    edge_len = s / max(8, min(24, int(resolution)))
+    bounds = [0.0, 0.0, 0.0, s, s, s]
+    diamond_m = m.Manifold.level_set(sdf_diamond, bounds, edge_len, 0.0)
+    box_bound = m.Manifold.cube([s, s, s], False)
+    bounded_cell = diamond_m ^ box_bound
+
+    return Solid(bounded_cell, "SchwarzDiamondCell")
 
 
 def compute_tpms_field(
@@ -139,6 +161,42 @@ def compute_tpms_field(
     return (X, Y, Z, field)
 
 
+def _generate_tpms_volume(
+    b_min: Vector3D,
+    b_max: Vector3D,
+    cell_size: float,
+    wall_thickness: float,
+    lattice_type: LatticeType
+) -> Solid:
+    """Génère directement un volume TPMS continu multi-cellulaire par extraction de surface de niveau."""
+    dx = max(cell_size, b_max.x - b_min.x)
+    dy = max(cell_size, b_max.y - b_min.y)
+    dz = max(cell_size, b_max.z - b_min.z)
+    k = 2.0 * math.pi / cell_size
+    tau = min(1.2, max(0.1, (wall_thickness / cell_size) * math.pi))
+
+    if lattice_type == LatticeType.SCHWARZ_DIAMOND:
+        def sdf_func(x: float, y: float, z: float) -> float:
+            sx, cx = math.sin(k * x), math.cos(k * x)
+            sy, cy = math.sin(k * y), math.cos(k * y)
+            sz, cz = math.sin(k * z), math.cos(k * z)
+            val = sx * sy * sz + sx * cy * cz + cx * sy * cz + cx * cy * sz
+            return tau - abs(val)
+    else:
+        def sdf_func(x: float, y: float, z: float) -> float:
+            val = (math.sin(k * x) * math.cos(k * y) +
+                   math.sin(k * y) * math.cos(k * z) +
+                   math.sin(k * z) * math.cos(k * x))
+            return tau - abs(val)
+
+    bounds = [b_min.x, b_min.y, b_min.z, b_max.x, b_max.y, b_max.z]
+    edge_len = cell_size / 10.0
+    lattice_m = m.Manifold.level_set(sdf_func, bounds, edge_len, 0.0)
+
+    box_bound = m.Manifold.cube([dx, dy, dz], False).translate([b_min.x, b_min.y, b_min.z])
+    bounded_m = lattice_m ^ box_bound
+    return Solid(bounded_m, f"Lattice_{lattice_type.value}")
+
 
 def generate_lattice_volume(
     bounding_min: Vector3D,
@@ -154,18 +212,16 @@ def generate_lattice_volume(
     dx = max(cell_size_mm, bounding_max.x - bounding_min.x)
     dy = max(cell_size_mm, bounding_max.y - bounding_min.y)
     dz = max(cell_size_mm, bounding_max.z - bounding_min.z)
-
     cs = max(2.0, float(cell_size_mm))
+
+    if lattice_type in (LatticeType.GYROID, LatticeType.SCHWARZ_DIAMOND):
+        return _generate_tpms_volume(bounding_min, bounding_max, cs, strut_or_wall_mm, lattice_type)
+
     nx = max(1, min(10, int(np.ceil(dx / cs))))
     ny = max(1, min(10, int(np.ceil(dy / cs))))
     nz = max(1, min(10, int(np.ceil(dz / cs))))
 
-    # 1. Créer la cellule de base
-    if lattice_type == LatticeType.GYROID:
-        base_cell = make_tpms_gyroid_cell(cs, strut_or_wall_mm)
-    else:
-        base_cell = make_octet_cell(cs, strut_or_wall_mm)
-
+    base_cell = make_octet_cell(cs, strut_or_wall_mm)
     base_manifold = base_cell.manifold
     instances: List[m.Manifold] = []
 

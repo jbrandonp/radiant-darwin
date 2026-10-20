@@ -20,8 +20,8 @@
 | **Plafond Complexité par Fonction** | **0 fonction > 25** | ≤ 25 (SonarSource) | ✅ CONFORME |
 | **Tests Unitaires & Intégration** | **696 / 696 Validés** | 100% | ✅ SUCCÈS |
 | **Score de Mutation Testing** | **100.0%** (4/4 tués) | ≥ 80.0% | ✅ SOTA |
-| **Périmètre du Code Source** | **166 fichiers** (37,873 SLOC) | - | ℹ️ INFO |
-| **Complexité Cognitive Globale** | **9,629 points** (Moy: 58.0) | - | ℹ️ INFO |
+| **Périmètre du Code Source** | **166 fichiers** (38,284 SLOC) | - | ℹ️ INFO |
+| **Complexité Cognitive Globale** | **9,921 points** (Moy: 59.8) | - | ℹ️ INFO |
 
 ---
 
@@ -40,11 +40,11 @@
 ### 🔥 Top 5 Architectural Hotspots (CodeScene Churn × Complexité)
 | Fichier Source | Churn | Complexité Cog | Hotspot Index | SLOC |
 | :--- | :---: | :---: | :---: | :---: |
-| `src/core/serializer.py` | 2387 | 333 | 794759 | 629 |
-| `src/core/step_importer.py` | 1392 | 509 | 708543 | 791 |
-| `src/ui/main_window.py` | 1539 | 341 | 524890 | 1,135 |
-| `src/core/sketch.py` | 1318 | 359 | 473005 | 929 |
-| `src/specialized/pcb_integrator.py` | 765 | 364 | 278633 | 656 |
+| `src/core/step_importer.py` | 1613 | 509 | 820933 | 791 |
+| `src/core/serializer.py` | 2438 | 333 | 811726 | 629 |
+| `src/ui/main_window.py` | 1687 | 341 | 575249 | 1,135 |
+| `src/core/sketch.py` | 1510 | 359 | 542246 | 929 |
+| `src/specialized/pcb_integrator.py` | 765 | 364 | 278394 | 656 |
 
 ---
 

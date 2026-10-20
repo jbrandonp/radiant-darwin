@@ -8,7 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict
 import numpy as np
-from PySide6.QtGui import QImage, QColor, QPainter, QLinearGradient
+from PySide6.QtGui import QImage, QColor, QPainter, QLinearGradient, QPolygonF, QBrush, QPen
+from PySide6.QtCore import QPointF
 
 from src.core.types import Vector3D, MeshBuffer
 from src.core.geometry import Solid
@@ -229,19 +230,35 @@ class PBRRaytracer:
             for i in range(len(verts))
         ]
 
-        z_buffer = np.full((safe_h, safe_w), -1e9, dtype=np.float32)
-
-        # Rendu des triangles avec ombrage PBR
+        # Rendu ultra-rapide des triangles par algorithme du peintre trié en Z et QPainter vectoriel
+        triangle_draw_list: List[Tuple[float, Tuple[int, int], Tuple[int, int], Tuple[int, int], QColor]] = []
         for face in faces:
             p0 = proj_pts[face[0]]
             p1 = proj_pts[face[1]]
             p2 = proj_pts[face[2]]
 
+            depth_centroid = (p0[2] + p1[2] + p2[2]) / 3.0
             norm = Vector3D(float(normals[face[0]][0]), float(normals[face[0]][1]), float(normals[face[0]][2]))
             color_rgb = self.shade_vertex(norm, view_dir, material)
             qcol = QColor(int(color_rgb[0] * 255), int(color_rgb[1] * 255), int(color_rgb[2] * 255), 255)
 
-            self._rasterize_triangle(image, z_buffer, p0, p1, p2, qcol, safe_w, safe_h)
+            triangle_draw_list.append((depth_centroid, (p0[0], p0[1]), (p1[0], p1[1]), (p2[0], p2[1]), qcol))
+
+        # Tri arrière vers avant (peintre)
+        triangle_draw_list.sort(key=lambda item: item[0])
+
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for _, pt0, pt1, pt2, col in triangle_draw_list:
+            painter.setBrush(QBrush(col))
+            painter.setPen(QPen(col, 0.5))
+            poly = QPolygonF([
+                QPointF(float(pt0[0]), float(pt0[1])),
+                QPointF(float(pt1[0]), float(pt1[1])),
+                QPointF(float(pt2[0]), float(pt2[1]))
+            ])
+            painter.drawPolygon(poly)
+        painter.end()
 
         return image
 

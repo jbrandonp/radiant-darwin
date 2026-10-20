@@ -188,7 +188,7 @@ class IndustrialPostProcessor:
         program_number: int = 1001,
         program_name: str = "USINAGE_PIECE",
         work_coordinate: str = "G54",
-        enable_arcs: bool = False,
+        enable_arcs: bool = True,
         cutter_comp: str = "none"
     ) -> str:
         """Génère un programme ISO certifié pour centres d'usinage CNC Haas (NGC / Classic)."""
@@ -239,7 +239,7 @@ class IndustrialPostProcessor:
         program_number: int = 1,
         program_name: str = "PART_USINAGE",
         work_coordinate: str = "G54",
-        enable_arcs: bool = False,
+        enable_arcs: bool = True,
         cutter_comp: str = "none"
     ) -> str:
         """Génère un programme conforme au standard Fanuc 0i/31i."""

@@ -329,6 +329,11 @@ class CADMainWindow(QMainWindow):
         self.ribbon.export_ply_requested.connect(self._on_export_ply)
         self.ribbon.export_step_requested.connect(self._on_export_step)
 
+        # Métiers Spécialisés
+        self.ribbon.bim_generate_requested.connect(self._on_action_bim_generate)
+        self.ribbon.aero_analysis_requested.connect(self._on_action_aero_analysis)
+        self.ribbon.ecad_thermal_requested.connect(self._on_action_ecad_thermal)
+
         # Sélection et navigateur
         self.timeline.feature_selected.connect(self.props_panel.set_feature)
         self.browser.body_selected.connect(self._on_body_selected)
@@ -402,6 +407,7 @@ class CADMainWindow(QMainWindow):
         """Avertit visuellement l'utilisateur dans la barre d'état et le statut lors d'une erreur d'opération."""
         self.status_bar.showMessage(f"⚠️ {message}", 6000)
         self.status_label.setText(f"Échec opération '{feature.name}'")
+        self.status_label.setStyleSheet("color: #ff5555; font-weight: bold;")
 
     # --- Gestionnaire Transactionnel d'Annulation / Rétablissement ---
     def _add_feature_with_undo(self, feat: Feature) -> None:
@@ -1178,6 +1184,65 @@ class CADMainWindow(QMainWindow):
             return
         dlg = RenderDialog(self.document.bodies, self)
         dlg.exec()
+
+    # --- Ateliers Métiers Spécialisés (BIM, Aérodynamique, Thermique ECAD) ---
+    def _on_action_bim_generate(self) -> None:
+        """Génère la maquette BIM IFC4 et affiche le rapport architectural."""
+        from src.specialized.bim_engine import BIMBuildingStorey, BIMWall, BIMSlab, BIMLayer, BIMMaterialType, export_bim_to_ifc4
+        wall1 = BIMWall(wall_id="MUR_EXT_01", length_m=10.0, height_m=2.8, layers=[
+            BIMLayer("Béton Armé", 0.20, BIMMaterialType.CONCRETE),
+            BIMLayer("Isolant Laine de Roche", 0.12, BIMMaterialType.INSULATION),
+        ])
+        slab1 = BIMSlab(slab_id="DALLE_RDC", length_m=10.0, width_m=8.0, thickness_m=0.25)
+        storey = BIMBuildingStorey(storey_name="RDC", elevation_mm=0.0, height_mm=2800.0, walls=[wall1], slabs=[slab1])
+        ifc_text = export_bim_to_ifc4([storey])
+        self.status_bar.showMessage("Maquette BIM IFC4 générée avec succès", 5000)
+        QMessageBox.information(
+            self,
+            "Atelier Métier BIM (IFC4)",
+            f"Maquette BIM IFC4 générée avec succès :\n"
+            f"- Étage : {storey.storey_name} (Élévation : {storey.elevation_mm} mm)\n"
+            f"- Éléments : {len(storey.walls)} Murs, {len(storey.slabs)} Dalles\n"
+            f"- Volume Béton : {storey.total_concrete_volume_m3():.2f} m³\n"
+            f"- Entités IFC générées : {len(ifc_text.splitlines())} lignes ISO-10303-21"
+        )
+
+    def _on_action_aero_analysis(self) -> None:
+        """Exécute l'analyse aérodynamique CFD / Théorie des profils minces."""
+        from src.specialized.aerodynamics_solver import AerodynamicsSolver, FluidFlowProperties, AirfoilSurfaceData
+        solver = AerodynamicsSolver(FluidFlowProperties(velocity_m_s=35.0))
+        airfoil = AirfoilSurfaceData(chord=1.2, span=6.0, angle_of_attack_deg=5.0)
+        report = solver.analyze_aerodynamics(airfoil)
+        self.status_bar.showMessage(f"Analyse Aérodynamique : Fz={report.forces.lift_newtons:.1f} N, Fx={report.forces.drag_newtons:.1f} N", 6000)
+        QMessageBox.information(
+            self,
+            "Atelier Aérodynamique & CFD",
+            f"Résultats Aérodynamiques (V = 35 m/s, α = 5°) :\n"
+            f"- Portance (Lift) : {report.forces.lift_newtons:.1f} N\n"
+            f"- Traînée (Drag) : {report.forces.drag_newtons:.1f} N\n"
+            f"- Finesse L/D : {report.forces.lift_to_drag_ratio:.2f}\n"
+            f"- Moment Tangage : {report.forces.pitching_moment_nm:.1f} N.m\n"
+            f"- Régime : {report.summary}"
+        )
+
+    def _on_action_ecad_thermal(self) -> None:
+        """Exécute la simulation thermique pour carte électronique ECAD."""
+        from src.specialized.ecad_thermal_twin import ECADThermalTwin, SMTComponent, CopperTrace
+        twin = ECADThermalTwin(pcb_name="Carte Contrôleur MCU", pcb_length_mm=100.0, pcb_width_mm=80.0)
+        twin.add_component(SMTComponent("MCU_STM32", power_dissipation_w=2.5, x_mm=50.0, y_mm=40.0, length_mm=14.0, width_mm=14.0))
+        twin.add_component(SMTComponent("REG_LDO_5V", power_dissipation_w=1.8, x_mm=20.0, y_mm=20.0, length_mm=8.0, width_mm=6.0))
+        twin.add_trace(CopperTrace("VCC_POWER", width_mm=1.5, length_mm=45.0, current_amps=3.0))
+        rep = twin.solve_thermal_field()
+        self.status_bar.showMessage(f"Thermique ECAD : T_max = {rep.t_max_celsius:.1f} °C", 6000)
+        QMessageBox.information(
+            self,
+            "Jumeau Numérique ECAD & Thermique",
+            f"Résultats Thermiques ({twin.pcb_name}) :\n"
+            f"- Température Max : {rep.t_max_celsius:.1f} °C (Point chaud : {rep.hotspot_component})\n"
+            f"- Température Moyenne : {rep.t_mean_celsius:.1f} °C\n"
+            f"- Puissance Totale Dissipée : {rep.total_power_w:.2f} W\n"
+            f"- Statut Fiabilité : {rep.reliability_status}"
+        )
 
     # --- Actions CAM & G-Code ---
     def _on_action_cam_facing(self) -> None:

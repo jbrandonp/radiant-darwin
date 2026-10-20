@@ -20,8 +20,8 @@
 | **Plafond Complexité par Fonction** | **0 fonction > 25** | ≤ 25 (SonarSource) | ✅ CONFORME |
 | **Tests Unitaires & Intégration** | **696 / 696 Validés** | 100% | ✅ SUCCÈS |
 | **Score de Mutation Testing** | **100.0%** (4/4 tués) | ≥ 80.0% | ✅ SOTA |
-| **Périmètre du Code Source** | **166 fichiers** (38,964 SLOC) | - | ℹ️ INFO |
-| **Complexité Cognitive Globale** | **10,286 points** (Moy: 62.0) | - | ℹ️ INFO |
+| **Périmètre du Code Source** | **166 fichiers** (39,075 SLOC) | - | ℹ️ INFO |
+| **Complexité Cognitive Globale** | **10,287 points** (Moy: 62.0) | - | ℹ️ INFO |
 
 ---
 
@@ -40,11 +40,11 @@
 ### 🔥 Top 5 Architectural Hotspots (CodeScene Churn × Complexité)
 | Fichier Source | Churn | Complexité Cog | Hotspot Index | SLOC |
 | :--- | :---: | :---: | :---: | :---: |
-| `src/core/step_importer.py` | 1579 | 509 | 803960 | 791 |
-| `src/core/serializer.py` | 2387 | 333 | 794944 | 629 |
-| `src/ui/main_window.py` | 1654 | 341 | 564037 | 1,137 |
-| `src/core/sketch.py` | 1479 | 359 | 531035 | 929 |
-| `src/core/operations/surfaces.py` | 981 | 307 | 301019 | 959 |
+| `src/core/step_importer.py` | 1579 | 509 | 803912 | 791 |
+| `src/core/serializer.py` | 2387 | 333 | 794896 | 629 |
+| `src/ui/main_window.py` | 1654 | 341 | 564004 | 1,196 |
+| `src/core/sketch.py` | 1479 | 359 | 531003 | 929 |
+| `src/core/operations/surfaces.py` | 1116 | 307 | 342753 | 959 |
 
 ---
 

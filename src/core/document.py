@@ -74,6 +74,10 @@ class CADDocument:
         """Enregistre un écouteur notifié lors d'une erreur d'évaluation de feature."""
         self._on_error_callbacks.append(callback)
 
+    def register_error_callback(self, callback: Callable[[str, Feature], None]) -> None:
+        """Alias public pour register_error_listener."""
+        self.register_error_listener(callback)
+
     def _notify_change(self) -> None:
         """Notifie tous les écouteurs qu'une mise à jour a eu lieu."""
         for cb in self._on_change_callbacks:
@@ -131,12 +135,13 @@ class CADDocument:
             if f_sk == sketch_id:
                 first_idx = idx
                 break
-        self.invalidate_cache(from_index=first_idx)
+        if first_idx is not None:
+            self.invalidate_cache(from_index=first_idx)
 
     def add_sketch(self, sketch: Sketch2D) -> None:
-        """Ajoute une esquisse au document."""
+        """Ajoute ou met à jour une esquisse au document avec invalidation sélective de cache."""
         self.sketches[sketch.sketch_id] = sketch
-        self.invalidate_cache()
+        self.invalidate_for_sketch(sketch.sketch_id)
         self._notify_change()
 
     def get_sketch(self, sketch_id: str) -> Optional[Sketch2D]:
@@ -151,10 +156,10 @@ class CADDocument:
         return None
 
     def remove_sketch(self, sketch_id: str) -> None:
-        """Supprime une esquisse du document et invalide le cache."""
+        """Supprime une esquisse du document et invalide sélectivement le cache."""
         if sketch_id in self.sketches:
+            self.invalidate_for_sketch(sketch_id)
             del self.sketches[sketch_id]
-            self.invalidate_cache()
             self._notify_change()
 
     def add_feature(self, feature: Feature) -> None:

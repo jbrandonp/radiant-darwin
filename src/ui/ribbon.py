@@ -161,6 +161,11 @@ class CADRibbonBar(QTabWidget):
     export_ply_requested = Signal()
     export_step_requested = Signal()
 
+    # Métiers Spécialisés (BIM, Aérodynamique, Thermique ECAD)
+    bim_generate_requested = Signal()
+    aero_analysis_requested = Signal()
+    ecad_thermal_requested = Signal()
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setFixedHeight(105)
@@ -178,6 +183,7 @@ class CADRibbonBar(QTabWidget):
         self._init_drawing_tab()
         self._init_inspection_tab()
         self._init_mesh_tab()
+        self._init_specialized_tab()
         self._init_tools_tab()
         self._init_export_tab()
 
@@ -451,6 +457,24 @@ class CADRibbonBar(QTabWidget):
 
         layout.addWidget(_create_ribbon_group("Atelier Maillage", [btn_diag, btn_rep, btn_dec]))
         self.addTab(tab, "MAILLAGE")
+
+    def _init_specialized_tab(self) -> None:
+        """Onglet MÉTIERS SPÉCIALISÉS (BIM, Aérodynamique, Thermique ECAD)."""
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        btn_bim = RibbonButton("Générer BIM", "🏛️")
+        btn_bim.clicked.connect(self.bim_generate_requested.emit)
+        btn_aero = RibbonButton("Aérodynamique", "🌪️")
+        btn_aero.clicked.connect(self.aero_analysis_requested.emit)
+        btn_ecad = RibbonButton("Thermique ECAD", "⚡")
+        btn_ecad.clicked.connect(self.ecad_thermal_requested.emit)
+
+        layout.addWidget(_create_ribbon_group("Ingénierie Avancée", [btn_bim, btn_aero, btn_ecad]))
+        self.addTab(tab, "MÉTIERS")
 
     def _init_tools_tab(self) -> None:
         """Onglet AFFICHAGE & CAMÉRA."""

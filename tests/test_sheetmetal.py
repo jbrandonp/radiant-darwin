@@ -96,6 +96,22 @@ def test_sheet_metal_feature_in_document() -> None:
         assert loaded_doc.bodies["body_sm_1"].volume() == pytest.approx(body.volume(), rel=1e-3)
 
 
+def test_sheet_metal_multi_flange_chassis_with_reliefs() -> None:
+    """Vérifie la génération d'un boîtier en tôle pliée sur 4 côtés avec grugeages d'angles."""
+    part = SheetMetalPart(base_width=80.0, base_length=100.0)
+    part.add_flange(length_mm=25.0, edge_side="top")
+    part.add_flange(length_mm=25.0, edge_side="bottom")
+    part.add_flange(length_mm=25.0, edge_side="left")
+    part.add_flange(length_mm=25.0, edge_side="right")
+
+    solid = part.generate_folded_solid()
+    assert not solid.is_empty()
+    assert solid.is_watertight() is True
+    # Volume supérieur à la base plate seule
+    base_vol = 80.0 * 100.0 * 2.0
+    assert solid.volume() > base_vol
+
+
 def test_dxf_laser_exporter() -> None:
     """Vérifie la génération conforme du fichier AutoCAD DXF R12."""
     part = SheetMetalPart(base_width=40.0, base_length=60.0)

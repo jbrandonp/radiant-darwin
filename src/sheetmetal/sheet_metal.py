@@ -32,6 +32,7 @@ class BendInfo:
     flange_length_mm: float
     bend_allowance_mm: float
     bend_deduction_mm: float
+    edge_side: str = "top"  # "top", "bottom", "left", "right"
 
 
 @dataclass
@@ -87,9 +88,14 @@ class SheetMetalPart:
         ba = self.calculate_bend_allowance(safe_angle)
         return float(2.0 * setback - ba)
 
-    def add_flange(self, length_mm: float, angle_deg: float = 90.0) -> BendInfo:
+    def add_flange(
+        self,
+        length_mm: float,
+        angle_deg: float = 90.0,
+        edge_side: str = "top"
+    ) -> BendInfo:
         """
-        Ajoute un rebord plié (Flange) à l'extrémité de la tôle.
+        Ajoute un rebord plié (Flange) le long d'un côté de la tôle ("top", "bottom", "left", "right").
         """
         ba = self.calculate_bend_allowance(angle_deg)
         bd = self.calculate_bend_deduction(angle_deg)
@@ -97,76 +103,82 @@ class SheetMetalPart:
             angle_deg=float(angle_deg),
             flange_length_mm=max(1.0, float(length_mm)),
             bend_allowance_mm=ba,
-            bend_deduction_mm=bd
+            bend_deduction_mm=bd,
+            edge_side=str(edge_side).lower()
         )
         self.bends.append(bend)
         return bend
 
+    def _build_single_flange_box(
+        self,
+        bend: BendInfo,
+        w: float,
+        l: float,
+        t: float,
+        r: float,
+        idx: int
+    ) -> Solid:
+        """Construit la boîte volumique d'un flange selon son orientation de bord."""
+        h = bend.flange_length_mm
+        flange_h = max(1.0, h - (r + t)) if r > 0.01 else h
+        zc = (t + r) if r > 0.01 else t
+        side = bend.edge_side
+
+        if side == "bottom":
+            fl = make_box(w, t, flange_h, center=False, name=f"Flange_{idx+1}_Bottom")
+            return fl.translate(Vector3D(0.0, 0.0, zc))
+        elif side == "left":
+            fl = make_box(t, l, flange_h, center=False, name=f"Flange_{idx+1}_Left")
+            return fl.translate(Vector3D(0.0, 0.0, zc))
+        elif side == "right":
+            fl = make_box(t, l, flange_h, center=False, name=f"Flange_{idx+1}_Right")
+            return fl.translate(Vector3D(w - t, 0.0, zc))
+        else:  # "top" par défaut
+            fl = make_box(w, t, flange_h, center=False, name=f"Flange_{idx+1}_Top")
+            return fl.translate(Vector3D(0.0, l - t, zc))
+
+    def _apply_corner_reliefs(self, solid: Solid, w: float, l: float, t: float) -> Solid:
+        """Applique des grugeages d'angle (Corner Reliefs) aux 4 coins pour éviter l'interpénétration."""
+        relief_radius = max(1.5, t * 1.5)
+        relief_height = max(10.0, max(b.flange_length_mm for b in self.bends) + 5.0)
+
+        corners = [(0.0, 0.0), (w, 0.0), (0.0, l), (w, l)]
+        res = solid
+        for cx, cy in corners:
+            notch = make_box(relief_radius * 2.0, relief_radius * 2.0, relief_height, center=True).translate(
+                Vector3D(cx, cy, relief_height * 0.5)
+            )
+            res = res.difference(notch)
+        return res
+
     def generate_folded_solid(self) -> Solid:
         """
         Génère le corps 3D plié correspondant à la pièce finie.
-        Intègre les congés de courbure cylindriques réalistes aux lignes de pliage.
+        Intègre les congés de courbure cylindriques réalistes aux lignes de pliage,
+        le support des rebords multi-côtés (boîtier 4 côtés) et les grugeages d'angle.
         """
         t = max(0.01, self.rule.thickness_mm)
         r = max(0.0, self.rule.bend_radius_mm)
         w = max(0.1, self.base_width)
+        l = max(0.1, self.base_length)
 
         if not self.bends:
-            return make_box(w, self.base_length, t, center=False, name="SheetMetal_Base")
+            return make_box(w, l, t, center=False, name="SheetMetal_Base")
 
-        current_y = self.base_length
+        # 1. Base plate de tôlerie
+        main_solid = make_box(w, l, t, center=False, name="SheetMetal_Base")
 
-        if r > 0.01:
-            yc = current_y - t - r
-            zc = t + r
-            if yc <= 0.0:
-                # Plaque trop courte pour insérer le rayon de courbure : repli sur arêtes vives
-                main_solid = make_box(w, self.base_length, t, center=False, name="SheetMetal_Base")
-                for idx, bend in enumerate(self.bends):
-                    h = bend.flange_length_mm
-                    flange_solid = make_box(w, t, h, center=False, name=f"Flange_{idx+1}")
-                    flange_solid = flange_solid.translate(Vector3D(0.0, current_y - t, t))
-                    main_solid = main_solid.union(flange_solid)
-                return main_solid
-
-            # 1. Base plate tronquée jusqu'à la tangence du pli
-            main_solid = make_box(w, yc, t, center=False, name="SheetMetal_Base")
-
-            # 2. Raccordement en quart de cylindre creux tangentiel
-            n_segs = 16
-            angles = np.linspace(-np.pi / 2.0, 0.0, n_segs)
-            outer_pts = [[float(yc + (r + t) * np.cos(a)), float(zc + (r + t) * np.sin(a))] for a in angles]
-            inner_pts = [[float(yc + r * np.cos(a)), float(zc + r * np.sin(a))] for a in reversed(angles)]
-            profile = outer_pts + inner_pts
-
-            cs = m.CrossSection([profile])
-            mat = np.array([
-                [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0]
-            ], dtype=np.float64)
-            bend_manifold = m.Manifold.extrude(cs, w).transform(mat[:3, :])
-            bend_solid = Solid(bend_manifold, "Bend_Arc")
-            main_solid = main_solid.union(bend_solid)
-
-            # 3. Flange vertical raccordé
-            for idx, bend in enumerate(self.bends):
-                h = bend.flange_length_mm
-                flange_h = max(1.0, h - (r + t))
-                flange_solid = make_box(w, t, flange_h, center=False, name=f"Flange_{idx+1}")
-                flange_solid = flange_solid.translate(Vector3D(0.0, current_y - t, zc))
-                main_solid = main_solid.union(flange_solid)
-
-            return main_solid
-
-        # Repli pour rayon de courbure nul
-        main_solid = make_box(w, self.base_length, t, center=False, name="SheetMetal_Base")
+        # 2. Ajout de chaque flange selon son côté
+        sides_used = set()
         for idx, bend in enumerate(self.bends):
-            h = bend.flange_length_mm
-            flange_solid = make_box(w, t, h, center=False, name=f"Flange_{idx+1}")
-            flange_solid = flange_solid.translate(Vector3D(0.0, current_y - t, t))
+            flange_solid = self._build_single_flange_box(bend, w, l, t, r, idx)
             main_solid = main_solid.union(flange_solid)
+            sides_used.add(bend.edge_side)
+
+        # 3. Application des grugeages d'angle si plus d'un côté est plié
+        if len(sides_used) > 1:
+            main_solid = self._apply_corner_reliefs(main_solid, w, l, t)
+
         return main_solid
 
     def generate_flat_pattern(self) -> FlatPattern:

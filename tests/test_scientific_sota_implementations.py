@@ -198,3 +198,8 @@ class TestSkillsCliIntegration:
         """Exécute 'audit-skills' via le point d'entrée principal du CLI."""
         exit_code = cli_main(["audit-skills"])
         assert exit_code == 0
+
+    def test_cli_audit_skills_deep_subcommand(self) -> None:
+        """Exécute 'audit-skills --deep' avec benchmark d'exécution en temps réel."""
+        exit_code = cli_main(["audit-skills", "--deep"])
+        assert exit_code == 0

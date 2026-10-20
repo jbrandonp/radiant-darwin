@@ -62,6 +62,18 @@ mod_loopcraft: Final[ModuleType] = _load_skill_module(
     "run_loopcraft_cycle",
     ".agents/skills/loopcraft-harness-engineer/scripts/run_loopcraft_cycle.py",
 )
+mod_cam: Final[ModuleType] = _load_skill_module(
+    "verify_cam_toolpath",
+    ".agents/skills/industrial-cam-engineer/scripts/verify_cam_toolpath.py",
+)
+mod_fea: Final[ModuleType] = _load_skill_module(
+    "verify_fea_deck",
+    ".agents/skills/fea-multiphysics-architect/scripts/verify_fea_deck.py",
+)
+mod_techdraw: Final[ModuleType] = _load_skill_module(
+    "verify_techdraw_gdt",
+    ".agents/skills/techdraw-drafting-engineer/scripts/verify_techdraw_gdt.py",
+)
 
 
 class TestAgentSkillsTooling:
@@ -170,3 +182,46 @@ class TestAgentSkillsTooling:
         assert len(report.steps) >= 3
         # Toutes les barrières doivent être au vert suite au durcissement SAST
         assert report.all_passed is True
+
+    def test_industrial_cam_toolpath_analyzer(self) -> None:
+        """Vérifie le calcul cinématique de trajectoire 5-axes et la détection de singularités."""
+        pts: List[Tuple[float, float, float]] = [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0)]
+        vecs: List[Tuple[float, float, float]] = [(0.0, 0.0, 1.0), (0.0, 0.0, 1.0)]
+        metrics = mod_cam.analyze_5axis_toolpath(pts, vecs, feedrate_mm_min=1000.0)
+        assert metrics.is_continuous is True
+        assert metrics.total_length_mm == 10.0
+        assert metrics.has_zenith_singularity is False
+
+    def test_fea_multiphysics_deck_auditor(self) -> None:
+        """Vérifie l'audit syntaxique et physique des cartes CalculiX .inp."""
+        valid_deck: Final[str] = (
+            "*NODE\n1, 0, 0, 0\n2, 1, 0, 0\n3, 0, 1, 0\n4, 0, 0, 1\n"
+            "*ELEMENT, TYPE=C3D10\n1, 1, 2, 3, 4\n"
+            "*ELASTIC\n210000000000, 0.3\n"
+            "*BOUNDARY\n1, 1, 3, 0\n"
+            "*CLOAD\n2, 1, 100\n"
+        )
+        verdict = mod_fea.audit_calculix_inp_content(valid_deck)
+        assert verdict.is_solvable is True
+        assert verdict.youngs_modulus_gpa == 210.0
+        assert verdict.poissons_ratio == 0.3
+
+    def test_techdraw_gdt_and_sheet_metal_calculator(self) -> None:
+        """Vérifie le calcul K-Factor tôlerie et la validation des cadres GD&T."""
+        bend = mod_techdraw.calculate_sheet_metal_bend(
+            thickness_mm=2.0,
+            radius_mm=2.0,
+            angle_deg=90.0,
+            k_factor=0.333,
+        )
+        assert bend.is_physically_valid is True
+        assert bend.bend_allowance_ba_mm > 0.0
+        assert bend.bend_deduction_bd_mm > 0.0
+
+        gdt = mod_techdraw.audit_gdt_feature_control_frame(
+            symbol="FLATNESS",
+            tolerance_mm=0.02,
+            datums=[],
+            available_datums={"A", "B"},
+        )
+        assert gdt.is_conforming is True

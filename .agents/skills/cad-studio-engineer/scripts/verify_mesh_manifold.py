@@ -23,6 +23,7 @@ class MeshMetrics:
     is_watertight: bool
     non_manifold_edges: int
     boundary_edges: int
+    has_positive_volume: bool = True
 
 
 def _compute_triangle_volume(
@@ -56,6 +57,7 @@ def analyze_triangular_mesh(
             is_watertight=False,
             non_manifold_edges=0,
             boundary_edges=0,
+            has_positive_volume=False,
         )
 
     # Dénombrement et orientation des demi-arêtes
@@ -103,6 +105,7 @@ def analyze_triangular_mesh(
         is_watertight=watertight,
         non_manifold_edges=non_manifold_count,
         boundary_edges=boundary_count,
+        has_positive_volume=(total_volume > 1e-6),
     )
 
 

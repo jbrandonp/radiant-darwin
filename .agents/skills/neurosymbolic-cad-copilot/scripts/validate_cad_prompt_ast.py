@@ -36,6 +36,15 @@ class CADCopilotASTVisitor(ast.NodeVisitor):
         "chamfer_edge",
         "extrude_sketch",
         "revolve_sketch",
+        "sweep",
+        "loft",
+        "shell",
+        "mirror",
+        "linear_pattern",
+        "circular_pattern",
+        "add_datum_plane",
+        "draft",
+        "thicken",
     }
 
     def __init__(self) -> None:

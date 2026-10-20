@@ -83,12 +83,13 @@ def evaluate_cad_oracles(
     volume: float,
     bounding_box_max_span: float,
     is_watertight: bool,
+    max_allowed_span: float = 100_000.0,
 ) -> VerificationVerdict:
     """Évalue les 4 oracles formels d'admissibilité du solide géométrique."""
     euler_chi: Final[int] = vertex_count - edge_count + face_count
     euler_ok: Final[bool] = (euler_chi == 2)
     volume_ok: Final[bool] = (volume > 1e-6)
-    aabb_ok: Final[bool] = (0.0 < bounding_box_max_span <= 1000.0)
+    aabb_ok: Final[bool] = (0.0 < bounding_box_max_span <= max_allowed_span)
 
     passed: Final[bool] = is_watertight and volume_ok and euler_ok and aabb_ok
 

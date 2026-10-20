@@ -40,6 +40,21 @@ class GeometricConstraint:
     target_value_v: float = 0.0
 
 
+@dataclass(frozen=True)
+class ConstraintDiagnosisReport:
+    """Rapport de diagnostic algébrique approfondi des contraintes (Style FreeCAD PlaneGCS)."""
+    degrees_of_freedom: int
+    total_variables: int
+    total_equations: int
+    jacobian_rank: int
+    is_fully_constrained: bool
+    is_overconstrained: bool
+    is_underconstrained: bool
+    redundant_constraint_indices: List[int]
+    conflicting_constraint_indices: List[int]
+    diagnostic_summary: str
+
+
 # Alias pour rétrocompatibilité et typage statique
 GeometricConstraint2D = GeometricConstraint
 
@@ -562,6 +577,114 @@ class SketchConstraintSolver2D:
             status = f"Sous-contrainte ({dof} degré{'s' if dof > 1 else ''} de liberté)"
 
         return (dof, status)
+
+    def _build_equation_map(self, x0: np.ndarray) -> List[Tuple[int, int]]:
+        """Construit la carte associant chaque contrainte à sa plage d'équations (ligne_début, nb_lignes)."""
+        num_pts = len(self.points)
+        eq_map: List[Tuple[int, int]] = []
+        cur_row = 0
+        for c in self.constraints:
+            res_list = self._eval_single_constraint_residual(c, x0, num_pts)
+            n_eq = len(res_list)
+            eq_map.append((cur_row, n_eq))
+            cur_row += n_eq
+        return eq_map
+
+    def _diagnose_constraint_dependencies(
+        self,
+        j_mat: np.ndarray,
+        f0: np.ndarray,
+        eq_map: List[Tuple[int, int]]
+    ) -> Tuple[List[int], List[int]]:
+        """Identifie les indices de contraintes redondantes et contradictoires via orthogonalisation."""
+        basis: List[np.ndarray] = []
+        redundant: List[int] = []
+        conflicting: List[int] = []
+
+        for c_idx, (start_row, num_rows) in enumerate(eq_map):
+            has_dep = False
+            has_conf = False
+            for r in range(start_row, start_row + num_rows):
+                grad = j_mat[r].copy()
+                norm_orig = float(np.linalg.norm(grad))
+                if norm_orig < 1e-9:
+                    continue
+                proj = grad.copy()
+                for b in basis:
+                    proj -= float(np.dot(proj, b)) * b
+                norm_proj = float(np.linalg.norm(proj))
+                if norm_proj >= 1e-4 * max(1.0, norm_orig):
+                    basis.append(proj / norm_proj)
+                else:
+                    has_dep = True
+                    if abs(f0[r]) > 0.05:
+                        has_conf = True
+            if has_dep:
+                if has_conf:
+                    conflicting.append(c_idx)
+                else:
+                    redundant.append(c_idx)
+        return redundant, conflicting
+
+    def diagnose_constraints(self) -> ConstraintDiagnosisReport:
+        """
+        Diagnostic algébrique exact inspiré de FreeCAD PlaneGCS (Décomposition matricielle).
+        Isole individuellement les contraintes redondantes et les contraintes en conflit.
+        """
+        num_pts = len(self.points)
+        num_vars = 2 * num_pts
+        if num_vars == 0:
+            return ConstraintDiagnosisReport(
+                degrees_of_freedom=0,
+                total_variables=0,
+                total_equations=0,
+                jacobian_rank=0,
+                is_fully_constrained=True,
+                is_overconstrained=False,
+                is_underconstrained=False,
+                redundant_constraint_indices=[],
+                conflicting_constraint_indices=[],
+                diagnostic_summary="Esquisse vide (0 DoF)"
+            )
+
+        x0 = np.zeros(num_vars, dtype=np.float64)
+        for i, pt in enumerate(self.points):
+            x0[2 * i] = pt.u
+            x0[2 * i + 1] = pt.v
+
+        f0 = self._evaluate_residuals(x0)
+        num_equations = len(f0)
+        j_mat = self._evaluate_jacobian(x0)
+        rank = int(np.linalg.matrix_rank(j_mat, tol=1e-5))
+        dof = max(0, num_vars - rank)
+
+        eq_map = self._build_equation_map(x0)
+        redundant, conflicting = self._diagnose_constraint_dependencies(j_mat, f0, eq_map)
+
+        is_over = len(conflicting) > 0 or (num_equations > rank and len(redundant) > 0)
+        is_fully = dof == 0 and not is_over
+        is_under = dof > 0 and not is_over
+
+        summary_parts: List[str] = [f"DoF: {dof}, Rang Jacobien: {rank}/{num_vars}"]
+        if conflicting:
+            summary_parts.append(f"Conflit sur {len(conflicting)} contrainte(s): {conflicting}")
+        if redundant:
+            summary_parts.append(f"Redondance sur {len(redundant)} contrainte(s): {redundant}")
+        if is_fully:
+            summary_parts.append("Système entièrement et proprement contraint.")
+
+        return ConstraintDiagnosisReport(
+            degrees_of_freedom=dof,
+            total_variables=num_vars,
+            total_equations=num_equations,
+            jacobian_rank=rank,
+            is_fully_constrained=is_fully,
+            is_overconstrained=is_over,
+            is_underconstrained=is_under,
+            redundant_constraint_indices=redundant,
+            conflicting_constraint_indices=conflicting,
+            diagnostic_summary=" | ".join(summary_parts)
+        )
 
 
 

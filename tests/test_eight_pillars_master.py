@@ -64,6 +64,23 @@ def test_pillar_8_physical_units_and_expressions() -> None:
     assert stress_mpa.category == UnitCategory.PRESSURE
     assert pytest.approx(stress_mpa.value_si, 1e-3) == 2.5e8  # 250 MPa = 2.5e8 Pa
 
+    # 4. Algèbre dimensionnelle [M, L, T] (FreeCAD Base::Quantity)
+    force_n = PhysicalQuantity(1000.0, "n")
+    area_m2 = PhysicalQuantity(2.0, "m2")
+    press_calc = force_n / area_m2
+    assert press_calc.dimensions == (1, -1, -2)
+    assert pytest.approx(press_calc.value, 1e-4) == 500.0  # 1000 N / 2 m2 = 500 Pa
+    assert press_calc.unit == "pa"
+
+    dist_m = PhysicalQuantity(5.0, "m")
+    torque_calc = force_n * dist_m
+    assert torque_calc.dimensions == (1, 2, -2)
+    assert pytest.approx(torque_calc.value, 1e-4) == 5000.0  # 1000 N * 5 m = 5000 J
+    assert torque_calc.unit == "j"
+
+    with pytest.raises(TypeError, match="Incompatibilité dimensionnelle"):
+        _ = force_n + q_mm
+
 
 def test_pillar_8_transactional_undo_redo() -> None:
     """Vérifie la pile de commandes Undo/Redo sans perte d'état."""

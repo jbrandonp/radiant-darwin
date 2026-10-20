@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import re
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 
 class UnitCategory(Enum):
@@ -23,12 +23,28 @@ class UnitCategory(Enum):
     TIME = "time"
 
 
+# Exponentielle des dimensions fondamentales SI [M, L, T] (Masse, Longueur, Temps)
+DIMENSION_BY_CATEGORY: Dict[UnitCategory, Tuple[int, int, int]] = {
+    UnitCategory.LENGTH: (0, 1, 0),
+    UnitCategory.ANGLE: (0, 0, 0),
+    UnitCategory.MASS: (1, 0, 0),
+    UnitCategory.FORCE: (1, 1, -2),
+    UnitCategory.PRESSURE: (1, -1, -2),
+    UnitCategory.TIME: (0, 0, 1),
+}
+
+
 @dataclass(frozen=True)
 class UnitDefinition:
-    """Définition d'une unité de mesure avec son facteur d'échelle vers l'unité SI de base."""
+    """Définition d'une unité de mesure avec son facteur d'échelle et ses dimensions SI [M, L, T]."""
     symbol: str
     category: UnitCategory
     scale_to_base: float  # Facteur multiplicateur vers l'unité de référence (m, rad, kg, N, Pa, s)
+    dimensions: Tuple[int, int, int] = (0, 0, 0)
+
+    def __post_init__(self) -> None:
+        if self.dimensions == (0, 0, 0) and self.category in DIMENSION_BY_CATEGORY:
+            object.__setattr__(self, "dimensions", DIMENSION_BY_CATEGORY[self.category])
 
 
 # Table des unités de référence d'ingénierie
@@ -45,6 +61,12 @@ UNIT_REGISTRY: Dict[str, UnitDefinition] = {
     "mil": UnitDefinition("mil", UnitCategory.LENGTH, 2.54e-5),
     "thou": UnitDefinition("thou", UnitCategory.LENGTH, 2.54e-5),
 
+    # Superficie & Volume dérivés
+    "m2": UnitDefinition("m2", UnitCategory.LENGTH, 1.0, dimensions=(0, 2, 0)),
+    "mm2": UnitDefinition("mm2", UnitCategory.LENGTH, 1e-6, dimensions=(0, 2, 0)),
+    "m3": UnitDefinition("m3", UnitCategory.LENGTH, 1.0, dimensions=(0, 3, 0)),
+    "mm3": UnitDefinition("mm3", UnitCategory.LENGTH, 1e-9, dimensions=(0, 3, 0)),
+
     # Angle (Base : radian 'rad')
     "rad": UnitDefinition("rad", UnitCategory.ANGLE, 1.0),
     "deg": UnitDefinition("deg", UnitCategory.ANGLE, 0.017453292519943295),  # pi / 180
@@ -58,10 +80,12 @@ UNIT_REGISTRY: Dict[str, UnitDefinition] = {
     "lb": UnitDefinition("lb", UnitCategory.MASS, 0.45359237),
     "oz": UnitDefinition("oz", UnitCategory.MASS, 0.028349523125),
 
-    # Force (Base : Newton 'N')
+    # Force & Énergie dérivée
     "n": UnitDefinition("n", UnitCategory.FORCE, 1.0),
     "kn": UnitDefinition("kn", UnitCategory.FORCE, 1e3),
     "lbf": UnitDefinition("lbf", UnitCategory.FORCE, 4.4482216152605),
+    "j": UnitDefinition("j", UnitCategory.FORCE, 1.0, dimensions=(1, 2, -2)),
+    "nm": UnitDefinition("nm", UnitCategory.FORCE, 1.0, dimensions=(1, 2, -2)),
 
     # Pression / Contrainte (Base : Pascal 'Pa')
     "pa": UnitDefinition("pa", UnitCategory.PRESSURE, 1.0),
@@ -77,43 +101,66 @@ UNIT_REGISTRY: Dict[str, UnitDefinition] = {
 }
 
 
+def _resolve_unit_for_dimensions(dim: Tuple[int, int, int]) -> str:
+    """Résout le symbole d'unité canonique pour un triplet dimensionnel [M, L, T]."""
+    for symbol, u_def in UNIT_REGISTRY.items():
+        if u_def.dimensions == dim and u_def.scale_to_base == 1.0:
+            return symbol
+    m, l, t = dim
+    return f"M{m}_L{l}_T{t}"
+
+
 @dataclass(frozen=True)
 class PhysicalQuantity:
-    """Grandeur physique scalaire associée à son unité de mesure."""
+    """Grandeur physique scalaire associée à son unité de mesure et ses dimensions [M, L, T]."""
     value: float
     unit: str
+    custom_dimensions: Optional[Tuple[int, int, int]] = None
 
     def __post_init__(self) -> None:
         u_key = self.unit.lower()
-        if u_key not in UNIT_REGISTRY:
+        if u_key not in UNIT_REGISTRY and self.custom_dimensions is None:
             raise ValueError(f"Unité physique inconnue : {self.unit}")
 
     @property
-    def definition(self) -> UnitDefinition:
-        """Retourne la définition de l'unité active."""
-        return UNIT_REGISTRY[self.unit.lower()]
+    def definition(self) -> Optional[UnitDefinition]:
+        """Retourne la définition de l'unité active si enregistrée."""
+        return UNIT_REGISTRY.get(self.unit.lower())
 
     @property
     def category(self) -> UnitCategory:
         """Retourne la catégorie physique (longueur, angle, masse, etc.)."""
-        return self.definition.category
+        d = self.definition
+        return d.category if d is not None else UnitCategory.LENGTH
+
+    @property
+    def dimensions(self) -> Tuple[int, int, int]:
+        """Exposants dimensionnels SI [M, L, T] (Masse, Longueur, Temps)."""
+        if self.custom_dimensions is not None:
+            return self.custom_dimensions
+        d = self.definition
+        return d.dimensions if d is not None else (0, 0, 0)
 
     @property
     def value_si(self) -> float:
         """Valeur convertie dans l'unité de base internationale (SI)."""
-        return self.value * self.definition.scale_to_base
+        d = self.definition
+        scale = d.scale_to_base if d is not None else 1.0
+        return self.value * scale
 
     def to(self, target_unit: str) -> PhysicalQuantity:
-        """Convertit la grandeur vers une unité compatible de même catégorie."""
+        """Convertit la grandeur vers une unité compatible de même dimension."""
         t_key = target_unit.lower()
         if t_key not in UNIT_REGISTRY:
             raise ValueError(f"Unité cible inconnue : {target_unit}")
         t_def = UNIT_REGISTRY[t_key]
-        if t_def.category != self.category:
-            raise TypeError(f"Incompatibilité physique : impossible de convertir {self.category.value} en {t_def.category.value}")
+        if t_def.dimensions != self.dimensions:
+            raise TypeError(
+                f"Incompatibilité physique : impossible de convertir [M,L,T] {self.dimensions} en {t_def.dimensions}"
+            )
 
         converted_val = self.value_si / t_def.scale_to_base
-        return PhysicalQuantity(converted_val, target_unit)
+        return PhysicalQuantity(converted_val, target_unit, custom_dimensions=self.dimensions)
 
     def to_mm(self) -> float:
         """Raccourci de conversion rapide vers les millimètres (CAO standard)."""
@@ -124,24 +171,56 @@ class PhysicalQuantity:
         return self.to("deg").value
 
     def __add__(self, other: PhysicalQuantity) -> PhysicalQuantity:
-        if self.category != other.category:
-            raise TypeError("Addition impossible entre grandeurs de catégories physiques différentes.")
-        other_converted = other.to(self.unit)
-        return PhysicalQuantity(self.value + other_converted.value, self.unit)
+        if self.dimensions != other.dimensions:
+            raise TypeError(
+                f"Incompatibilité dimensionnelle : impossible d'additionner des grandeurs de dimensions "
+                f"[M, L, T] {self.dimensions} et {other.dimensions}."
+            )
+        other_converted = other.to(self.unit) if other.unit.lower() in UNIT_REGISTRY else other
+        return PhysicalQuantity(self.value + other_converted.value, self.unit, custom_dimensions=self.dimensions)
 
     def __sub__(self, other: PhysicalQuantity) -> PhysicalQuantity:
-        if self.category != other.category:
-            raise TypeError("Soustraction impossible entre grandeurs de catégories physiques différentes.")
-        other_converted = other.to(self.unit)
-        return PhysicalQuantity(self.value - other_converted.value, self.unit)
+        if self.dimensions != other.dimensions:
+            raise TypeError(
+                f"Incompatibilité dimensionnelle : impossible de soustraire des grandeurs de dimensions "
+                f"[M, L, T] {self.dimensions} et {other.dimensions}."
+            )
+        other_converted = other.to(self.unit) if other.unit.lower() in UNIT_REGISTRY else other
+        return PhysicalQuantity(self.value - other_converted.value, self.unit, custom_dimensions=self.dimensions)
 
-    def __mul__(self, factor: float) -> PhysicalQuantity:
-        return PhysicalQuantity(self.value * float(factor), self.unit)
+    def __mul__(self, other: Union[float, int, PhysicalQuantity]) -> PhysicalQuantity:
+        if isinstance(other, (int, float)):
+            return PhysicalQuantity(self.value * float(other), self.unit, custom_dimensions=self.dimensions)
+        if isinstance(other, PhysicalQuantity):
+            new_val_si = self.value_si * other.value_si
+            new_dim = (
+                self.dimensions[0] + other.dimensions[0],
+                self.dimensions[1] + other.dimensions[1],
+                self.dimensions[2] + other.dimensions[2],
+            )
+            target_unit = _resolve_unit_for_dimensions(new_dim)
+            scale = UNIT_REGISTRY[target_unit].scale_to_base if target_unit in UNIT_REGISTRY else 1.0
+            return PhysicalQuantity(new_val_si / scale, target_unit, custom_dimensions=new_dim)
+        raise TypeError(f"Opération de multiplication non supportée avec {type(other)}")
 
-    def __truediv__(self, divisor: float) -> PhysicalQuantity:
-        if abs(divisor) < 1e-12:
-            raise ZeroDivisionError("Division par zéro d'une grandeur physique.")
-        return PhysicalQuantity(self.value / float(divisor), self.unit)
+    def __truediv__(self, other: Union[float, int, PhysicalQuantity]) -> PhysicalQuantity:
+        if isinstance(other, (int, float)):
+            if abs(other) < 1e-12:
+                raise ZeroDivisionError("Division par zéro d'une grandeur physique.")
+            return PhysicalQuantity(self.value / float(other), self.unit, custom_dimensions=self.dimensions)
+        if isinstance(other, PhysicalQuantity):
+            if abs(other.value_si) < 1e-12:
+                raise ZeroDivisionError("Division par zéro d'une grandeur physique.")
+            new_val_si = self.value_si / other.value_si
+            new_dim = (
+                self.dimensions[0] - other.dimensions[0],
+                self.dimensions[1] - other.dimensions[1],
+                self.dimensions[2] - other.dimensions[2],
+            )
+            target_unit = _resolve_unit_for_dimensions(new_dim)
+            scale = UNIT_REGISTRY[target_unit].scale_to_base if target_unit in UNIT_REGISTRY else 1.0
+            return PhysicalQuantity(new_val_si / scale, target_unit, custom_dimensions=new_dim)
+        raise TypeError(f"Opération de division non supportée avec {type(other)}")
 
     def __str__(self) -> str:
         return f"{self.value:.4g} {self.unit}"

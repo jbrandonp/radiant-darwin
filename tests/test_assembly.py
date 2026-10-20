@@ -127,3 +127,54 @@ def test_assembly_manager_revolute_with_origin_anchor() -> None:
     assert "arm" in updated
     assert pytest.approx(updated["arm"].volume(), 1e-3) == arm.volume()
 
+
+def test_assembly_link_zero_copy_and_instancing() -> None:
+    """
+    Vérifie la parité industrielle FreeCAD App::Link :
+    - Partage zéro-copie du solide maître unique en mémoire vive
+    - Cache paresseux mémoïsé (lazy evaluation) des solides transformés
+    - Extraction matricielle par lot (N, 4, 4) pour rendu GPU instancié
+    - Calcul du ratio d'économie de mémoire
+    """
+    import numpy as np
+    from src.core.assembly import AssemblyLink, AssemblyLinkManager
+
+    master_bolt = make_box(5.0, 5.0, 20.0)
+    link_mgr = AssemblyLinkManager()
+    link_mgr.register_master_solid("bolt_m5", master_bolt)
+
+    # Création de 10 instances liées
+    num_instances = 10
+    for i in range(num_instances):
+        t_mat = np.eye(4, dtype=np.float64)
+        t_mat[0, 3] = float(i * 15.0)  # Décalage en X
+        link = link_mgr.create_link(f"bolt_inst_{i}", "bolt_m5", placement_matrix=t_mat)
+        # Vérification zéro-copie : pointe exactement sur le même objet Python
+        assert link.solid is master_bolt
+
+    assert len(link_mgr.links) == 10
+    assert pytest.approx(link_mgr.calculate_memory_savings_ratio(), 1e-4) == 10.0
+
+    # Vérification extraction de matrices GPU (10, 4, 4)
+    gpu_matrices = link_mgr.get_instance_matrices_for_master("bolt_m5")
+    assert gpu_matrices.shape == (10, 4, 4)
+    assert gpu_matrices[3, 0, 3] == 45.0  # 3 * 15.0
+
+    # Vérification du cache paresseux
+    link_0 = link_mgr.links["bolt_inst_0"]
+    # Matrice identité au début pour test de lazy cache
+    link_0.set_transform(np.eye(4, dtype=np.float64))
+    assert link_0.get_transformed_solid() is master_bolt
+
+    new_mat = np.eye(4, dtype=np.float64)
+    new_mat[2, 3] = 100.0
+    link_0.set_transform(new_mat)
+    transformed_1 = link_0.get_transformed_solid()
+    assert transformed_1 is not master_bolt
+    assert pytest.approx(transformed_1.volume(), 1e-3) == master_bolt.volume()
+
+    # Second appel : doit retourner l'instance en cache sans re-calcul
+    transformed_2 = link_0.get_transformed_solid()
+    assert transformed_1 is transformed_2
+
+

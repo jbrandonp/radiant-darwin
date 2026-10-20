@@ -216,6 +216,31 @@ class NexusNURBSSurface(NexusSurface):
 
         return comb
 
+    def adaptive_tessellate(
+        self,
+        linear_deflection: float = 0.05,
+        angular_deflection_deg: float = 15.0,
+        max_depth: int = 5
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Tessellation adaptative par flèche cordale et déviation angulaire (FreeCAD BRepMesh_IncrementalMesh).
+        Subdivise récursivement le domaine paramétrique (u, v) là où la surface s'écarte
+        du plan de tangence ou présente une forte courbure.
+        Retourne (sommets_3d, triangles).
+        """
+        from src.core.adaptive_tessellation import AdaptiveTessellator
+        u_bounds = (float(self.knots_u[0]), float(self.knots_u[-1]))
+        v_bounds = (float(self.knots_v[0]), float(self.knots_v[-1]))
+        return AdaptiveTessellator.tessellate(
+            eval_fn=self.evaluate,
+            normal_fn=self.normal,
+            u_bounds=u_bounds,
+            v_bounds=v_bounds,
+            linear_deflection=linear_deflection,
+            angular_deflection_deg=angular_deflection_deg,
+            max_depth=max_depth
+        )
+
 
 def check_surface_continuity(
     surf_a: NexusNURBSSurface,

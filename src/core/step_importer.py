@@ -830,6 +830,29 @@ class STEPImporter:
 
         return m.Manifold.cube([20.0, 20.0, 20.0], center=False)
 
+    @staticmethod
+    def _try_heal_mesh(
+        all_verts: Sequence[Sequence[float]],
+        triangles: Sequence[Tuple[int, int, int]]
+    ) -> Optional[m.Manifold]:
+        """Tente de réparer les micro-fissures topologiques via ShapeFixer (ShapeFix)."""
+        from src.core.shape_healing import ShapeFixer
+        v_arr = np.array(all_verts, dtype=np.float64)
+        t_arr = np.array(triangles, dtype=np.int32)
+        healed_v, healed_t, _ = ShapeFixer.heal_mesh(v_arr, t_arr, tolerance=1e-3)
+        if len(healed_t) >= 4:
+            try:
+                mesh = m.Mesh(
+                    vert_properties=healed_v.astype(np.float32),
+                    tri_verts=healed_t.astype(np.int32)
+                )
+                mani = m.Manifold(mesh)
+                if not mani.is_empty() and mani.volume() > 1e-4:
+                    return mani
+            except (ValueError, RuntimeError, IndexError):
+                pass
+        return None
+
     def _construct_manifold_from_brep(
         self,
         brep: NexusBRep,
@@ -852,6 +875,10 @@ class STEPImporter:
                     return mani
             except (ValueError, RuntimeError, IndexError):
                 mani = None
+
+            healed_mani = self._try_heal_mesh(all_verts, triangles)
+            if healed_mani is not None:
+                return healed_mani
 
         # 1. Enveloppe convexe étanche basée sur les sommets réels du B-Rep
         if len(all_verts) >= 4:

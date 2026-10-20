@@ -209,3 +209,37 @@ def test_unified_sketch_solver_facade() -> None:
     assert diag.degrees_of_freedom == 0
     assert diag.status.value == "fully_constrained"
 
+
+def test_planegcs_algebraic_constraint_diagnosis() -> None:
+    """Vérifie le diagnostic algébrique exact (FreeCAD PlaneGCS) isolant redondances et conflits."""
+    solver = SketchConstraintSolver2D()
+    p0 = solver.add_point(Point2D(0.0, 0.0))
+    p1 = solver.add_point(Point2D(10.0, 0.0))
+
+    # C0: Horizontale entre p0 et p1 (v0 = v1)
+    solver.add_horizontal(p0, p1)
+    # C1: Fixe p0 à (0, 0) (u0 = 0, v0 = 0)
+    solver.add_fixed(p0, 0.0, 0.0)
+    # C2: Fixe p1 à (10, 0) (u1 = 10, v1 = 0) -> Rendant C0 redondante !
+    solver.add_fixed(p1, 10.0, 0.0)
+
+    report = solver.diagnose_constraints()
+    assert report.degrees_of_freedom == 0
+    assert report.is_overconstrained is True
+    assert 2 in report.redundant_constraint_indices  # La contrainte 2 contient une dépendance redondante sur v1
+
+    # Maintenant, créons un conflit direct
+    solver_conflict = SketchConstraintSolver2D()
+    pa = solver_conflict.add_point(Point2D(0.0, 0.0))
+    pb = solver_conflict.add_point(Point2D(10.0, 0.0))
+
+    solver_conflict.add_horizontal(pa, pb)
+    solver_conflict.add_fixed(pa, 0.0, 0.0)
+    # En conflit violent avec l'horizontalité car v_b = 5.0 alors que v_a = 0.0
+    solver_conflict.add_fixed(pb, 10.0, 5.0)
+
+    conf_report = solver_conflict.diagnose_constraints()
+    assert len(conf_report.conflicting_constraint_indices) > 0
+    assert 2 in conf_report.conflicting_constraint_indices
+
+

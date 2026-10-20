@@ -23,6 +23,7 @@ JSONValue = Union[
 ]
 
 from src.core.document import CADDocument
+from src.core.geometry import Solid
 from src.core.types import PlaneType, BooleanOperation, Point2D
 from src.core.sketch import Sketch2D
 from src.core.feature import (
@@ -565,7 +566,12 @@ class ProjectSerializer:
     FORMAT_VERSION: str = "1.0"
 
     @classmethod
-    def save_project(cls, document: CADDocument, filepath: str) -> bool:
+    def save_project(
+        cls,
+        document: CADDocument,
+        filepath: str,
+        cache_geometry: bool = True
+    ) -> bool:
         """Sérialise le document complet sous forme de fichier JSON .cadproj ou .cadz compressé."""
         data: Dict[str, JSONValue] = {
             "format_version": cls.FORMAT_VERSION,
@@ -589,8 +595,9 @@ class ProjectSerializer:
             f_dict = ProjectSerializer._serialize_feature(feat)
             cast_features.append(f_dict)
 
-        # 3. Écriture atomique sécurisée sur disque (support du format compressé .cadz)
-        return ProjectSerializer._write_to_disk(data, filepath)
+        # 3. Écriture atomique sécurisée sur disque (support du format compressé .cadz avec caches)
+        bodies_to_cache = getattr(document, "bodies", None) if cache_geometry else None
+        return cls._write_to_disk(data, filepath, bodies=bodies_to_cache)
 
     _DIRECT_SERIALIZE_ATTRS: Tuple[str, ...] = (
         "target_body_id", "sketch_id", "source_body_id", "tool_body_id",
@@ -651,7 +658,48 @@ class ProjectSerializer:
         return f_dict
 
     @staticmethod
-    def _write_to_disk(data: Dict[str, JSONValue], filepath: str) -> bool:
+    def _write_geometry_cache_to_zip(zf: zipfile.ZipFile, bodies: Dict[str, Solid]) -> None:
+        """Sérialise les corps solides sous forme de caches binaires .npz (Parité FreeCAD .brp)."""
+        import io
+        import numpy as np
+        for body_id, solid in bodies.items():
+            if solid is None or not hasattr(solid, "manifold") or solid.is_empty():
+                continue
+            mesh = solid.manifold.to_mesh()
+            v_arr = np.array(mesh.vert_properties, dtype=np.float32)
+            t_arr = np.array(mesh.tri_verts, dtype=np.int32)
+            buf = io.BytesIO()
+            np.savez_compressed(buf, vertices=v_arr, triangles=t_arr)
+            zf.writestr(f"shapes/{body_id}.npz", buf.getvalue())
+
+    @staticmethod
+    def read_geometry_cache(filepath: str) -> Dict[str, Solid]:
+        """Extrait les corps solides pré-calculés depuis les caches binaires d'un fichier .cadz."""
+        import io
+        import numpy as np
+        import manifold3d as m
+        if not zipfile.is_zipfile(filepath):
+            return {}
+        cached_solids: Dict[str, Solid] = {}
+        with zipfile.ZipFile(filepath, "r") as zf:
+            for name in zf.namelist():
+                if name.startswith("shapes/") and name.endswith(".npz"):
+                    body_id = name[len("shapes/"):-len(".npz")]
+                    raw_data = zf.read(name)
+                    with np.load(io.BytesIO(raw_data)) as data:
+                        v = data["vertices"]
+                        t = data["triangles"]
+                        mesh = m.Mesh(vert_properties=v, tri_verts=t)
+                        cached_solids[body_id] = Solid(m.Manifold(mesh), name=body_id)
+        return cached_solids
+
+    @classmethod
+    def _write_to_disk(
+        cls,
+        data: Dict[str, JSONValue],
+        filepath: str,
+        bodies: Optional[Dict[str, Solid]] = None
+    ) -> bool:
         """
         Écrit les données JSON brutes ou zippées de manière atomique.
         Utilise un fichier temporaire suivi d'un renommage atomique via os.replace()
@@ -662,6 +710,8 @@ class ProjectSerializer:
             if filepath.lower().endswith(".cadz"):
                 with zipfile.ZipFile(tmp_filepath, "w", compression=zipfile.ZIP_DEFLATED) as zf:
                     zf.writestr("project.json", json.dumps(data, indent=2, ensure_ascii=False))
+                    if bodies:
+                        cls._write_geometry_cache_to_zip(zf, bodies)
             else:
                 with open(tmp_filepath, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
@@ -676,9 +726,12 @@ class ProjectSerializer:
                     pass
             raise
 
-
     @classmethod
-    def load_project(cls, filepath: str) -> Optional[CADDocument]:
+    def load_project(
+        cls,
+        filepath: str,
+        use_geometry_cache: bool = False
+    ) -> Optional[CADDocument]:
         """
         Désérialise un projet .cadproj ou .cadz compressé et reconstruit l'arbre paramétrique.
         Architecture propre de moins de 30 lignes avec complexité cognitive minimale.
@@ -716,6 +769,13 @@ class ProjectSerializer:
             # 4. Positionner le curseur de rollback et reconstruire la géométrie
             raw_rollback = data.get("rollback_index")
             doc.rollback_index = raw_rollback if isinstance(raw_rollback, int) else len(doc.features) - 1
+
+            if use_geometry_cache and filepath.lower().endswith(".cadz"):
+                cached_bodies = cls.read_geometry_cache(filepath)
+                if cached_bodies:
+                    doc.bodies = cached_bodies
+                    return doc
+
             doc.rebuild()
             return doc
 

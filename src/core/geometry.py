@@ -167,6 +167,38 @@ class Solid:
         res.color = self.color
         return res
 
+    def fuzzy_union(self, other: Solid, fuzzy_tolerance: float = 1e-4) -> Solid:
+        """
+        Union booléenne à tolérance floue (Parité OpenCASCADE BOPAlgo_PaveFiller SetFuzzyValue).
+        Rapproche les frontières coplanaires ou tangentes distantes de moins de fuzzy_tolerance
+        pour éliminer les micro-fissures IEEE 754 et facettes quasi-nulles.
+        """
+        s1 = self.simplify(fuzzy_tolerance) if fuzzy_tolerance > 1e-6 else self
+        s2 = other.simplify(fuzzy_tolerance) if fuzzy_tolerance > 1e-6 else other
+        res = s1.union(s2)
+        res.name = f"{self.name}_FuzzyUnion"
+        return res
+
+    def fuzzy_difference(self, other: Solid, fuzzy_tolerance: float = 1e-4) -> Solid:
+        """
+        Différence booléenne à tolérance floue (Parité OpenCASCADE BOPAlgo_PaveFiller SetFuzzyValue).
+        """
+        s1 = self.simplify(fuzzy_tolerance) if fuzzy_tolerance > 1e-6 else self
+        s2 = other.simplify(fuzzy_tolerance) if fuzzy_tolerance > 1e-6 else other
+        res = s1.difference(s2)
+        res.name = f"{self.name}_FuzzyCut"
+        return res
+
+    def fuzzy_intersection(self, other: Solid, fuzzy_tolerance: float = 1e-4) -> Solid:
+        """
+        Intersection booléenne à tolérance floue (Parité OpenCASCADE BOPAlgo_PaveFiller SetFuzzyValue).
+        """
+        s1 = self.simplify(fuzzy_tolerance) if fuzzy_tolerance > 1e-6 else self
+        s2 = other.simplify(fuzzy_tolerance) if fuzzy_tolerance > 1e-6 else other
+        res = s1.intersection(s2)
+        res.name = f"{self.name}_FuzzyIntersect"
+        return res
+
     def split_by_plane(
         self,
         normal: Union[Vector3D, Tuple[float, float, float], Sequence[float]] = (0.0, 0.0, 1.0),

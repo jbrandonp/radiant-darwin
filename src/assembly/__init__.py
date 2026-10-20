@@ -22,6 +22,8 @@ from src.core.assembly import (
     AssemblyMate,
     AssemblyInstance,
     AssemblySolver,
+    AssemblyLink,
+    AssemblyLinkManager,
 )
 
 # 3. Liaisons cinématiques de transmission (engrenages, crémaillères, rotules) et vue éclatée
@@ -66,6 +68,8 @@ __all__ = [
     "AssemblyMate",
     "AssemblyInstance",
     "AssemblySolver",
+    "AssemblyLink",
+    "AssemblyLinkManager",
     # Cinématique de transmission & Vue éclatée
     "TransmissionSense",
     "GearMate",

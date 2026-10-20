@@ -132,3 +132,42 @@ def test_save_and_load_body_materials() -> None:
         assert reloaded_body.material_name == mat_key
         assert pytest.approx(reloaded_body.calculate_mass_grams(), rel=1e-2) == 4.43
 
+
+def test_cadz_binary_geometry_cache() -> None:
+    """
+    Vérifie la sérialisation hybride avec caches géométriques binaires (Parité FreeCAD .FCStd / .brp) :
+    - Écriture des corps solides évalués dans l'archive .cadz (shapes/<body_id>.npz)
+    - Lecture directe des caches binaires sans réévaluation complète du Feature Tree
+    - Restauration exacte des volumes et topologies
+    """
+    import zipfile
+    doc = CADDocument("BinaryCacheTest")
+    box = BoxFeature("box_1", "BaseBox", width=25.0, height=15.0, depth=10.0)
+    doc.add_feature(box)
+    orig_vol = doc.bodies[box.body_id].volume()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cadz_path = os.path.join(tmp_dir, "cached_model.cadz")
+
+        # 1. Sauvegarde avec caches géométriques activés
+        assert ProjectSerializer.save_project(doc, cadz_path, cache_geometry=True)
+        assert os.path.exists(cadz_path)
+
+        # 2. Vérification du contenu du conteneur ZIP
+        with zipfile.ZipFile(cadz_path, "r") as zf:
+            names = zf.namelist()
+            assert "project.json" in names
+            assert f"shapes/{box.body_id}.npz" in names
+
+        # 3. Extraction directe des corps géométriques pré-calculés
+        cached_shapes = ProjectSerializer.read_geometry_cache(cadz_path)
+        assert box.body_id in cached_shapes
+        assert pytest.approx(cached_shapes[box.body_id].volume(), 1e-2) == orig_vol
+
+        # 4. Chargement accéléré via cache géométrique
+        fast_doc = ProjectSerializer.load_project(cadz_path, use_geometry_cache=True)
+        assert fast_doc is not None
+        assert box.body_id in fast_doc.bodies
+        assert pytest.approx(fast_doc.bodies[box.body_id].volume(), 1e-2) == orig_vol
+
+

@@ -67,6 +67,101 @@ class AssemblyInstance:
         return self.solid.transform(mat_3x4)
 
 
+class AssemblyLink(AssemblyInstance):
+    """
+    Instance d'assemblage zéro-copie haute performance (style FreeCAD App::Link).
+    Partage le même solide maître géométrique en mémoire vive sans duplication de sommets/facettes,
+    en ne stockant que la matrice de transformation affine 4x4.
+    Permet la mise à l'échelle vers des dizaines de milliers de composants sans saturer la RAM ni le GC.
+    """
+
+    def __init__(
+        self,
+        instance_id: str,
+        solid: Solid,
+        name: str = "LinkedComponent",
+        is_grounded: bool = False,
+        source_component_id: str = ""
+    ) -> None:
+        super().__init__(instance_id, solid, name, is_grounded)
+        self.source_component_id: str = source_component_id or solid.name
+        self._transformed_cache: Optional[Solid] = None
+        self._cached_matrix: Optional[np.ndarray] = None
+
+    def set_transform(self, matrix: np.ndarray) -> None:
+        """Met à jour la pose 4x4 et invalide le cache géométrique paresseux."""
+        self.transform_matrix = matrix
+        self._transformed_cache = None
+
+    def get_transformed_solid(self) -> Solid:
+        """Retourne le solide transformé avec mémoïsation paresseuse (Lazy Evaluation)."""
+        if np.allclose(self.transform_matrix, np.eye(4)):
+            return self.solid
+        if self._transformed_cache is not None and self._cached_matrix is not None:
+            if np.allclose(self.transform_matrix, self._cached_matrix):
+                return self._transformed_cache
+        mat_3x4 = self.transform_matrix[:3, :4]
+        self._transformed_cache = self.solid.transform(mat_3x4)
+        self._cached_matrix = self.transform_matrix.copy()
+        return self._transformed_cache
+
+
+class AssemblyLinkManager:
+    """
+    Gestionnaire central des liens d'assemblage zéro-copie (App::Link Registry).
+    Groupe les instances par pièce maîtresse et extrait les matrices d'instanciation GPU.
+    """
+
+    def __init__(self) -> None:
+        self.master_solids: Dict[str, Solid] = {}
+        self.links: Dict[str, AssemblyLink] = {}
+
+    def register_master_solid(self, solid_id: str, solid: Solid) -> None:
+        """Enregistre un solide maître partagé."""
+        self.master_solids[solid_id] = solid
+
+    def create_link(
+        self,
+        instance_id: str,
+        master_solid_id: str,
+        placement_matrix: Optional[np.ndarray] = None,
+        name: Optional[str] = None
+    ) -> AssemblyLink:
+        """Crée une nouvelle instance liée zéro-copie référençant le solide maître."""
+        if master_solid_id not in self.master_solids:
+            raise KeyError(f"Solide maître inconnu : {master_solid_id}")
+        master = self.master_solids[master_solid_id]
+        inst_name = name or f"{master.name}_{instance_id}"
+        link = AssemblyLink(
+            instance_id=instance_id,
+            solid=master,
+            name=inst_name,
+            source_component_id=master_solid_id
+        )
+        if placement_matrix is not None:
+            link.set_transform(placement_matrix)
+        self.links[instance_id] = link
+        return link
+
+    def get_instance_matrices_for_master(self, master_solid_id: str) -> np.ndarray:
+        """Retourne le tableau (N, 4, 4) des matrices de transformation pour l'instanciation GPU."""
+        matched = [
+            lnk.transform_matrix for lnk in self.links.values()
+            if lnk.source_component_id == master_solid_id
+        ]
+        if not matched:
+            return np.empty((0, 4, 4), dtype=np.float64)
+        return np.array(matched, dtype=np.float64)
+
+    def calculate_memory_savings_ratio(self) -> float:
+        """Calcule le ratio d'économie de mémoire vive permise par l'instanciation zéro-copie."""
+        if not self.links:
+            return 1.0
+        total_instances = len(self.links)
+        unique_masters = len(set(lnk.source_component_id for lnk in self.links.values()))
+        return float(total_instances) / max(1.0, float(unique_masters))
+
+
 class AssemblySolver:
     """
     Solveur cinématique et géométrique pour assemblages multi-pièces.

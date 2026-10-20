@@ -37,6 +37,15 @@ $$s = \frac{R_e}{\max(\sigma_{\text{vM}})}$$
 - **Analyse Isogéométrique Directe B-Rep (IBRA)** : Utilise directement les fonctions de base B-Splines / NURBS de la CAO comme fonctions de forme variationnelles pour résoudre l'élasticité linéaire, éliminant totalement l'étape de discrétisation en maillage tétraédrique et les erreurs d'approximation de frontière géométrique.
 - **Couplage Faible de Nitsche pour Faces Raccordées** : Raccordement continu variationnel à travers les découpes et interfaces multi-patchs non-conformes sans introduire de multiplicateurs de Lagrange additionnels, préservant la symétrie et la positivité stricte de la matrice globale $\mathbf{K}$.
 
+### 4. Optimisation Topologique Multiscale & Homogénéisation TPMS (SIMP 2024-2026)
+- **Interpolation de Matériau SIMP avec Filtrage PDE** :
+  $$E(\rho_e) = E_{\min} + \rho_e^p (E_0 - E_{\min}), \quad p \ge 3$$
+  Régularisé par l'équation d'Helmholtz $-r_0^2 \nabla^2 \tilde{\rho} + \tilde{\rho} = \rho$ pour imposer une longueur caractéristique minimale et éliminer les motifs en damier (*checkerboard patterns*).
+- **Homogénéisation Micromécanique de Réseaux TPMS** :
+  Calcul du tenseur d'élasticité effectif $\mathbf{C}^{\text{eff}}$ sur cellules unitaires (Gyroid, Schwarz Diamond) par conditions aux limites périodiques :
+  $$C_{ijkl}^{\text{eff}} = \frac{1}{|Y|} \int_Y C_{ijpq} \left(\varepsilon_{pq}^{kl(0)} - \varepsilon_{pq}(\boldsymbol{\chi}^{kl})\right) dY$$
+  permettant de mapper des densités continues macroscopiques vers des structures poreuses légères fabricables en fabrication additive métal (L-PBF).
+
 ---
 
 ## 🧰 Outils & Références d'Accompagnement

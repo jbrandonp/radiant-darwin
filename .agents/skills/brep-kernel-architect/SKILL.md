@@ -49,6 +49,13 @@ $$V - E + F - H = 2(1 - g)$$
 - **BrepGen (SIGGRAPH 2024)** : Représentation arborescente hiérarchique de géométrie latente diffusée de haut en bas, avec fusion de nœuds dupliqués pour reconstituer la topologie B-Rep étanche sans approximation polygonale.
 - **DualBrep (Flow Matching Continu)** : Formulation dans le domaine euclidien continu unifiant le champ de distance signée (SDF pour la forme globale) et le champ de distance non signée de Voronoi (UDF pour les éléments de surface) avec reconstruction neuronale étanche.
 
+### 5. Intersection Surface-Surface Certifiée (SSI & Opérateur de Krawczyk 2024-2026)
+- **Certification Topologique par Intervalles** : Résolution du système non-linéaire $F(u_1, v_1, u_2, v_2) = S_1(u_1, v_1) - S_2(u_2, v_2) = 0$.
+- **Opérateur de Krawczyk $K(X)$** :
+  $$K(X) = m(X) - Y \cdot F(m(X)) + (I - Y \cdot F'(X))(X - m(X))$$
+  Si $K(X) \subset \text{int}(X)$, prouve mathématiquement l'existence et l'unicité d'une branche de courbe d'intersection dans la boîte paramétrique 4D $X$, éliminant les boucles orphelines et les fausses intersections.
+- **Isolation des Singularités** : Détecte et isole les points de tangence rasante et cusps où $\mathrm{rank}(F') < 3$, garantissant la fermeture des coques découpées sans divergence.
+
 ---
 
 ## 🛠️ Boîte à Outils Algorithmique

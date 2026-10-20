@@ -56,6 +56,13 @@ Partitionne le système d'équations géométriques en 3 composantes irréductib
 2. **Bien-contrainte** : Blocs carrés réguliers résolus de manière découplée par Levenberg-Marquardt.
 3. **Sur-contrainte** : Détection des équations redondantes ou contradictoires pour diagnostic visuel immédiat dans l'arbre d'esquisse.
 
+### 3. Cinématique d'Assemblage Spatiale & Produit d'Exponentielles (PoE) sur SE(3)
+Pour les liaisons cinématiques d'assemblage 3D complexes (pivots, glissières, liaisons hélicoïdales) :
+- **Formule du Produit d'Exponentielles (PoE)** :
+  $$T(\boldsymbol{\theta}) = e^{[\mathcal{S}_1]\theta_1} e^{[\mathcal{S}_2]\theta_2} \dots e^{[\mathcal{S}_n]\theta_n} M$$
+  où $[\mathcal{S}_i] = \begin{pmatrix} [\boldsymbol{\omega}_i] & \mathbf{v}_i \\ \mathbf{0} & 0 \end{pmatrix} \in se(3)$ est le twist invariant spatial représentant l'axe hélicoïdal de la liaison, et $M \in SE(3)$ est la pose de référence au repos.
+- **Avantage SOTA** : Élimine les singularités de représentation d'Euler et les ambiguïtés d'axes parallèles inhérentes aux conventions classiques de Denavit-Hartenberg (DH).
+
 ---
 
 ## 🛠️ Composants Clés du Répertoire `src/core/`

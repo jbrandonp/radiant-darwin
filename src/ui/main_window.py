@@ -101,6 +101,7 @@ class CADMainWindow(QMainWindow):
         self._undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self, self._on_action_undo)
         self._redo_shortcut = QShortcut(QKeySequence("Ctrl+Y"), self, self._on_action_redo)
         self._redo_shift_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._on_action_redo)
+        self._ortho_shortcut = QShortcut(QKeySequence("5"), self, self._on_toggle_ortho)
 
         # Initialisation UI
         self._setup_ui()
@@ -322,6 +323,7 @@ class CADMainWindow(QMainWindow):
         # Affichage
         self.ribbon.fit_view_requested.connect(self.viewport.fit_view)
         self.ribbon.home_view_requested.connect(lambda: self.viewport.camera.set_preset_view("HOME"))
+        self.ribbon.toggle_ortho_requested.connect(self._on_toggle_ortho)
 
         # Export 3D
         self.ribbon.export_stl_requested.connect(self._on_export_stl)
@@ -1299,6 +1301,12 @@ class CADMainWindow(QMainWindow):
             ok = CADExporter.export_step(self.document.bodies, path)
             if ok:
                 QMessageBox.information(self, "Exportation STEP", f"Modèle STEP B-Rep exporté avec succès :\n{path}")
+
+    def _on_toggle_ortho(self) -> None:
+        """Bascule entre la vue perspective et la vue orthographique."""
+        is_ortho = self.viewport.toggle_orthographic()
+        mode_label = "Orthographique" if is_ortho else "Perspective"
+        self.status_bar.showMessage(f"Mode de caméra : {mode_label}", 2500)
 
     def _on_body_selected(self, body_id: str) -> None:
         """Affiche les informations d'un corps solide sélectionné dans le navigateur."""

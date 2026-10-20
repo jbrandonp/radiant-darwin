@@ -363,38 +363,55 @@ class CADViewportWidget(QOpenGLWidget):
         self.camera.zoom(float(delta))
         self.update()
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Gère les raccourcis clavier pratiques (F=fit, H=home, Q=press-pull, M=shading, S=snap, G=gizmo, Ctrl+Z/Y)."""
-        if bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier):
-            if event.key() == Qt.Key.Key_Z:
-                if bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
-                    if self.undo_redo_manager and self.undo_redo_manager.can_redo:
-                        self.undo_redo_manager.redo()
-                        self.update()
-                        return
-                elif self.undo_redo_manager and self.undo_redo_manager.can_undo:
-                    self.undo_redo_manager.undo()
-                    self.update()
-                    return
-            elif event.key() == Qt.Key.Key_Y:
-                if self.undo_redo_manager and self.undo_redo_manager.can_redo:
+    def toggle_orthographic(self) -> bool:
+        """Bascule entre la vue perspective et la vue orthographique."""
+        is_ortho = self.camera.toggle_projection_mode()
+        self.update()
+        return is_ortho
+
+    def _reset_home_view(self) -> None:
+        """Rétablit la vue canonique HOME."""
+        self.camera.set_preset_view("HOME")
+        self.update()
+
+    def _handle_undo_redo_key(self, event: QKeyEvent) -> bool:
+        """Gère les raccourcis d'annulation/rétablissement Ctrl+Z et Ctrl+Y."""
+        if not bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier) or not self.undo_redo_manager:
+            return False
+
+        if event.key() == Qt.Key.Key_Z:
+            if bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                if self.undo_redo_manager.can_redo:
                     self.undo_redo_manager.redo()
                     self.update()
-                    return
-
-        if event.key() == Qt.Key.Key_F:
-            self.fit_view()
-        elif event.key() == Qt.Key.Key_H:
-            self.camera.set_preset_view("HOME")
+                    return True
+            elif self.undo_redo_manager.can_undo:
+                self.undo_redo_manager.undo()
+                self.update()
+                return True
+        elif event.key() == Qt.Key.Key_Y and self.undo_redo_manager.can_redo:
+            self.undo_redo_manager.redo()
             self.update()
-        elif event.key() == Qt.Key.Key_Q:
-            self.execute_press_pull(10.0)
-        elif event.key() == Qt.Key.Key_M:
-            self._cycle_shading_mode()
-        elif event.key() == Qt.Key.Key_S:
-            self._toggle_snapping()
-        elif event.key() == Qt.Key.Key_G:
-            self._toggle_gizmo()
+            return True
+        return False
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Gère les raccourcis clavier pratiques (F=fit, H=home, Q=press-pull, M=shading, S=snap, G=gizmo, 5=ortho)."""
+        if self._handle_undo_redo_key(event):
+            return
+
+        key_actions: dict[Qt.Key, Callable[[], None]] = {
+            Qt.Key.Key_F: self.fit_view,
+            Qt.Key.Key_H: self._reset_home_view,
+            Qt.Key.Key_Q: lambda: self.execute_press_pull(10.0),
+            Qt.Key.Key_M: self._cycle_shading_mode,
+            Qt.Key.Key_S: self._toggle_snapping,
+            Qt.Key.Key_G: self._toggle_gizmo,
+            Qt.Key.Key_5: lambda: self.toggle_orthographic(),
+        }
+        action = key_actions.get(event.key())
+        if action is not None:
+            action()
         else:
             super().keyPressEvent(event)
 

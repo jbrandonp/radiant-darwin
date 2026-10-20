@@ -6,6 +6,10 @@ Démarre la boucle d'événements Qt et affiche l'interface utilisateur.
 from __future__ import annotations
 import sys
 import os
+import multiprocessing
+
+# Empêcher le risque de fork bomb lors du multi-processus sous Windows (PyInstaller / spawn)
+multiprocessing.freeze_support()
 
 # S'assurer que le dossier racine du projet est dans sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

@@ -400,15 +400,22 @@ class CADScriptEngine:
         with AtomicTransactionScope(document, "Script Code-as-CAD") as scope:
             old_trace = sys.gettrace()
             step_counter = [0]
+            in_trace = [False]
 
             def _watchdog_trace(
                 frame: types.FrameType,
                 event: str,
                 arg: Union[Exception, str, int, float, bool, None]
             ) -> Optional[Callable[..., None]]:
+                if in_trace[0]:
+                    return _watchdog_trace
                 step_counter[0] += 1
                 if (step_counter[0] & 0x1FF) == 0:
-                    token.check_cancelled()
+                    in_trace[0] = True
+                    try:
+                        token.check_cancelled()
+                    finally:
+                        in_trace[0] = False
                 return _watchdog_trace
 
             try:

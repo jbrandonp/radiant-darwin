@@ -44,6 +44,10 @@ class CADCamera:
         self.is_orthographic = not self.is_orthographic
         return self.is_orthographic
 
+    def toggle_orthographic(self) -> bool:
+        """Alias de commodité pour toggle_projection_mode."""
+        return self.toggle_projection_mode()
+
     def orbit(self, delta_yaw: float, delta_pitch: float) -> None:
         """Fait tourner la caméra autour de la cible."""
         self.yaw_deg = (self.yaw_deg + delta_yaw) % 360.0

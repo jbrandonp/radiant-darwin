@@ -74,3 +74,27 @@ def test_main_window_specialized_actions(qapp: QApplication) -> None:
     assert hasattr(window, "_on_action_ecad_thermal")
 
     window.close()
+
+
+def test_main_window_ortho_toggle(qapp: QApplication) -> None:
+    """Vérifie le basculement orthographique via le ruban, la fenêtre et le raccourci."""
+    window = CADMainWindow()
+    assert not window.viewport.camera.is_orthographic
+
+    # Basculement via la méthode d'action liée au raccourci '5' et au ruban
+    window._on_toggle_ortho()
+    assert window.viewport.camera.is_orthographic is True
+    assert "Orthographique" in window.status_bar.currentMessage()
+
+    # Deuxième basculement : retour en perspective
+    window._on_toggle_ortho()
+    assert window.viewport.camera.is_orthographic is False
+    assert "Perspective" in window.status_bar.currentMessage()
+
+    # Vérification du signal du ruban
+    emitted = []
+    window.ribbon.toggle_ortho_requested.connect(lambda: emitted.append(True))
+    window.ribbon.toggle_ortho_requested.emit()
+    assert len(emitted) == 1
+
+    window.close()

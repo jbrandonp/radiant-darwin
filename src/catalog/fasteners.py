@@ -50,7 +50,7 @@ ISO_METRIC_TABLE: Dict[str, MetricFastenerSpec] = {
 }
 
 
-_FASTENER_CACHE: Dict[Tuple[str, str, float, bool], m.Manifold] = {}
+_FASTENER_CACHE: Dict[Union[Tuple[str, str, float, bool], Tuple[str, str, float]], m.Manifold] = {}
 
 
 def clear_fastener_cache() -> None:
@@ -117,9 +117,12 @@ def create_hex_bolt(standard_size: str = "M6", length: float = 30.0, name: str =
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
     safe_len = max(2.0, float(length))
     cache_key = ("hex_bolt", standard_size, safe_len, threaded)
+    cache_key_compat = ("hex_bolt", standard_size, safe_len)
 
     if cache_key in _FASTENER_CACHE:
         return Solid(_FASTENER_CACHE[cache_key], name)
+    if threaded and cache_key_compat in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key_compat], name)
 
     if threaded:
         shank_m = _make_threaded_shank(spec.nominal_dia, spec.pitch, safe_len)
@@ -133,6 +136,8 @@ def create_hex_bolt(standard_size: str = "M6", length: float = 30.0, name: str =
 
     combined = shank_m + head_m
     _FASTENER_CACHE[cache_key] = combined
+    if threaded:
+        _FASTENER_CACHE[cache_key_compat] = combined
     return Solid(combined, name)
 
 
@@ -142,9 +147,12 @@ def create_socket_head_cap_screw(standard_size: str = "M6", length: float = 25.0
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
     safe_len = max(2.0, float(length))
     cache_key = ("socket_screw", standard_size, safe_len, threaded)
+    cache_key_compat = ("socket_screw", standard_size, safe_len)
 
     if cache_key in _FASTENER_CACHE:
         return Solid(_FASTENER_CACHE[cache_key], name)
+    if threaded and cache_key_compat in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key_compat], name)
 
     if threaded:
         shank_m = _make_threaded_shank(spec.nominal_dia, spec.pitch, safe_len)
@@ -163,6 +171,8 @@ def create_socket_head_cap_screw(standard_size: str = "M6", length: float = 25.0
     head_with_socket = head_m - socket_cutter
     combined = shank_m + head_with_socket
     _FASTENER_CACHE[cache_key] = combined
+    if threaded:
+        _FASTENER_CACHE[cache_key_compat] = combined
     return Solid(combined, name)
 
 
@@ -170,8 +180,11 @@ def create_hex_nut(standard_size: str = "M6", name: str = "HexNut", threaded: bo
     """Crée un écrou hexagonal conforme ISO 4032 / DIN 934 avec mémoïsation."""
     from src.core.geometry import Solid
     cache_key = ("hex_nut", standard_size, 0.0, threaded)
+    cache_key_compat = ("hex_nut", standard_size, 0.0)
     if cache_key in _FASTENER_CACHE:
         return Solid(_FASTENER_CACHE[cache_key], name)
+    if threaded and cache_key_compat in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key_compat], name)
 
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
     r_circ = (spec.hex_s * 0.5) / float(np.cos(np.pi / 6.0))
@@ -187,6 +200,8 @@ def create_hex_nut(standard_size: str = "M6", name: str = "HexNut", threaded: bo
         nut_m_final = nut_body - hole_cutter
 
     _FASTENER_CACHE[cache_key] = nut_m_final
+    if threaded:
+        _FASTENER_CACHE[cache_key_compat] = nut_m_final
     return Solid(nut_m_final, name)
 
 
@@ -194,8 +209,11 @@ def create_washer(standard_size: str = "M6", name: str = "Washer") -> Solid:
     """Crée une rondelle plate conforme ISO 7089 / DIN 125 avec mémoïsation."""
     from src.core.geometry import Solid
     cache_key = ("washer", standard_size, 0.0, False)
+    cache_key_compat = ("washer", standard_size, 0.0)
     if cache_key in _FASTENER_CACHE:
         return Solid(_FASTENER_CACHE[cache_key], name)
+    if cache_key_compat in _FASTENER_CACHE:
+        return Solid(_FASTENER_CACHE[cache_key_compat], name)
 
     spec = ISO_METRIC_TABLE.get(standard_size, ISO_METRIC_TABLE["M6"])
     r_out = spec.washer_d2 * 0.5
@@ -207,5 +225,6 @@ def create_washer(standard_size: str = "M6", name: str = "Washer") -> Solid:
 
     washer_m = outer_cyl - inner_cyl
     _FASTENER_CACHE[cache_key] = washer_m
+    _FASTENER_CACHE[cache_key_compat] = washer_m
     return Solid(washer_m, name)
 

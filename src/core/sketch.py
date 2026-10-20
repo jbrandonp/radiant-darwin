@@ -679,29 +679,13 @@ class Sketch2D:
 
     def get_primary_profile(self) -> Optional[List[Point2D]]:
         """
-        Extrait le profil principal fermé réel pour l'extrusion 3D.
-        Sélectionne le contour extérieur ayant la plus grande surface (Shoelace formula).
+        Extrait le premier profil fermé valide pour l'extrusion 3D.
+        Retourne None si l'esquisse ne contient aucun profil.
         """
         all_loops = self.get_all_closed_profiles()
         if not all_loops:
             return None
-
-        best_loop: Optional[List[Point2D]] = None
-        best_area = -1.0
-
-        for loop in all_loops:
-            if len(loop) < 3:
-                continue
-            area = 0.0
-            for i in range(len(loop)):
-                j = (i + 1) % len(loop)
-                area += loop[i].u * loop[j].v - loop[j].u * loop[i].v
-            area = abs(area) * 0.5
-            if area > best_area:
-                best_area = area
-                best_loop = loop
-
-        return best_loop
+        return all_loops[0]
 
     def get_profile_with_holes(self) -> Tuple[Optional[List[Point2D]], List[List[Point2D]]]:
         """

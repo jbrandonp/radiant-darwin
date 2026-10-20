@@ -154,6 +154,7 @@ class CADRibbonBar(QTabWidget):
     # Affichage
     fit_view_requested = Signal()
     home_view_requested = Signal()
+    toggle_ortho_requested = Signal()
 
     # Export 3D
     export_stl_requested = Signal()
@@ -488,8 +489,10 @@ class CADRibbonBar(QTabWidget):
         btn_fit.clicked.connect(self.fit_view_requested.emit)
         btn_home = RibbonButton("Vue Home", "🏠")
         btn_home.clicked.connect(self.home_view_requested.emit)
+        btn_ortho = RibbonButton("Ortho / Persp", "📐")
+        btn_ortho.clicked.connect(self.toggle_ortho_requested.emit)
 
-        layout.addWidget(_create_ribbon_group("Caméra", [btn_fit, btn_home]))
+        layout.addWidget(_create_ribbon_group("Caméra", [btn_fit, btn_home, btn_ortho]))
         self.addTab(tab, "AFFICHAGE")
 
     def _init_export_tab(self) -> None:

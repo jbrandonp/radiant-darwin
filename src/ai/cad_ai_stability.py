@@ -54,7 +54,7 @@ class AICancellationToken:
         """Initialise le jeton avec un timeout optionnel en secondes."""
         self._is_cancelled: bool = False
         self._cancel_reason: str = ""
-        self._lock: threading.Lock = threading.Lock()
+        self._lock: threading.RLock = threading.RLock()
         self._start_time: float = time.perf_counter()
         self._deadline: Optional[float] = (
             self._start_time + timeout_seconds if timeout_seconds is not None else None

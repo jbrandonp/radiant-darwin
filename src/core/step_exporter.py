@@ -346,7 +346,7 @@ class STEPExporter:
             "HEADER;",
             f"FILE_DESCRIPTION(('{header_description}','Standard STEP AP242 / AP214 Advanced B-Rep'),'2;1');",
             f"FILE_NAME('{part_name}.step','{timestamp}',('Brandon'),('CAD Studio'),'CAD Studio 1.0','CAD Studio Hybrid Kernel','');",
-            "FILE_SCHEMA(('AUTOMOTIVE_DESIGN', 'AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF'));",
+            "FILE_SCHEMA(('AUTOMOTIVE_DESIGN_CC2', 'AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF'));",
             "ENDSEC;",
             "DATA;",
             "#1=APPLICATION_CONTEXT('mechanical design');",

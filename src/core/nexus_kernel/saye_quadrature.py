@@ -159,13 +159,49 @@ class SayeImplicitQuadrature:
         )
 
     @classmethod
+    def _integrate_ray_subsegments(
+        cls,
+        phi_func: Callable[[float, float, float], float],
+        px: float,
+        py: float,
+        z_min: float,
+        z_max: float,
+        w_2d: float,
+        pts_list: List[List[float]],
+        wts_list: List[float]
+    ) -> None:
+        """Découpe le rayon 1D en sous-segments pour capturer les géométries courbes sans perte de racine."""
+        num_sub = 4
+        dz = (z_max - z_min) / float(num_sub)
+        for s in range(num_sub):
+            t_a = z_min + s * dz
+            t_b = z_min + (s + 1) * dz
+            phi_a = phi_func(px, py, t_a)
+            phi_b = phi_func(px, py, t_b)
+
+            if phi_a <= 0.0 and phi_b <= 0.0:
+                cls._append_1d_gauss_line(px, py, t_a, t_b, w_2d, pts_list, wts_list)
+            elif phi_a <= 0.0 and phi_b > 0.0:
+                z_root = cls.find_root_1d(phi_func, px, py, t_a, t_b, axis=2)
+                cls._append_1d_gauss_line(px, py, t_a, z_root, w_2d, pts_list, wts_list)
+            elif phi_a > 0.0 and phi_b <= 0.0:
+                z_root = cls.find_root_1d(phi_func, px, py, t_a, t_b, axis=2)
+                cls._append_1d_gauss_line(px, py, z_root, t_b, w_2d, pts_list, wts_list)
+            else:
+                t_mid = 0.5 * (t_a + t_b)
+                if phi_func(px, py, t_mid) <= 0.0:
+                    r1 = cls.find_root_1d(phi_func, px, py, t_a, t_mid, axis=2)
+                    r2 = cls.find_root_1d(phi_func, px, py, t_mid, t_b, axis=2)
+                    cls._append_1d_gauss_line(px, py, r1, r2, w_2d, pts_list, wts_list)
+
+    @classmethod
     def _integrate_saye_cut_cell(
         cls,
         phi_func: Callable[[float, float, float], float],
         bx_min: np.ndarray,
         bx_max: np.ndarray
     ) -> SayeQuadratureRule:
-        """Intégration numérique par réduction dimensionnelle 2D (XY) x 1D (Z coupé)."""
+        """Intégration numérique par réduction dimensionnelle 2D (XY) x 1D (Z coupé multi-racines)."""
         pts_list: List[List[float]] = []
         wts_list: List[float] = []
 
@@ -182,26 +218,7 @@ class SayeImplicitQuadrature:
             for iy, wy in enumerate(cls.GAUSS_1D_WTS_3):
                 py = cy + hy * cls.GAUSS_1D_PTS_3[iy]
                 w_2d = area_scale * wx * wy
-
-                # Racine de phi le long du rayon vertical
-                phi_at_zmin = phi_func(px, py, z_min)
-                phi_at_zmax = phi_func(px, py, z_max)
-
-                # Cas 1 : Segment vertical entièrement intérieur (phi <= 0)
-                if phi_at_zmin <= 0.0 and phi_at_zmax <= 0.0:
-                    cls._append_1d_gauss_line(px, py, z_min, z_max, w_2d, pts_list, wts_list)
-                # Cas 2 : Segment vertical entièrement extérieur
-                elif phi_at_zmin > 0.0 and phi_at_zmax > 0.0:
-                    continue
-                # Cas 3 : Segment coupé
-                else:
-                    z_root = cls.find_root_1d(phi_func, px, py, z_min, z_max, axis=2)
-                    if phi_at_zmin <= 0.0:
-                        # Intérieur entre z_min et z_root
-                        cls._append_1d_gauss_line(px, py, z_min, z_root, w_2d, pts_list, wts_list)
-                    else:
-                        # Intérieur entre z_root et z_max
-                        cls._append_1d_gauss_line(px, py, z_root, z_max, w_2d, pts_list, wts_list)
+                cls._integrate_ray_subsegments(phi_func, px, py, z_min, z_max, w_2d, pts_list, wts_list)
 
         if not pts_list:
             return SayeQuadratureRule(
@@ -286,3 +303,8 @@ class SayeImplicitQuadrature:
                     rule = cls.compute_cut_voxel_quadrature(phi_func, cell_min, cell_max)
                     total_vol += rule.fractional_volume
         return float(total_vol)
+
+
+# Alias pour interopérabilité et conformité aux benchmarks
+SayeQuadratureEngine = SayeImplicitQuadrature
+

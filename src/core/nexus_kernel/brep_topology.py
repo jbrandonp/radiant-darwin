@@ -12,6 +12,8 @@ from enum import Enum, auto
 from typing import Dict, List, Tuple, Optional, Sequence, Union
 import numpy as np
 
+from src.core.nexus_kernel.generational_arena import GenerationalArena, ArenaKey
+
 
 class SurfaceType(Enum):
     """Types de surfaces analytiques et NURBS supportées par NEXUS-3D."""
@@ -322,17 +324,40 @@ class NexusBRep:
         self.faces: Dict[str, NexusFace] = {}
         self.shells: Dict[str, NexusShell] = {}
 
+        # Arènes mémoire contiguës O(1) avec validation générationnelle SlotMap (Data-Oriented Design)
+        self.vertex_arena: GenerationalArena[NexusVertex] = GenerationalArena()
+        self.edge_arena: GenerationalArena[NexusEdge] = GenerationalArena()
+        self.face_arena: GenerationalArena[NexusFace] = GenerationalArena()
+        self.vertex_keys: Dict[str, ArenaKey] = {}
+        self.edge_keys: Dict[str, ArenaKey] = {}
+        self.face_keys: Dict[str, ArenaKey] = {}
+
     def add_vertex(self, vertex: NexusVertex) -> None:
         self.vertices[vertex.vertex_id] = vertex
+        self.vertex_keys[vertex.vertex_id] = self.vertex_arena.insert(vertex)
 
     def add_edge(self, edge: NexusEdge) -> None:
         self.edges[edge.edge_id] = edge
+        self.edge_keys[edge.edge_id] = self.edge_arena.insert(edge)
 
     def add_wire(self, wire: NexusWire) -> None:
         self.wires[wire.wire_id] = wire
 
     def add_face(self, face: NexusFace) -> None:
         self.faces[face.face_id] = face
+        self.face_keys[face.face_id] = self.face_arena.insert(face)
+
+    def get_vertex_by_key(self, key: ArenaKey) -> Optional[NexusVertex]:
+        """Accès direct O(1) au sommet via clé générationnelle immuable."""
+        return self.vertex_arena.get(key)
+
+    def get_edge_by_key(self, key: ArenaKey) -> Optional[NexusEdge]:
+        """Accès direct O(1) à l'arête via clé générationnelle immuable."""
+        return self.edge_arena.get(key)
+
+    def get_face_by_key(self, key: ArenaKey) -> Optional[NexusFace]:
+        """Accès direct O(1) à la face via clé générationnelle immuable."""
+        return self.face_arena.get(key)
 
     def add_shell(self, shell: NexusShell) -> None:
         self.shells[shell.shell_id] = shell

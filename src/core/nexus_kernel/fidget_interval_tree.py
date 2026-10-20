@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, List, Sequence, Tuple
+import math
 import numpy as np
 
 
@@ -96,6 +97,16 @@ class SDFIntervalTreeNode:
         inside_dist = min(max(dx, max(dy, dz)), 0.0)
         return outside_dist + inside_dist
 
+    def _eval_cylinder_scalar(self, x: float, y: float, z: float) -> float:
+        """Distance signée ponctuelle à un cylindre d'axe Z."""
+        radius = self.params[0] if self.params else 10.0
+        hz = self.params[1] if len(self.params) > 1 else 10.0
+        d_xy = math.hypot(x, y) - radius
+        d_z = abs(z) - hz
+        outside = math.hypot(max(0.0, d_xy), max(0.0, d_z))
+        inside = min(max(d_xy, d_z), 0.0)
+        return outside + inside
+
     def eval_scalar(self, x: float, y: float, z: float) -> float:
         """Évaluation ponctuelle scalaire directe de la distance signée."""
         if self.op == CSGOpType.SPHERE:
@@ -103,6 +114,9 @@ class SDFIntervalTreeNode:
 
         if self.op == CSGOpType.BOX:
             return self._eval_box_scalar(x, y, z)
+
+        if self.op == CSGOpType.CYLINDER:
+            return self._eval_cylinder_scalar(x, y, z)
 
         if self.op == CSGOpType.CONSTANT:
             return self.params[0] if self.params else 0.0
@@ -141,6 +155,57 @@ class SDFIntervalTreeNode:
         max_dist = float(np.sqrt(dx_max ** 2 + dy_max ** 2 + dz_max ** 2)) - radius
         return SDFInterval(min_dist, max_dist)
 
+    def _eval_box_interval(self, ix: SDFInterval, iy: SDFInterval, iz: SDFInterval) -> SDFInterval:
+        """Intervalle de distance signée à une boîte alignée."""
+        hx = self.params[0] if self.params else 10.0
+        hy = self.params[1] if len(self.params) > 1 else 10.0
+        hz = self.params[2] if len(self.params) > 2 else 10.0
+
+        dx_min = max(0.0, max(-hx - ix.max_val, ix.min_val - hx))
+        dy_min = max(0.0, max(-hy - iy.max_val, iy.min_val - hy))
+        dz_min = max(0.0, max(-hz - iz.max_val, iz.min_val - hz))
+
+        if ix.min_val <= hx and ix.max_val >= -hx and iy.min_val <= hy and iy.max_val >= -hy and iz.min_val <= hz and iz.max_val >= -hz:
+            d_in_x = max(abs(ix.min_val) - hx, abs(ix.max_val) - hx)
+            d_in_y = max(abs(iy.min_val) - hy, abs(iy.max_val) - hy)
+            d_in_z = max(abs(iz.min_val) - hz, abs(iz.max_val) - hz)
+            min_dist = min(0.0, max(d_in_x, max(d_in_y, d_in_z)))
+        else:
+            min_dist = float(np.sqrt(dx_min ** 2 + dy_min ** 2 + dz_min ** 2))
+
+        corners = [
+            (ix.min_val, iy.min_val, iz.min_val),
+            (ix.max_val, iy.max_val, iz.max_val),
+            (ix.min_val, iy.max_val, iz.min_val),
+            (ix.max_val, iy.min_val, iz.max_val)
+        ]
+        max_dist = max(self._eval_box_scalar(cx, cy, cz) for cx, cy, cz in corners)
+        return SDFInterval(min_dist, max_dist)
+
+    def _eval_cylinder_interval(self, ix: SDFInterval, iy: SDFInterval, iz: SDFInterval) -> SDFInterval:
+        """Intervalle de distance signée à un cylindre d'axe Z."""
+        radius = self.params[0] if self.params else 10.0
+        hz = self.params[1] if len(self.params) > 1 else 10.0
+
+        dx_min = max(0.0, max(0.0 - ix.max_val, ix.min_val - 0.0))
+        dy_min = max(0.0, max(0.0 - iy.max_val, iy.min_val - 0.0))
+        r_box_min = float(np.sqrt(dx_min ** 2 + dy_min ** 2))
+        dz_min = max(0.0, max(-hz - iz.max_val, iz.min_val - hz))
+
+        d_xy = max(0.0, r_box_min - radius)
+        min_dist = float(np.sqrt(d_xy ** 2 + dz_min ** 2))
+        if r_box_min < radius and iz.min_val <= hz and iz.max_val >= -hz:
+            min_dist = min(0.0, r_box_min - radius)
+
+        corners = [
+            (ix.min_val, iy.min_val, iz.min_val),
+            (ix.max_val, iy.max_val, iz.max_val),
+            (ix.min_val, iy.max_val, iz.min_val),
+            (ix.max_val, iy.min_val, iz.max_val)
+        ]
+        max_dist = max(self._eval_cylinder_scalar(cx, cy, cz) for cx, cy, cz in corners)
+        return SDFInterval(min_dist, max_dist)
+
     def eval_interval(
         self,
         ix: SDFInterval,
@@ -150,6 +215,12 @@ class SDFIntervalTreeNode:
         """Évalue l'intervalle de distance signée sur une boîte 3D [ix, iy, iz]."""
         if self.op == CSGOpType.SPHERE:
             return self._eval_sphere_interval(ix, iy, iz)
+
+        if self.op == CSGOpType.BOX:
+            return self._eval_box_interval(ix, iy, iz)
+
+        if self.op == CSGOpType.CYLINDER:
+            return self._eval_cylinder_interval(ix, iy, iz)
 
         if self.op == CSGOpType.CONSTANT:
             c = self.params[0] if self.params else 0.0

@@ -158,6 +158,7 @@ class CADMainWindow(QMainWindow):
 
         # 2. Viewport 3D
         self.viewport = CADViewportWidget(self.document)
+        self.viewport.undo_redo_manager = self.undo_redo_manager
         self.last_picked_entity: Optional[PickResult] = None
         self.viewport.register_pick_listener(self._on_viewport_entity_picked)
         central_layout.addWidget(self.viewport, 1)
@@ -392,6 +393,7 @@ class CADMainWindow(QMainWindow):
                 self.timeline.refresh()
                 self.browser.refresh()
                 self.undo_redo_manager = UndoRedoManager(new_doc)
+                self.viewport.undo_redo_manager = self.undo_redo_manager
                 if hasattr(self, "copilot_widget"):
                     self.copilot_widget.set_document(new_doc)
                 QMessageBox.information(self, "Projet Ouvert", f"Projet chargé avec succès :\n{new_doc.name} ({len(new_doc.features)} opérations)")

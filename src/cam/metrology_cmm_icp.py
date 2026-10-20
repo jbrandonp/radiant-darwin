@@ -83,8 +83,15 @@ class IterativeClosestPointAligner:
             closest_indices = self._find_nearest_neighbors(current_p, q_ref)
             matched_q = q_ref[closest_indices]
 
-            # 2. Estimation de la transformation optimale par Décomposition en Valeurs Singulières (SVD)
-            r_step, t_step = self._compute_rigid_step(current_p, matched_q)
+            # 2. Filtrage robuste des points aberrants (Trimmed ICP pour éliminer brides, étaux et bruits)
+            sq_dists = np.sum((current_p - matched_q) ** 2, axis=1)
+            inlier_cutoff = float(np.percentile(sq_dists, 85.0))
+            inlier_mask = sq_dists <= max(1.0, inlier_cutoff)
+
+            if int(np.sum(inlier_mask)) >= 3:
+                r_step, t_step = self._compute_rigid_step(current_p[inlier_mask], matched_q[inlier_mask])
+            else:
+                r_step, t_step = self._compute_rigid_step(current_p, matched_q)
 
             # 3. Application de la mise à jour
             current_p = (current_p @ r_step.T) + t_step

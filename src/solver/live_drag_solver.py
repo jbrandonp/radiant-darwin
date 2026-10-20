@@ -119,9 +119,6 @@ class LiveDragSolver:
                 if c.target_pos is not None:
                     current_x = c.target_pos.x
                     current_y = c.target_pos.y
-                else:
-                    current_x = c.target_val
-                    current_y = c.target_val
 
             elif c.constraint_type == DragConstraintType.DISTANCE:
                 if c.target_pos is not None and c.target_val > 0.0:

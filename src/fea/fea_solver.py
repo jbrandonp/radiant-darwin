@@ -7,11 +7,22 @@ le facteur de sécurité et génère le maillage cartographique coloré (heatmap
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional
+import os
+import shutil
+import subprocess
+import tempfile
+import logging
 import numpy as np
 
 from src.core.types import Vector3D, MeshBuffer, ColorRGBA
 from src.core.geometry import Solid
 from src.materials.material_db import PhysicalMaterial, MATERIAL_LIBRARY
+from src.fea.calculix_bridge import (
+    CalculixSimulationDeck,
+    FeaMaterial,
+    FeaElementType,
+    CalculixResultParser,
+)
 
 
 @dataclass
@@ -98,6 +109,162 @@ class FEASimulator:
             displacements=displacements,
             is_safe=bool(safety_factor >= 1.0)
         )
+
+    def generate_calculix_deck(
+        self,
+        solid: Solid,
+        applied_force_newtons: float = 1000.0,
+        force_direction: Vector3D = Vector3D(0.0, 0.0, -1.0),
+        job_name: str = "fea_analysis"
+    ) -> Optional[CalculixSimulationDeck]:
+        """
+        Génère un jeu de données complet (*.inp) pour le solveur industriel CalculiX CrunchiX (ccx).
+        Associe les sommets du maillage comme nœuds, les tétraèdres volumiques,
+        l'encastrement à la base et la charge nodale en tête.
+        """
+        if solid.is_empty():
+            return None
+        mesh_buf = solid.to_mesh_buffer()
+        if mesh_buf.is_empty() or len(mesh_buf.vertices) < 4:
+            return None
+
+        # Convertir le PhysicalMaterial en FeaMaterial pour CalculiX
+        fea_mat = FeaMaterial(
+            name=self.material.name.replace(" ", "_"),
+            young_modulus_mpa=float(self.material.young_modulus_gpa * 1000.0),
+            poisson_ratio=float(self.material.poisson_ratio),
+            density_kg_m3=float(self.material.density_kg_m3)
+        )
+
+        deck = CalculixSimulationDeck(
+            job_name=job_name,
+            material=fea_mat,
+            element_type=FeaElementType.C3D4
+        )
+
+        verts = mesh_buf.vertices
+        for idx, v in enumerate(verts):
+            deck.add_node(idx + 1, Vector3D(float(v[0]), float(v[1]), float(v[2])))
+
+        # Construire les éléments tétraédriques volumiques en reliant les triangles de surface au centroïde
+        centroid = Vector3D(float(np.mean(verts[:, 0])), float(np.mean(verts[:, 1])), float(np.mean(verts[:, 2])))
+        centroid_id = len(verts) + 1
+        deck.add_node(centroid_id, centroid)
+
+        for elem_idx, f in enumerate(mesh_buf.faces):
+            deck.add_tetrahedron(elem_idx + 1, [int(f[0]) + 1, int(f[1]) + 1, int(f[2]) + 1, centroid_id])
+
+        # Encastrer les nœuds de la base (Z proche du minimum)
+        z_coords = verts[:, 2]
+        z_min = float(np.min(z_coords))
+        z_max = float(np.max(z_coords))
+        z_range = max(0.001, z_max - z_min)
+        base_threshold = z_min + 0.05 * z_range
+        top_threshold = z_max - 0.05 * z_range
+
+        for idx, v in enumerate(verts):
+            if v[2] <= base_threshold:
+                deck.fix_node(idx + 1)
+
+        # Répartir la charge sur les nœuds de tête (Z proche du maximum)
+        top_nodes = [idx + 1 for idx, v in enumerate(verts) if v[2] >= top_threshold]
+        if not top_nodes:
+            top_nodes = [int(np.argmax(z_coords)) + 1]
+
+        force_per_node = applied_force_newtons / float(len(top_nodes))
+        dir_norm = force_direction.normalized()
+        for nid in top_nodes:
+            if abs(dir_norm.x) > 1e-4:
+                deck.apply_load(nid, 1, force_per_node * dir_norm.x)
+            if abs(dir_norm.y) > 1e-4:
+                deck.apply_load(nid, 2, force_per_node * dir_norm.y)
+            if abs(dir_norm.z) > 1e-4:
+                deck.apply_load(nid, 3, force_per_node * dir_norm.z)
+
+        return deck
+
+    def _build_fea_result_from_calculix(
+        self,
+        nodal_results: Dict[int, CalculixNodalResult],
+        solid: Solid
+    ) -> Optional[FEAResult]:
+        """Convertit les résultats nodaux CalculiX en FEAResult structuré."""
+        mesh_buf = solid.to_mesh_buffer()
+        num_verts = len(mesh_buf.vertices)
+        if num_verts == 0 or not nodal_results:
+            return None
+
+        stresses = np.zeros(num_verts, dtype=np.float64)
+        disps = np.zeros((num_verts, 3), dtype=np.float64)
+        for idx in range(num_verts):
+            node_id = idx + 1
+            if node_id in nodal_results:
+                res = nodal_results[node_id]
+                stresses[idx] = res.von_mises_stress_mpa
+                disps[idx] = [res.displacement.x, res.displacement.y, res.displacement.z]
+
+        max_s = float(np.max(stresses)) if len(stresses) > 0 else 0.0
+        min_s = float(np.min(stresses)) if len(stresses) > 0 else 0.0
+        max_d = float(np.max(np.linalg.norm(disps, axis=1))) if len(disps) > 0 else 0.0
+        yield_limit = max(0.01, self.material.yield_strength_mpa)
+        sf = yield_limit / max(0.001, max_s)
+        return FEAResult(
+            max_stress_mpa=max_s,
+            min_stress_mpa=min_s,
+            max_displacement_mm=max_d,
+            safety_factor=sf,
+            nodal_stresses=stresses,
+            displacements=disps,
+            is_safe=bool(sf >= 1.0)
+        )
+
+    def run_calculix_analysis(
+        self,
+        solid: Solid,
+        applied_force_newtons: float = 1000.0,
+        force_direction: Vector3D = Vector3D(0.0, 0.0, -1.0),
+        ccx_path: Optional[str] = None
+    ) -> Optional[FEAResult]:
+        """
+        Exécute la simulation FEA via le binaire CalculiX CrunchiX (ccx).
+        En l'absence de binaire externe installé, consigne un avertissement informatif
+        et bascule de manière transparente sur le solveur éléments finis interne.
+        """
+        binary = ccx_path or os.environ.get("CCX_BINARY") or shutil.which("ccx") or shutil.which("ccx.exe")
+        if not binary or not os.path.exists(binary):
+            logger = logging.getLogger("CADStudio.FEA")
+            logger.info("Solveur binaire CalculiX ccx non détecté dans le PATH système. Utilisation du solveur FEA interne haute fidélité.")
+            return self.run_static_analysis(solid, applied_force_newtons, force_direction)
+
+        deck = self.generate_calculix_deck(solid, applied_force_newtons, force_direction, job_name="cad_fea")
+        if deck is None:
+            return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inp_file = os.path.join(tmpdir, "cad_fea.inp")
+            deck.write_to_file(inp_file)
+            try:
+                subprocess.run([binary, "cad_fea"], cwd=tmpdir, check=True, timeout=60, capture_output=True)
+                frd_file = os.path.join(tmpdir, "cad_fea.frd")
+                dat_file = os.path.join(tmpdir, "cad_fea.dat")
+                content = ""
+                if os.path.exists(frd_file):
+                    with open(frd_file, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                elif os.path.exists(dat_file):
+                    with open(dat_file, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+
+                if content:
+                    parser = CalculixResultParser()
+                    nodal_results = parser.parse_full_results(content)
+                    fea_res = self._build_fea_result_from_calculix(nodal_results, solid)
+                    if fea_res is not None:
+                        return fea_res
+            except Exception as exc:
+                logging.getLogger("CADStudio.FEA").warning(f"Échec exécution CalculiX ccx ({exc}). Repli sur le solveur FEA interne.")
+
+        return self.run_static_analysis(solid, applied_force_newtons, force_direction)
 
     def generate_stress_heatmap_mesh(self, solid: Solid, fea_result: FEAResult) -> MeshBuffer:
         """

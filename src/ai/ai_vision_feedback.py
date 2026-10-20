@@ -159,8 +159,9 @@ class AIVisionFeedback:
         verts = buf.vertices
         faces = buf.faces
 
-        # Projection 3D -> 2D
+        # Projection 3D -> 2D avec profondeur Z pour tri en profondeur (Painter's algorithm)
         proj_pts: List[QPointF] = []
+        z_depths: List[float] = []
         for v in verts:
             # Centrage relatif
             rx = float(v[0] - center.x)
@@ -175,15 +176,29 @@ class AIVisionFeedback:
             # Rotation Pitch (axe X)
             x2 = x1
             y2 = y1 * cos_p - z1 * sin_p
+            z2 = y1 * sin_p + z1 * cos_p
 
             screen_x = half_w + x2 * scale
             screen_y = half_h - y2 * scale
             proj_pts.append(QPointF(screen_x, screen_y))
+            z_depths.append(z2)
 
-        # Dessin des triangles
-        max_draw_faces = min(2000, len(faces))
-        for i in range(max_draw_faces):
-            f = faces[i]
+        if len(faces) == 0 or len(proj_pts) == 0:
+            return
+
+        # Tri en profondeur de toutes les facettes (Z-buffer logiciel / Algorithme du peintre)
+        face_depths = [
+            (float(z_depths[f[0]] + z_depths[f[1]] + z_depths[f[2]]) / 3.0, idx)
+            for idx, f in enumerate(faces)
+        ]
+        # Trier de l'arrière vers l'avant (du Z le plus négatif au plus positif)
+        face_depths.sort(key=lambda item: item[0])
+
+        # Dessin complet sans troncature arbitraire (supporte jusqu'à 50 000 facettes)
+        max_draw_faces = min(50000, len(faces))
+        for k in range(max_draw_faces):
+            f_idx = face_depths[k][1]
+            f = faces[f_idx]
             p0, p1, p2 = proj_pts[f[0]], proj_pts[f[1]], proj_pts[f[2]]
             painter.drawPolygon([p0, p1, p2])
 

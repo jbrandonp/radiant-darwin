@@ -9,6 +9,7 @@ from src.system.undo_redo import (
     AddFeatureCommand,
     RemoveFeatureCommand,
     ModifyParameterCommand,
+    TransformBodyCommand,
     UndoRedoManager,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "AddFeatureCommand",
     "RemoveFeatureCommand",
     "ModifyParameterCommand",
+    "TransformBodyCommand",
     "UndoRedoManager",
 ]

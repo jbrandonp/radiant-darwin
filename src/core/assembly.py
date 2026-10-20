@@ -73,6 +73,19 @@ class AssemblySolver:
     Calcule la matrice de pose rigide relative pour satisfaire les contraintes d'assemblage.
     """
 
+    @staticmethod
+    def _compute_rodrigues_rotation(v_from: np.ndarray, v_to: np.ndarray) -> Optional[np.ndarray]:
+        """Calcule la matrice de rotation 3D alignant v_from sur v_to par Rodrigues."""
+        cross_p = np.cross(v_from, v_to)
+        sin_a = float(np.linalg.norm(cross_p))
+        cos_a = float(np.dot(v_from, v_to))
+        if sin_a > 1e-5:
+            rot_axis = cross_p / sin_a
+            kx, ky, kz = rot_axis
+            k_mat = np.array([[0, -kz, ky], [kz, 0, -kx], [-ky, kx, 0]], dtype=np.float64)
+            return np.eye(3, dtype=np.float64) + sin_a * k_mat + (1.0 - cos_a) * (k_mat @ k_mat)
+        return None
+
     @classmethod
     def _apply_single_mate(
         cls,
@@ -110,18 +123,17 @@ class AssemblySolver:
         pt_ref_curr = rot_ref @ pt_ref + trans_ref
         v_ref = rot_ref @ ax_ref if norm_ref > 1e-9 else ax_ref
 
-        # Alignement angulaire 3D de l'axe pour COAXIAL
+        # Alignement angulaire 3D de l'axe ou de la normale
+        desired_v: Optional[np.ndarray] = None
         if mate.mate_type == MateType.COAXIAL and norm_ref > 1e-9 and norm_tgt > 1e-9:
-            cross_p = np.cross(v_curr, v_ref)
-            sin_a = float(np.linalg.norm(cross_p))
-            cos_a = float(np.dot(v_curr, v_ref))
-            if sin_a > 1e-5:
-                rot_axis = cross_p / sin_a
-                kx, ky, kz = rot_axis
-                k_mat = np.array([[0, -kz, ky], [kz, 0, -kx], [-ky, kx, 0]], dtype=np.float64)
-                r_step = np.eye(3, dtype=np.float64) + sin_a * k_mat + (1.0 - cos_a) * (k_mat @ k_mat)
+            desired_v = v_ref
+        elif mate.mate_type == MateType.COINCIDENT_PLANES and norm_ref > 1e-9 and norm_tgt > 1e-9:
+            desired_v = -v_ref
+
+        if desired_v is not None:
+            r_step = cls._compute_rodrigues_rotation(v_curr, desired_v)
+            if r_step is not None:
                 target_inst.transform_matrix[0:3, 0:3] = r_step @ target_inst.transform_matrix[0:3, 0:3]
-                # Re-calcul du point cible après la rotation
                 pt_tgt_curr = target_inst.transform_matrix[0:3, 0:3] @ pt_tgt + target_inst.transform_matrix[0:3, 3]
 
         if mate.mate_type in (MateType.COINCIDENT_PLANES, MateType.DISTANCE):

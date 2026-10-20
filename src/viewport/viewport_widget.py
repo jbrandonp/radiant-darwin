@@ -12,6 +12,8 @@ from PySide6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent, QSurfaceFormat, Q
 
 from src.core.document import CADDocument
 from src.core.types import MeshBuffer, Vector3D
+from src.core.geometry import Solid
+from src.system.undo_redo import UndoRedoManager, TransformBodyCommand
 from src.viewport.camera import CADCamera
 from src.viewport.gl_renderer import GLRenderer
 from src.viewport.view_cube import ViewCubeOverlay
@@ -42,6 +44,10 @@ class CADViewportWidget(QOpenGLWidget):
         self.selected_pick: Optional[PickResult] = None
         self.current_snap: Optional[SnapResult] = None
         self._pick_listeners: List[Callable[[PickResult], None]] = []
+
+        self.undo_redo_manager: Optional[UndoRedoManager] = None
+        self._drag_start_solid: Optional[Solid] = None
+        self._accumulated_drag_delta: Vector3D = Vector3D(0.0, 0.0, 0.0)
 
         self._last_mouse_pos: QPoint = QPoint()
         self._is_orbiting: bool = False
@@ -274,6 +280,11 @@ class CADViewportWidget(QOpenGLWidget):
                     self.renderer.transform_gizmo.start_drag(
                         hit_axis, float(event.position().x()), float(event.position().y()), r_orig, r_dir
                     )
+                    self._accumulated_drag_delta = Vector3D(0.0, 0.0, 0.0)
+                    if self.selected_pick is not None and self.selected_pick.body_id in self.document.bodies:
+                        self._drag_start_solid = self.document.bodies[self.selected_pick.body_id]
+                    else:
+                        self._drag_start_solid = None
                     self.update()
                     return
 
@@ -296,6 +307,15 @@ class CADViewportWidget(QOpenGLWidget):
                 float(current_pos.x()), float(current_pos.y()), r_orig, r_dir
             )
             self.renderer.transform_gizmo.position = self.renderer.transform_gizmo._drag_start_pos + delta_t
+            self._accumulated_drag_delta = delta_t
+            if (
+                self._drag_start_solid is not None
+                and self.selected_pick is not None
+                and self.selected_pick.body_id in self.document.bodies
+            ):
+                body_id = self.selected_pick.body_id
+                self.document.bodies[body_id] = self._drag_start_solid.translate(delta_t)
+                self.cached_buffers = self.document.get_all_mesh_buffers()
             self.update()
             return
 
@@ -318,6 +338,21 @@ class CADViewportWidget(QOpenGLWidget):
         """Relâche les verrous de navigation et de manipulation gizmo lors du relâchement du clic."""
         if self.renderer.transform_gizmo.is_dragging:
             self.renderer.transform_gizmo.end_drag()
+            if (
+                self.selected_pick is not None
+                and self.selected_pick.body_id in self.document.bodies
+                and self._drag_start_solid is not None
+                and self._accumulated_drag_delta.length() > 1e-4
+            ):
+                body_id = self.selected_pick.body_id
+                self.document.bodies[body_id] = self._drag_start_solid
+                cmd = TransformBodyCommand(body_id, self._accumulated_drag_delta)
+                if self.undo_redo_manager is not None:
+                    self.undo_redo_manager.execute_command(cmd)
+                else:
+                    cmd.execute(self.document)
+            self._drag_start_solid = None
+            self._accumulated_drag_delta = Vector3D(0.0, 0.0, 0.0)
             self.update()
         self._is_orbiting = False
         self._is_panning = False
@@ -329,7 +364,24 @@ class CADViewportWidget(QOpenGLWidget):
         self.update()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Gère les raccourcis clavier pratiques (F=fit, H=home, Q=press-pull, M=shading, S=snap, G=gizmo)."""
+        """Gère les raccourcis clavier pratiques (F=fit, H=home, Q=press-pull, M=shading, S=snap, G=gizmo, Ctrl+Z/Y)."""
+        if bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            if event.key() == Qt.Key.Key_Z:
+                if bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                    if self.undo_redo_manager and self.undo_redo_manager.can_redo:
+                        self.undo_redo_manager.redo()
+                        self.update()
+                        return
+                elif self.undo_redo_manager and self.undo_redo_manager.can_undo:
+                    self.undo_redo_manager.undo()
+                    self.update()
+                    return
+            elif event.key() == Qt.Key.Key_Y:
+                if self.undo_redo_manager and self.undo_redo_manager.can_redo:
+                    self.undo_redo_manager.redo()
+                    self.update()
+                    return
+
         if event.key() == Qt.Key.Key_F:
             self.fit_view()
         elif event.key() == Qt.Key.Key_H:

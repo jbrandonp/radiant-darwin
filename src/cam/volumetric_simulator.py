@@ -133,34 +133,67 @@ class VolumetricStockSimulator:
         in_z = (f_min_z <= tz <= f_max_z)
         return bool(in_x and in_y and in_z)
 
+    def _build_voxel_sphere_kernel(self, r: float) -> Tuple[np.ndarray, int]:
+        """Précalcule le masque booléen 3D de l'outil pour un balayage vectorisé ultra-rapide."""
+        r_vox = max(1, int(np.ceil(r / self.res)))
+        d_range = np.arange(-r_vox, r_vox + 1, dtype=np.float64) * self.res
+        X, Y, Z = np.meshgrid(d_range, d_range, d_range, indexing="ij")
+        kernel = (X ** 2 + Y ** 2 + Z ** 2) <= (r ** 2)
+        return kernel, r_vox
+
+    def _carve_point(self, ix: int, iy: int, iz: int, r_vox: int, kernel: np.ndarray) -> None:
+        """Découpe un point d'usinage vectorisé sans boucle scalaire Python."""
+        i0, i1 = max(0, ix - r_vox), min(self.nx, ix + r_vox + 1)
+        j0, j1 = max(0, iy - r_vox), min(self.ny, iy + r_vox + 1)
+        k0, k1 = max(0, iz - r_vox), min(self.nz, iz + r_vox + 1)
+        if i0 >= i1 or j0 >= j1 or k0 >= k1:
+            return
+
+        ki0, ki1 = i0 - (ix - r_vox), i0 - (ix - r_vox) + (i1 - i0)
+        kj0, kj1 = j0 - (iy - r_vox), j0 - (iy - r_vox) + (j1 - j0)
+        kk0, kk1 = k0 - (iz - r_vox), k0 - (iz - r_vox) + (k1 - k0)
+
+        self.grid[i0:i1, j0:j1, k0:k1] &= ~kernel[ki0:ki1, kj0:kj1, kk0:kk1]
+
+    def _interpolate_toolpath_points(
+        self, points: List[Tuple[float, float, float]]
+    ) -> List[Tuple[float, float, float]]:
+        """Génère un balayage cylindrique continu (Swept Envelope) par interpolation le long des segments."""
+        if len(points) < 2:
+            return points
+        dense_points: List[Tuple[float, float, float]] = []
+        step = self.res * 0.5
+        for idx in range(len(points) - 1):
+            p0, p1 = points[idx], points[idx + 1]
+            seg_len = float(np.hypot(np.hypot(p1[0] - p0[0], p1[1] - p0[1]), p1[2] - p0[2]))
+            num_steps = max(1, int(np.ceil(seg_len / step)))
+            for s in range(num_steps):
+                t = float(s) / float(num_steps)
+                dense_points.append((
+                    p0[0] + t * (p1[0] - p0[0]),
+                    p0[1] + t * (p1[1] - p0[1]),
+                    p0[2] + t * (p1[2] - p0[2])
+                ))
+        dense_points.append(points[-1])
+        return dense_points
+
     def simulate_toolpath_cut(
         self,
         points: List[Tuple[float, float, float]],
         tool_radius_mm: float
     ) -> None:
-        """Soustrait la matière le long de la ligne d'usinage."""
+        """Soustrait la matière le long de la trajectoire par balayage cylindrique vectorisé."""
+        if not points:
+            return
         r = float(tool_radius_mm)
-        r_vox = int(np.ceil(r / self.res))
+        kernel, r_vox = self._build_voxel_sphere_kernel(r)
+        dense_points = self._interpolate_toolpath_points(points)
 
-        for pt in points:
-            px, py, pz = pt
-            ix = int(px / self.res)
-            iy = int(py / self.res)
-            iz = int(pz / self.res)
-
-            i_min = max(0, ix - r_vox)
-            i_max = min(self.nx, ix + r_vox + 1)
-            j_min = max(0, iy - r_vox)
-            j_max = min(self.ny, iy + r_vox + 1)
-            k_min = max(0, iz - r_vox)
-            k_max = min(self.nz, iz + r_vox + 1)
-
-            for i in range(i_min, i_max):
-                for j in range(j_min, j_max):
-                    for k in range(k_min, k_max):
-                        dist_sq = ((i - ix) * self.res) ** 2 + ((j - iy) * self.res) ** 2 + ((k - iz) * self.res) ** 2
-                        if dist_sq <= r ** 2:
-                            self.grid[i, j, k] = False
+        for px, py, pz in dense_points:
+            ix = int(np.round(px / self.res))
+            iy = int(np.round(py / self.res))
+            iz = int(np.round(pz / self.res))
+            self._carve_point(ix, iy, iz, r_vox, kernel)
 
     def generate_report(self, collisions: Optional[List[str]] = None) -> StockVoxelReport:
         """Calcule le volume exact de copeaux enlevés et l'état final."""

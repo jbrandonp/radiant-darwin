@@ -8,7 +8,7 @@ Architecture fortement typée : strictement zéro Any et zéro object.
 from __future__ import annotations
 from dataclasses import dataclass, field
 import math
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Callable
 import numpy as np
 
 from src.core.types import Vector3D
@@ -108,14 +108,15 @@ class AutomatedFiberPlacementEngine:
         tow_id: str,
         material: str,
         seed_point: Vector3D,
-        stress_field_fn: type, # Callable[[Vector3D], StressTensor3D]
+        stress_field_fn: Callable[[Vector3D], StressTensor3D],
         step_size_mm: float = 2.0,
         max_steps: int = 100,
-        preferred_initial_direction: Optional[Vector3D] = None
+        preferred_initial_direction: Optional[Vector3D] = None,
+        surface_projection_fn: Optional[Callable[[Vector3D], Vector3D]] = None
     ) -> FiberTowTrajectory:
         """
         Intègre la trajectoire de la fibre le long du champ directeur de traction maximale σ₁.
-        Applique un limiteur de courbure pour garantir l'absence de défauts de drapage.
+        Applique un limiteur de courbure et projette sur la surface du moule pour éviter la lévitation.
         """
         traj = FiberTowTrajectory(
             tow_id=tow_id,
@@ -124,7 +125,7 @@ class AutomatedFiberPlacementEngine:
             tow_thickness_mm=self.tow_thickness
         )
 
-        current_pos = seed_point
+        current_pos = seed_point if surface_projection_fn is None else surface_projection_fn(seed_point)
         # Évaluation initiale au point de départ
         initial_tensor = stress_field_fn(current_pos)
         (s1, _, _), (v1, _, _) = initial_tensor.compute_principal_stresses()
@@ -169,6 +170,8 @@ class AutomatedFiberPlacementEngine:
 
             # Progression spatiale (Schéma d'Euler pour la ligne de courant)
             next_pos = current_pos + (steered_dir * step_size_mm)
+            if surface_projection_fn is not None:
+                next_pos = surface_projection_fn(next_pos)
             current_pos = next_pos
             prev_dir = steered_dir
 

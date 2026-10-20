@@ -93,6 +93,10 @@ class CADDocument:
         except (ImportError, AttributeError, RuntimeError):
             self._bus_connected = False
 
+    def notify_listeners(self) -> None:
+        """Alias public pour notifier tous les écouteurs de changements."""
+        self._notify_change()
+
     def _notify_error(self, message: str, feature: Feature) -> None:
         """Notifie les écouteurs et le bus global d'une erreur d'évaluation géométrique."""
         for cb in self._on_error_callbacks:
@@ -262,8 +266,8 @@ class CADDocument:
             if first_outdated_idx <= max_idx:
                 self._purge_invalid_snapshots(first_outdated_idx)
             elif max_idx in self._timeline_snapshots:
-                # Restauration instantanée O(1)
-                self.bodies = dict(self._timeline_snapshots[max_idx])
+                # Restauration instantanée O(1) avec isolation par clonage
+                self.bodies = {b_id: s.clone() for b_id, s in self._timeline_snapshots[max_idx].items()}
                 self._notify_change()
                 return
 
@@ -271,7 +275,8 @@ class CADDocument:
 
             for idx in range(start_idx, max_idx + 1):
                 current_bodies = self._evaluate_feature_step(self.features[idx], current_bodies)
-                self._timeline_snapshots[idx] = dict(current_bodies)
+                # Enregistrement d'instantanés immuables et isolés
+                self._timeline_snapshots[idx] = {b_id: s.clone() for b_id, s in current_bodies.items()}
 
             # Restituer les matériaux physiques enregistrés pour chaque corps
             for b_id, mat_name in self.body_materials.items():

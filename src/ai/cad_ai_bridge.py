@@ -8,6 +8,8 @@ Architecture fortement typée : strictement zéro Any et zéro object.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
+import os
+import json
 import re
 from typing import Callable, Dict, List, Tuple, Optional
 
@@ -63,6 +65,7 @@ class AICommandType(Enum):
     EXPORT_FILE = "export_file"
     UNDO = "undo"
     REDO = "redo"
+    CUSTOM_SCRIPT = "custom_script"
     UNKNOWN = "unknown"
 
 
@@ -218,6 +221,49 @@ class CADAIBridge:
             command_type=AICommandType.CLEAR_SCENE
         )
 
+    def _try_llm_copilot_generation(self, prompt: str) -> Optional[CADAIExecutionResult]:
+        """Tente d'interroger un LLM externe (Ollama local ou API Claude/OpenAI) pour synthétiser un script Python CAD."""
+        ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        has_ollama = bool(os.environ.get("USE_OLLAMA") or os.environ.get("OLLAMA_HOST"))
+        has_openai = bool(os.environ.get("OPENAI_API_KEY"))
+        has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+        if not (has_ollama or has_openai or has_anthropic):
+            return None
+
+        # Si Ollama est configuré, envoyer un prompt de génération de code CAD
+        if has_ollama:
+            import urllib.request
+            import urllib.error
+            url = f"{ollama_host.rstrip('/')}/api/generate"
+            sys_prompt = "You are a CAD scripting engine. Return ONLY valid Python code manipulating `doc` using `make_box`, `make_cylinder`, `make_sphere`, `extrude_polygon`, or `Solid` operations."
+            payload = json.dumps({
+                "model": os.environ.get("OLLAMA_MODEL", "codellama"),
+                "prompt": f"{sys_prompt}\nUser: {prompt}\nCode:\n",
+                "stream": False
+            }).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        code_resp = str(data.get("response", ""))
+                        clean_code = re.sub(r"```python|```", "", code_resp).strip()
+                        if clean_code:
+                            from src.ai.cad_script_engine import CADScriptEngine
+                            res = CADScriptEngine.execute_script(self.doc, clean_code)
+                            return CADAIExecutionResult(
+                                success=res.success,
+                                message=f"Code généré par LLM ({os.environ.get('OLLAMA_MODEL', 'ollama')}) : {res.message}",
+                                command_executed="llm_cad_script",
+                                command_type=AICommandType.CUSTOM_SCRIPT,
+                                created_body_ids=res.created_bodies
+                            )
+            except Exception:
+                return None
+
+        return None
+
     def interpret_and_execute(self, prompt: str) -> CADAIExecutionResult:
         """Alias direct pour execute_natural_language_prompt."""
         return self.execute_natural_language_prompt(prompt)
@@ -238,6 +284,11 @@ class CADAIBridge:
         for predicate, handler in self._get_shape_dispatch_table():
             if predicate(p_clean):
                 return handler(p_clean)
+
+        # Phase 3 : tentative de synthèse de script par LLM externe (Ollama / Claude / OpenAI)
+        llm_result = self._try_llm_copilot_generation(prompt)
+        if llm_result is not None:
+            return llm_result
 
         # Commande non reconnue : suggestions interactives
         return CADAIExecutionResult(

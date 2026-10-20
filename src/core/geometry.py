@@ -139,6 +139,13 @@ class Solid:
         res.color = self.color
         return res
 
+    def clone(self) -> Solid:
+        """Crée une copie indépendante du corps solide préservant son maillage et ses métadonnées."""
+        res = Solid(self._manifold, self.name)
+        res.color = self.color
+        res.material_name = self.material_name
+        return res
+
     def union(self, other: Solid) -> Solid:
         """Union booléenne : fusionne ce solide avec un autre."""
         res_manifold = self._manifold + other._manifold

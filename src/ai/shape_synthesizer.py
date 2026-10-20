@@ -24,6 +24,76 @@ class ShapeSynthesizer:
     """
 
     @staticmethod
+    def _compute_involute_flank_angles(
+        base_radius: float,
+        outer_radius: float,
+        root_radius: float,
+        inv_alpha_0: float,
+        half_thick: float,
+        num_samples: int = 4
+    ) -> List[Tuple[float, float]]:
+        """Calcule les rayons et angles de déviation de développante de cercle exacte ISO 53."""
+        r_start = max(base_radius, root_radius)
+        flank_data: List[Tuple[float, float]] = []
+        for step in range(num_samples):
+            frac = float(step) / float(num_samples - 1)
+            r_cur = r_start + frac * (outer_radius - r_start)
+            # Angle de pression instantané à ce rayon : cos(alpha_r) = r_base / r
+            ratio = max(0.0, min(1.0, base_radius / r_cur))
+            alpha_r = math.acos(ratio)
+            inv_alpha_r = math.tan(alpha_r) - alpha_r
+            delta_theta = half_thick + inv_alpha_0 - inv_alpha_r
+            flank_data.append((r_cur, max(0.0, delta_theta)))
+        return flank_data
+
+    @classmethod
+    def _build_involute_gear_points(
+        cls,
+        num_teeth: int,
+        base_radius: float,
+        outer_radius: float,
+        root_radius: float,
+        inv_alpha_0: float,
+        half_thick: float
+    ) -> List[Point2D]:
+        """Génère l'ensemble des sommets 2D formant le profil d'engrenage à développante."""
+        flank = cls._compute_involute_flank_angles(
+            base_radius, outer_radius, root_radius, inv_alpha_0, half_thick
+        )
+        angle_per_tooth = 2.0 * math.pi / max(4, num_teeth)
+        points_2d: List[Point2D] = []
+
+        for i in range(num_teeth):
+            theta = float(i) * angle_per_tooth
+            d_th_root = flank[0][1]
+
+            # 1. Racinement flanc d'attaque si r_root < r_base
+            if root_radius < base_radius:
+                th_r1 = theta - d_th_root
+                points_2d.append(Point2D(root_radius * math.cos(th_r1), root_radius * math.sin(th_r1)))
+
+            # 2. Flanc montant (involute flanc droit en ordre croissant d'angle : theta - d_th)
+            for r_k, d_th in flank:
+                th = theta - d_th
+                points_2d.append(Point2D(r_k * math.cos(th), r_k * math.sin(th)))
+
+            # 3. Flanc descendant (involute flanc gauche du sommet vers la base : theta + d_th)
+            for r_k, d_th in reversed(flank):
+                th = theta + d_th
+                points_2d.append(Point2D(r_k * math.cos(th), r_k * math.sin(th)))
+
+            # 4. Racinement flanc de fuite si r_root < r_base
+            if root_radius < base_radius:
+                th_r2 = theta + d_th_root
+                points_2d.append(Point2D(root_radius * math.cos(th_r2), root_radius * math.sin(th_r2)))
+
+            # 5. Fond d'entredent entre deux dents successives
+            th_root_mid = theta + 0.5 * angle_per_tooth
+            points_2d.append(Point2D(root_radius * math.cos(th_root_mid), root_radius * math.sin(th_root_mid)))
+
+        return points_2d
+
+    @staticmethod
     def create_spur_gear(
         num_teeth: int = 20,
         module: float = 2.0,
@@ -34,47 +104,34 @@ class ShapeSynthesizer:
         keyway_depth: float = 2.0
     ) -> Solid:
         """
-        Génère un engrenage droit cylindrique à développante de cercle normalisé ISO.
+        Génère un engrenage droit cylindrique à développante de cercle normalisé ISO 53 / DIN 867.
         """
-        # Dimensions normalisées
         pitch_diameter = num_teeth * module
         pitch_radius = pitch_diameter / 2.0
+        alpha_0 = math.radians(pressure_angle_deg)
+        inv_alpha_0 = math.tan(alpha_0) - alpha_0
+        base_radius = pitch_radius * math.cos(alpha_0)
         addendum = 1.0 * module
         dedendum = 1.25 * module
         outer_radius = pitch_radius + addendum
         root_radius = max(bore_diameter / 2.0 + 2.0, pitch_radius - dedendum)
+        half_thick = math.pi / (2.0 * max(4, num_teeth))
 
-        # Tracé du contour polygonal d'une dent (profil trapézoïdal approché à développante)
-        points_2d: List[Point2D] = []
-        angle_per_tooth = 2.0 * math.pi / max(4, num_teeth)
-        half_tooth_angle = angle_per_tooth / 4.0
-
-        for i in range(num_teeth):
-            theta = i * angle_per_tooth
-            # 1. Fond de dent (Root)
-            p_root_1 = Point2D(root_radius * math.cos(theta - half_tooth_angle), root_radius * math.sin(theta - half_tooth_angle))
-            # 2. Flanc montant (Involute flank)
-            p_pitch_1 = Point2D(pitch_radius * math.cos(theta - half_tooth_angle * 0.6), pitch_radius * math.sin(theta - half_tooth_angle * 0.6))
-            # 3. Sommet de dent (Tip)
-            p_tip_1 = Point2D(outer_radius * math.cos(theta - half_tooth_angle * 0.3), outer_radius * math.sin(theta - half_tooth_angle * 0.3))
-            p_tip_2 = Point2D(outer_radius * math.cos(theta + half_tooth_angle * 0.3), outer_radius * math.sin(theta + half_tooth_angle * 0.3))
-            # 4. Flanc descendant
-            p_pitch_2 = Point2D(pitch_radius * math.cos(theta + half_tooth_angle * 0.6), pitch_radius * math.sin(theta + half_tooth_angle * 0.6))
-            p_root_2 = Point2D(root_radius * math.cos(theta + half_tooth_angle), root_radius * math.sin(theta + half_tooth_angle))
-
-            points_2d.extend([p_root_1, p_pitch_1, p_tip_1, p_tip_2, p_pitch_2, p_root_2])
+        points_2d = ShapeSynthesizer._build_involute_gear_points(
+            num_teeth, base_radius, outer_radius, root_radius, inv_alpha_0, half_thick
+        )
 
         # Extrusion volumique du corps denté
         gear_blank = extrude_polygon(points_2d, face_width, name=f"SpurGear_Z{num_teeth}_M{module}")
 
-        # Perçage de l'alésage central pour l'arbre
-        bore = make_cylinder(bore_diameter / 2.0, face_width * 1.5, center=True)
+        # Perçage traversant de l'alésage central pour l'arbre
+        bore = make_cylinder(bore_diameter / 2.0, face_width * 2.0, center=True).translate(0.0, 0.0, face_width / 2.0)
         gear_with_bore = gear_blank.difference(bore)
 
         # Rainure de clavette normalisée
         if keyway_width > 0.0 and keyway_depth > 0.0:
-            kw_box = make_box(keyway_width, keyway_depth * 2.0, face_width * 1.5, center=True)
-            kw_shifted = kw_box.translate(0.0, (bore_diameter / 2.0) + (keyway_depth / 2.0), 0.0)
+            kw_box = make_box(keyway_width, keyway_depth * 2.0, face_width * 2.0, center=True)
+            kw_shifted = kw_box.translate(0.0, (bore_diameter / 2.0) + (keyway_depth / 2.0), face_width / 2.0)
             return gear_with_bore.difference(kw_shifted)
 
         return gear_with_bore

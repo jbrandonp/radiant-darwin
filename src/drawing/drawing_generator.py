@@ -594,6 +594,34 @@ class TechnicalDrawingGenerator:
 
             c_val += step
 
+    def _project_section_background_edges(
+        self,
+        sheet: TechnicalSheet,
+        solid: Solid,
+        cut_height: float,
+        center_x: float,
+        center_y: float,
+        mean_u: float,
+        mean_v: float,
+        scale: float
+    ) -> None:
+        """Projette les arêtes d'arrière-plan visibles en arrière du plan de coupe (ISO 128)."""
+        buf = solid.to_mesh_buffer()
+        if buf.is_empty() or len(buf.edge_vertices) < 2:
+            return
+
+        for i in range(0, len(buf.edge_vertices) - 1, 2):
+            ev0 = buf.edge_vertices[i]
+            ev1 = buf.edge_vertices[i + 1]
+            if ev0[2] <= cut_height + 1e-4 and ev1[2] <= cut_height + 1e-4:
+                if abs(ev0[2] - cut_height) < 1e-4 and abs(ev1[2] - cut_height) < 1e-4:
+                    continue
+                bx1 = center_x + (float(ev0[0]) - mean_u) * scale
+                by1 = center_y + (float(ev0[1]) - mean_v) * scale
+                bx2 = center_x + (float(ev1[0]) - mean_u) * scale
+                by2 = center_y + (float(ev1[1]) - mean_v) * scale
+                sheet.lines.append(DrawingLine2D(bx1, by1, bx2, by2, is_hidden=False))
+
     def generate_section_view(
         self,
         solid: Solid,
@@ -642,6 +670,11 @@ class TechnicalDrawingGenerator:
                 continue
             self._draw_section_contour(sheet, poly, center_x, center_y, mean_u, mean_v, scale)
             self._generate_polygon_hatches(sheet, poly, center_x, center_y, mean_u, mean_v, scale, hatch_spacing)
+
+        # Projection des arêtes d'arrière-plan visibles en arrière du plan de coupe (norme ISO 128)
+        self._project_section_background_edges(
+            sheet, solid, cut_height, center_x, center_y, mean_u, mean_v, scale
+        )
 
         sheet.dimensions.append(DimensionLabel(center_x, center_y - 80.0, f"Coupe A-A (Z = {cut_height:.1f} mm)"))
         return sheet

@@ -8,6 +8,8 @@ Architecture 100% fortement typée sans Any ni object, compatible multiplateform
 from __future__ import annotations
 import json
 import sys
+import urllib.request
+import urllib.error
 from typing import Dict, List, Optional, Tuple, Union
 
 from src.core.document import CADDocument
@@ -414,8 +416,41 @@ class MCPStdioServer:
 
         return None
 
+    def _try_forward_to_gui_server(self, name: str, args: CompatDict) -> Optional[Tuple[str, bool]]:
+        """Tente de transférer l'appel d'outil au serveur HTTP de l'IHM active (port 8765)."""
+        url = "http://127.0.0.1:8765/mcp"
+        payload = json.dumps({
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+            "id": "mcp_forward"
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                if resp.status == 200:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    res_body = resp_data.get("result", {})
+                    content_list = res_body.get("content", [])
+                    is_err = bool(res_body.get("isError", False))
+                    text_parts = [item.get("text", "") for item in content_list if isinstance(item, dict)]
+                    res_text = "\n".join(text_parts) if text_parts else "Opération exécutée dans l'IHM active."
+                    return (res_text, not is_err)
+        except (urllib.error.URLError, TimeoutError, ConnectionRefusedError, OSError):
+            return None
+        return None
+
     def _dispatch_tool_action(self, name: str, args: CompatDict) -> Tuple[str, bool]:
-        """Achemine l'appel d'outil vers le sous-système approprié."""
+        """Achemine l'appel d'outil vers l'IHM active si disponible, ou en local autonome."""
+        forwarded = self._try_forward_to_gui_server(name, args)
+        if forwarded is not None:
+            return forwarded
+
         prim_res = self._dispatch_primitive(name, args)
         if prim_res is not None:
             return prim_res

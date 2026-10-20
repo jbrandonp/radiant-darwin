@@ -12,6 +12,7 @@ from typing import List, Optional, Callable
 from src.core.document import CADDocument
 from src.core.feature import Feature
 from src.core.sketch import Sketch2D
+from src.core.types import Vector3D
 
 
 class CADCommand(ABC):
@@ -112,6 +113,35 @@ class ModifyParameterCommand(CADCommand):
         feat.parameters[self.param_name] = self.old_value
         document.invalidate_cache()
         document.rebuild()
+        return True
+
+
+class TransformBodyCommand(CADCommand):
+    """Commande de transformation spatiale réversible d'un corps solide par translation."""
+
+    def __init__(self, body_id: str, delta_translation: Vector3D) -> None:
+        super().__init__(
+            f"Déplacement corps {body_id} ({delta_translation.x:+.1f}, {delta_translation.y:+.1f}, {delta_translation.z:+.1f})"
+        )
+        self.body_id: str = body_id
+        self.delta_translation: Vector3D = delta_translation
+
+    def execute(self, document: CADDocument) -> bool:
+        """Applique la translation sur le corps solide spécifié."""
+        if self.body_id not in document.bodies:
+            return False
+        solid = document.bodies[self.body_id]
+        document.bodies[self.body_id] = solid.translate(self.delta_translation)
+        document.notify_listeners()
+        return True
+
+    def undo(self, document: CADDocument) -> bool:
+        """Annule la translation en appliquant le vecteur inverse."""
+        if self.body_id not in document.bodies:
+            return False
+        solid = document.bodies[self.body_id]
+        document.bodies[self.body_id] = solid.translate(self.delta_translation.scale(-1.0))
+        document.notify_listeners()
         return True
 
 

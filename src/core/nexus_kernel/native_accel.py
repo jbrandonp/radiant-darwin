@@ -30,7 +30,7 @@ def accelerated_orient2d(
     cx: float, cy: float
 ) -> float:
     """
-    Prédicat d'orientation 2D exact et robuste.
+    Prédicat d'orientation 2D exact et robuste avec filtrage d'erreur adaptatif de Shewchuk.
     Retourne le déterminant signé orienté :
     > 0 : Sens trigonométrique (anti-horaire)
     < 0 : Sens horaire
@@ -40,7 +40,19 @@ def accelerated_orient2d(
     bcx = bx - cx
     acy = ay - cy
     bcy = by - cy
-    det = acx * bcy - acy * bcx
+    det_left = acx * bcy
+    det_right = acy * bcx
+    det = det_left - det_right
+
+    eps = 1.1102230246251565e-16
+    det_sum = abs(det_left) + abs(det_right)
+    err_bound = (3.0 + 8.0 * eps) * eps * det_sum
+    if abs(det) <= err_bound:
+        from src.core.nexus_kernel.robust_predicates import RobustGeometricPredicates
+        discrete = RobustGeometricPredicates.orient2d((ax, ay), (bx, by), (cx, cy))
+        if discrete == 0:
+            return 0.0
+        return float(discrete) * max(err_bound, 1e-18)
     return float(det)
 
 
@@ -51,7 +63,7 @@ def accelerated_orient3d(
     dx: float, dy: float, dz: float
 ) -> float:
     """
-    Prédicat d'orientation 3D exact.
+    Prédicat d'orientation 3D exact avec filtrage adaptatif de Shewchuk.
     Évalue si le point D est au-dessus, en dessous ou coplanaire au plan orienté (A, B, C).
     """
     adx = ax - dx
@@ -64,11 +76,20 @@ def accelerated_orient3d(
     bdz = bz - dz
     cdz = cz - dz
 
-    det = (
-        adx * (bdy * cdz - bdz * cdy)
-        - bdx * (ady * cdz - adz * cdy)
-        + cdx * (ady * bdz - adz * bdy)
-    )
+    term1 = adx * (bdy * cdz - bdz * cdy)
+    term2 = bdx * (cdy * adz - cdz * ady)
+    term3 = cdx * (ady * bdz - adz * bdy)
+    det = term1 + term2 + term3
+
+    eps = 1.1102230246251565e-16
+    permanent_sum = abs(term1) + abs(term2) + abs(term3)
+    err_bound = (7.0 + 56.0 * eps) * eps * permanent_sum
+    if abs(det) <= err_bound:
+        from src.core.nexus_kernel.robust_predicates import RobustGeometricPredicates
+        discrete = RobustGeometricPredicates.orient3d((ax, ay, az), (bx, by, bz), (cx, cy, cz), (dx, dy, dz))
+        if discrete == 0:
+            return 0.0
+        return float(discrete) * max(err_bound, 1e-18)
     return float(det)
 
 

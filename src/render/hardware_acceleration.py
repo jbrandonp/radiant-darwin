@@ -249,6 +249,9 @@ class HardwareAcceleratedNeuralSDF:
         v1 = mesh_vertices[mesh_faces[:, 1]]
         v2 = mesh_vertices[mesh_faces[:, 2]]
         face_centers = (v0 + v1 + v2) / 3.0
+        face_cross = np.cross(v1 - v0, v2 - v0)
+        face_norms = np.linalg.norm(face_cross, axis=1, keepdims=True)
+        face_normals = np.where(face_norms > 1e-12, face_cross / np.maximum(face_norms, 1e-12), np.array([0.0, 0.0, 1.0]))
 
         for start_idx in range(0, num_queries, batch_size):
             end_idx = min(num_queries, start_idx + batch_size)
@@ -258,13 +261,14 @@ class HardwareAcceleratedNeuralSDF:
             # diffs: (B, F, 3)
             diffs = batch_pts[:, None, :] - face_centers[None, :, :]
             dists_sq = np.sum(diffs * diffs, axis=2)  # (B, F)
-            min_dists = np.sqrt(np.min(dists_sq, axis=1))
+            min_indices = np.argmin(dists_sq, axis=1)
+            min_dists = np.sqrt(dists_sq[np.arange(len(batch_pts)), min_indices])
 
-            # Approximation du signe par rapport au barycentre global
-            centroid = np.mean(mesh_vertices, axis=0)
-            radial_dists = np.linalg.norm(batch_pts - centroid, axis=1)
-            mean_radius = float(np.mean(np.linalg.norm(mesh_vertices - centroid, axis=1)))
-            signs = np.where(radial_dists < mean_radius, -1.0, 1.0)
+            # Détermination exacte du signe par projection sur la normale extérieure de la facette la plus proche
+            closest_centers = face_centers[min_indices]
+            closest_normals = face_normals[min_indices]
+            dots = np.sum((batch_pts - closest_centers) * closest_normals, axis=1)
+            signs = np.where(dots < 0.0, -1.0, 1.0)
 
             results[start_idx:end_idx] = signs * min_dists
 

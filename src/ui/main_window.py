@@ -834,12 +834,17 @@ class CADMainWindow(QMainWindow):
         if dlg.exec():
             vals = dlg.get_values()
             self._feature_seq += 1
+            selected_edges = None
+            pick = self.viewport.selected_pick
+            if pick is not None and pick.entity_type == PickedEntityType.EDGE and pick.edge_index >= 0:
+                selected_edges = [pick.edge_index]
             feat = FilletFeature(
                 feature_id=f"feat_{self._feature_seq}",
                 name=f"Congé R{vals['radius']:.1f}mm",
                 target_body_id=str(vals["target_body_id"]),
                 radius=float(vals["radius"]),
-                segments=int(float(vals["segments"]))
+                segments=int(float(vals["segments"])),
+                edge_indices=selected_edges
             )
             self._add_feature_with_undo(feat)
 
@@ -852,12 +857,17 @@ class CADMainWindow(QMainWindow):
         if dlg.exec():
             vals = dlg.get_values()
             self._feature_seq += 1
+            selected_edges = None
+            pick = self.viewport.selected_pick
+            if pick is not None and pick.entity_type == PickedEntityType.EDGE and pick.edge_index >= 0:
+                selected_edges = [pick.edge_index]
             feat = ChamferFeature(
                 feature_id=f"feat_{self._feature_seq}",
                 name=f"Chanfrein {vals['distance']:.1f}mm",
                 target_body_id=str(vals["target_body_id"]),
                 distance=float(vals["distance"]),
-                edges_mode=str(vals["edges_mode"])
+                edges_mode=str(vals["edges_mode"]),
+                edge_indices=selected_edges
             )
             self._add_feature_with_undo(feat)
 

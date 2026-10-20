@@ -23,6 +23,7 @@ from src.viewport.viewport_shading import ShadingMode
 from src.viewport.snap_engine import SnapResult
 from src.viewport.transform_gizmo import GizmoAxis, GizmoMode
 from src.core.push_pull import PushPullEngine
+from src.viewport.spacemouse import SpaceMouseController
 
 
 class CADViewportWidget(QOpenGLWidget):
@@ -52,6 +53,7 @@ class CADViewportWidget(QOpenGLWidget):
         self._last_mouse_pos: QPoint = QPoint()
         self._is_orbiting: bool = False
         self._is_panning: bool = False
+        self.spacemouse: SpaceMouseController = SpaceMouseController()
 
         # Configurer le format de surface (anti-aliasing 4x)
         fmt = QSurfaceFormat()
@@ -196,6 +198,13 @@ class CADViewportWidget(QOpenGLWidget):
         """Met à jour les maillages mis en cache et redessine la scène."""
         self.cached_buffers = self.document.get_all_mesh_buffers()
         self.update()
+
+    def poll_spacemouse(self, dt: float = 0.016) -> bool:
+        """Applique les mouvements du périphérique 6-DoF 3Dconnexion SpaceMouse à la caméra."""
+        moved = self.spacemouse.apply_to_camera(self.camera, dt)
+        if moved:
+            self.update()
+        return moved
 
     def fit_view(self) -> None:
         """Recadre la caméra pour afficher tous les objets à l'écran."""

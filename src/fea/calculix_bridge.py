@@ -148,6 +148,44 @@ class CalculixSimulationDeck:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(deck_content)
 
+    def run_solver(
+        self,
+        working_dir: str,
+        timeout_seconds: float = 30.0,
+        ccx_binary: str = "ccx"
+    ) -> Optional[Dict[int, FeaNodalResult]]:
+        """
+        Exécute le binaire natif CalculiX CrunchiX (ccx) sur le jeu de données généré.
+        Retourne les résultats nodaux complets si ccx est disponible, ou None.
+        """
+        import shutil
+        import subprocess
+
+        bin_path = shutil.which(ccx_binary)
+        if bin_path is None:
+            return None
+
+        inp_path = os.path.join(working_dir, f"{self.job_name}.inp")
+        self.write_to_file(inp_path)
+
+        try:
+            subprocess.run(
+                [bin_path, self.job_name],
+                cwd=working_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False
+            )
+            frd_path = os.path.join(working_dir, f"{self.job_name}.frd")
+            if os.path.isfile(frd_path):
+                with open(frd_path, "r", encoding="utf-8", errors="ignore") as f:
+                    frd_content = f.read()
+                return CalculixResultParser().parse_full_results(frd_content)
+        except Exception:
+            return None
+        return None
+
 
 @dataclass
 class FeaNodalResult:

@@ -46,6 +46,22 @@ class FEASimulator:
         """Initialise le simulateur avec un matériau physique d'ingénierie."""
         self.material: PhysicalMaterial = material or MATERIAL_LIBRARY["Acier Carbone C45"]
 
+    @staticmethod
+    def _compute_effective_section_area(
+        vertices: np.ndarray,
+        z_min: float,
+        z_range: float,
+        vol_fallback: float
+    ) -> float:
+        """Calcule l'aire de section résistante réelle du solide à l'encastrement."""
+        base_mask = vertices[:, 2] <= (z_min + z_range * 0.15)
+        base_pts = vertices[base_mask]
+        if len(base_pts) >= 4:
+            dx = max(1.0, float(np.ptp(base_pts[:, 0])))
+            dy = max(1.0, float(np.ptp(base_pts[:, 1])))
+            return max(1.0, dx * dy * 0.7854)
+        return max(1.0, vol_fallback / max(0.001, z_range))
+
     def run_static_analysis(
         self,
         solid: Solid,
@@ -79,7 +95,8 @@ class FEASimulator:
         # Bras de levier / flexion : sigma ~ M * y / I
         lever_arm = np.abs(vertices[:, 0]) + np.abs(vertices[:, 1])
         force_mag = abs(applied_force_newtons)
-        base_stress = (force_mag / (np.pi * 15.0 ** 2))  # MPa approx
+        sec_area = self._compute_effective_section_area(vertices, z_min, z_range, solid.volume())
+        base_stress = force_mag / sec_area
 
         # Contrainte de von Mises nodale synthétisée par loi de comportement
         E_gpa = max(0.01, self.material.young_modulus_gpa)

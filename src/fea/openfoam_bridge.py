@@ -356,6 +356,53 @@ class OpenFoamCase:
 
         return files_written
 
+    def run_mesh_and_solver(
+        self,
+        case_dir: str,
+        timeout_seconds: float = 60.0
+    ) -> Tuple[bool, str]:
+        """
+        Exécute la chaîne CFD OpenFOAM complète : blockMesh puis simpleFoam.
+        Retourne (True, logs) en cas de succès, ou (False, message d'erreur/absence).
+        """
+        import shutil
+        import subprocess
+
+        block_mesh_bin = shutil.which("blockMesh")
+        simple_foam_bin = shutil.which("simpleFoam")
+
+        if block_mesh_bin is None or simple_foam_bin is None:
+            return False, "Exécutables OpenFOAM (blockMesh / simpleFoam) non détectés sur le système."
+
+        self.write_case_to_directory(case_dir)
+
+        try:
+            p_mesh = subprocess.run(
+                [block_mesh_bin],
+                cwd=case_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False
+            )
+            if p_mesh.returncode != 0:
+                return False, f"Échec de blockMesh :\n{p_mesh.stderr}"
+
+            p_solve = subprocess.run(
+                [simple_foam_bin],
+                cwd=case_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False
+            )
+            if p_solve.returncode != 0:
+                return False, f"Échec de simpleFoam :\n{p_solve.stderr}"
+
+            return True, "Simulation OpenFOAM convergée avec succès."
+        except Exception as e:
+            return False, f"Erreur durant l'exécution OpenFOAM : {e}"
+
 
 # Alias de rétro-compatibilité
 OpenFoamCaseGenerator = OpenFoamCase

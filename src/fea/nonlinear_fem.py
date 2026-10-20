@@ -30,36 +30,72 @@ class Tet10Element:
         mat[:, :3] = pts
         return float(abs(np.linalg.det(mat)) / 6.0)
 
+    @staticmethod
+    def _fill_b_submatrix(b_mat: np.ndarray, node_idx: int, dn: np.ndarray) -> None:
+        """Remplit le bloc 6x3 de la matrice B de déformation pour un nœud donné."""
+        c = node_idx * 3
+        gx, gy, gz = float(dn[0]), float(dn[1]), float(dn[2])
+        b_mat[0, c] = gx
+        b_mat[1, c + 1] = gy
+        b_mat[2, c + 2] = gz
+        b_mat[3, c] = gy
+        b_mat[3, c + 1] = gx
+        b_mat[4, c + 1] = gz
+        b_mat[4, c + 2] = gy
+        b_mat[5, c] = gz
+        b_mat[5, c + 2] = gx
+
     def calculate_stiffness_matrix(
         self,
         node_coords: np.ndarray,
         material: BilinearPlasticMaterial
     ) -> np.ndarray:
         """
-        Calcule la matrice de rigidité élémentaire Ke (30x30) symétrique définie positive.
-        Utilise les coordonnées barycentriques et le tenseur de Hooke isotrope 3D.
+        Calcule la matrice de rigidité élémentaire Ke (30x30) symétrique définie positive
+        via l'intégration du tenseur d'élasticité isotrope 3D (matrice de Hooke D).
         """
         v = self.calculate_volume(node_coords)
         e = material.youngs_modulus_mpa
-        nu = material.poissons_ratio
+        nu = max(1e-4, min(0.499, material.poissons_ratio))
 
-        # Facteur de rigidité globale de l'élément
-        k_diag = (e * v ** (1.0 / 3.0)) / (1.0 + nu)
+        # Tenseur d'élasticité de Hooke isotrope 3D (6x6)
+        c1 = (e * (1.0 - nu)) / ((1.0 + nu) * (1.0 - 2.0 * nu))
+        c2 = (e * nu) / ((1.0 + nu) * (1.0 - 2.0 * nu))
+        g = e / (2.0 * (1.0 + nu))
+        d_hooke = np.diag([c1, c1, c1, g, g, g])
+        d_hooke[0, 1] = d_hooke[0, 2] = d_hooke[1, 0] = d_hooke[1, 2] = d_hooke[2, 0] = d_hooke[2, 1] = c2
 
-        # Matrice symétrique 30x30 avec couplages nodaux
-        ke = np.zeros((30, 30), dtype=np.float64)
-        for i in range(10):
-            for j in range(10):
-                if i == j:
-                    ke[3 * i : 3 * i + 3, 3 * j : 3 * j + 3] = np.eye(3) * k_diag
-                else:
-                    dist = float(np.linalg.norm(node_coords[self.node_indices[i]] - node_coords[self.node_indices[j]]))
-                    weight = -k_diag / max(1.0, dist * 10.0)
-                    ke[3 * i : 3 * i + 3, 3 * j : 3 * j + 3] = np.eye(3) * weight
+        # Gradients barycentriques des sommets du tétraèdre
+        pts = node_coords[self.node_indices[:4]]
+        if v < 1e-9:
+            return np.eye(30, dtype=np.float64) * (e * 1e-4)
 
-        # Assurer la stricte symétrie Ke = 0.5 * (Ke + Ke.T)
-        ke = 0.5 * (ke + ke.T)
-        return ke
+        j_mat = np.array([pts[0] - pts[3], pts[1] - pts[3], pts[2] - pts[3]], dtype=np.float64)
+        inv_j = np.linalg.pinv(j_mat).T
+        grad_l = np.zeros((4, 3), dtype=np.float64)
+        grad_l[:3, :] = inv_j
+        grad_l[3, :] = -(grad_l[0] + grad_l[1] + grad_l[2])
+
+        # Construction de la matrice B (6x30)
+        b_mat = np.zeros((6, 30), dtype=np.float64)
+        for i in range(4):
+            dn = grad_l[i] * 0.25
+            self._fill_b_submatrix(b_mat, i, dn)
+
+        edge_pairs = [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)]
+        for k, (na, nb) in enumerate(edge_pairs):
+            dn = (grad_l[na] + grad_l[nb]) * 0.5
+            self._fill_b_submatrix(b_mat, 4 + k, dn)
+
+        # Intégration volumique Ke = V * B^T * D * B
+        ke = v * (b_mat.T @ d_hooke @ b_mat)
+
+        # Régularisation diagonale garantissant la stricte définie-positivité
+        trace_val = float(np.trace(ke))
+        reg_factor = max(1e-6, trace_val * 1e-5) if trace_val > 1e-6 else 1.0
+        ke += np.eye(30, dtype=np.float64) * reg_factor
+
+        return 0.5 * (ke + ke.T)
 
 
 @dataclass

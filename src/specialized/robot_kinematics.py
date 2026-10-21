@@ -126,21 +126,27 @@ class RobotArm6Axis:
         return t[:3, 3], t[:3, :3]
 
     def calculate_jacobian(self, joint_angles_rad: Optional[Sequence[float]] = None) -> np.ndarray:
-        """Calcule la matrice Jacobienne 6x6 reliant les vitesses articulaires aux vitesses cartésiennes."""
+        """Calcule la matrice Jacobienne géométrique 6x6 (vitesses linéaires et angulaires cartésiennes)."""
         angles = np.array(joint_angles_rad, dtype=np.float64) if joint_angles_rad is not None else self.joint_angles_rad
-        eps = 1e-4
         j_mat = np.zeros((6, 6), dtype=np.float64)
-        t0 = self.forward_kinematics(angles)
-        pos0 = t0[:3, 3]
+
+        t_accum: List[np.ndarray] = [np.eye(4, dtype=np.float64)]
+        t_curr = np.eye(4, dtype=np.float64)
+        for i in range(6):
+            dh = self.dh_params[i]
+            theta_total = dh.theta_rad + float(angles[i])
+            a_i = self._dh_matrix(dh.a_mm, dh.alpha_rad, dh.d_mm, theta_total)
+            t_curr = t_curr @ a_i
+            t_accum.append(t_curr)
+
+        p_e = t_accum[6][:3, 3]
 
         for i in range(6):
-            step = np.copy(angles)
-            step[i] += eps
-            t_plus = self.forward_kinematics(step)
-            pos_plus = t_plus[:3, 3]
-            vel_linear = (pos_plus - pos0) / eps
-            j_mat[:3, i] = vel_linear
-            j_mat[3:, i] = np.array([0.0, 0.0, 1.0])
+            t_prev = t_accum[i]
+            z_prev = t_prev[:3, 2]
+            p_prev = t_prev[:3, 3]
+            j_mat[:3, i] = np.cross(z_prev, p_e - p_prev)
+            j_mat[3:, i] = z_prev
 
         return j_mat
 

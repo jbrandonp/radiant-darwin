@@ -161,7 +161,7 @@ class GmshVolumetricMesher:
             (n0, n2, n3, n7),
             (n0, n4, n5, n7),
             (n2, n5, n6, n7),
-            (n0, n2, n5, n7)
+            (n0, n5, n2, n7)
         ]
 
     def mesh_bounding_box_domain(
@@ -257,9 +257,14 @@ class GmshVolumetricMesher:
             pos = node.coords
             lines.append(f"{n_tag}, {pos.x:.6f}, {pos.y:.6f}, {pos.z:.6f}")
 
-        lines.append("*ELEMENT, TYPE=C3D4, ELSET=EALL")
+        is_tet10 = any(elem.element_type == GmshElementType.TETRAHEDRON_10 or len(elem.node_tags) == 10 for elem in self.elements.values())
+        elem_type_str = "C3D10" if is_tet10 else "C3D4"
+        lines.append(f"*ELEMENT, TYPE={elem_type_str}, ELSET=EALL")
         for e_tag, elem in sorted(self.elements.items()):
-            nodes_str = ", ".join(str(n) for n in elem.node_tags[:4])
+            if is_tet10 and len(elem.node_tags) >= 10:
+                nodes_str = ", ".join(str(n) for n in elem.node_tags[:10])
+            else:
+                nodes_str = ", ".join(str(n) for n in elem.node_tags[:4])
             lines.append(f"{e_tag}, {nodes_str}")
 
         lines.append("*MATERIAL, NAME=STEEL")

@@ -220,7 +220,7 @@ class AssemblySolver:
 
         # Alignement angulaire 3D de l'axe ou de la normale
         desired_v: Optional[np.ndarray] = None
-        if mate.mate_type == MateType.COAXIAL and norm_ref > 1e-9 and norm_tgt > 1e-9:
+        if mate.mate_type in (MateType.COAXIAL, MateType.PARALLEL) and norm_ref > 1e-9 and norm_tgt > 1e-9:
             desired_v = v_ref
         elif mate.mate_type == MateType.COINCIDENT_PLANES and norm_ref > 1e-9 and norm_tgt > 1e-9:
             desired_v = -v_ref
@@ -309,6 +309,7 @@ class AssemblySolver:
         MateType.REVOLUTE: 5,
         MateType.PRISMATIC: 5,
         MateType.DISTANCE: 1,
+        MateType.PARALLEL: 2,
     }
 
     @classmethod

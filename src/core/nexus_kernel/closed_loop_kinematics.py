@@ -98,7 +98,7 @@ class ClosedLoopKinematicEngine:
         a_closed = a_unc + m_inv_jt @ lambda_forces
 
         residual_norm = float(np.linalg.norm(c_drift))
-        is_converged = residual_norm < 1e-4 or np.isfinite(a_closed).all()
+        is_converged = (residual_norm < 1e-4) and bool(np.isfinite(a_closed).all())
 
         return ClosedLoopDynamicsResult(
             joint_accelerations=a_closed,

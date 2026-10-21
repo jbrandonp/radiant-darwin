@@ -195,6 +195,9 @@ class FeaNodalResult:
     von_mises_stress_mpa: float
 
 
+CalculixNodalResult = FeaNodalResult
+
+
 class CalculixResultParser:
     """
     Parseur des résultats produits par CalculiX (.frd ou .dat tabulaire).

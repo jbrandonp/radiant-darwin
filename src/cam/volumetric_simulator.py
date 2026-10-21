@@ -81,6 +81,7 @@ class VolumetricStockSimulator:
 
         self.grid: np.ndarray = np.ones((self.nx, self.ny, self.nz), dtype=bool)
         self.voxel_vol_mm3: float = self.res ** 3
+        self._active_voxels: int = self.nx * self.ny * self.nz
 
     @property
     def total_initial_volume_mm3(self) -> float:
@@ -88,8 +89,7 @@ class VolumetricStockSimulator:
 
     def get_remaining_volume_cm3(self) -> float:
         """Retourne le volume de matière restant en centimètres cubes (cm³)."""
-        active_voxels = int(np.count_nonzero(self.grid))
-        return (active_voxels * self.voxel_vol_mm3) / 1000.0
+        return (self._active_voxels * self.voxel_vol_mm3) / 1000.0
 
     def simulate_linear_cut(
         self,
@@ -181,7 +181,12 @@ class VolumetricStockSimulator:
         ki0, ki1 = i0 - (ix - r_vox), i0 - (ix - r_vox) + (i1 - i0)
         kj0, kj1 = j0 - (iy - r_vox), j0 - (iy - r_vox) + (j1 - j0)
 
-        self.grid[i0:i1, j0:j1, k0:k1] &= ~kernel[ki0:ki1, kj0:kj1, kk0:kk1]
+        old_region = self.grid[i0:i1, j0:j1, k0:k1]
+        mask = kernel[ki0:ki1, kj0:kj1, kk0:kk1]
+        removed = int(np.count_nonzero(old_region & mask))
+        if removed > 0:
+            self._active_voxels -= removed
+            self.grid[i0:i1, j0:j1, k0:k1] &= ~mask
 
     def _interpolate_toolpath_points(
         self, points: List[Tuple[float, float, float]]

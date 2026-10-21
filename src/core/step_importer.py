@@ -596,7 +596,7 @@ class STEPImporter:
             p0 = pts_3d[i]
             p1 = pts_3d[j]
             nx += (float(p0[1]) - float(p1[1])) * (float(p0[2]) + float(p1[2]))
-            ny += (float(p0[2]) - float(p1[2])) * (float(p0[0]) + float(p0[2]))
+            ny += (float(p0[2]) - float(p1[2])) * (float(p0[0]) + float(p1[0]))
             nz += (float(p0[0]) - float(p1[0])) * (float(p0[1]) + float(p1[1]))
 
         abs_x, abs_y, abs_z = abs(nx), abs(ny), abs(nz)

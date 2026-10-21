@@ -205,7 +205,7 @@ class FiveAxisGougeChecker:
             # Tête bi-rotative A (autour de X) et B (autour de Y) sans axe vertical Z
             vx = max(-1.0, min(1.0, tool_vec.x))
             axis_b = math.degrees(math.asin(vx))
-            axis_a = math.degrees(math.atan2(-tool_vec.y, max(1e-12, tool_vec.z)))
+            axis_a = math.degrees(math.atan2(-tool_vec.y, tool_vec.z))
             return axis_a, axis_b
         else:
             axis_a = tilt_angle
@@ -281,7 +281,13 @@ class RTCPKinematicsEngine:
 
         pw = np.array([workpiece_pos.x, workpiece_pos.y, workpiece_pos.z], dtype=np.float64)
         pm = r_mat @ pw + self.pivot_offset
-        pm[2] += self.tool_length
+        if self.kinematics_type == MachineKinematics5Axis.HEAD_HEAD_AB:
+            tv = np.array([tool_vec.x, tool_vec.y, tool_vec.z], dtype=np.float64)
+            norm_tv = float(np.linalg.norm(tv))
+            tv_unit = tv / norm_tv if norm_tv > 1e-9 else np.array([0.0, 0.0, 1.0])
+            pm += self.tool_length * tv_unit
+        else:
+            pm[2] += self.tool_length
 
         mach_pos = Vector3D(float(pm[0]), float(pm[1]), float(pm[2]))
         return mach_pos, rot1, rot2

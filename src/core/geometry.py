@@ -4,7 +4,7 @@ Utilise manifold3d pour garantir des solides manifold (étanches) et des opérat
 """
 
 from __future__ import annotations
-from typing import List, Tuple, Optional, Sequence, Callable, Union
+from typing import List, Tuple, Optional, Sequence, Callable, Union, Dict
 import numpy as np
 import manifold3d as m
 

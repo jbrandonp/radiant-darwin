@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional, Callable, TypeVar
 import numpy as np
 import sys
+import threading
 
 from src.core.types import Vector3D, MeshBuffer, ColorRGBA
 from src.core.generative_lattices import LatticeType, generate_lattice_volume
@@ -275,6 +276,7 @@ class CADWorkerPool:
     """
 
     _instance: Optional[CADWorkerPool] = None
+    _lock: threading.Lock = threading.Lock()
 
     def __init__(self, max_workers: Optional[int] = None) -> None:
         self._executor: ProcessPoolExecutor = ProcessPoolExecutor(max_workers=max_workers)
@@ -283,7 +285,9 @@ class CADWorkerPool:
     def get_instance(cls) -> CADWorkerPool:
         """Accès Singleton thread-safe au pool de calcul."""
         if cls._instance is None:
-            cls._instance = CADWorkerPool()
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = CADWorkerPool()
         return cls._instance
 
     def submit_tpms(self, params: TPMSWorkerParams) -> Future[TPMSWorkerResult]:
@@ -331,8 +335,12 @@ def dispatch_to_qt_event_loop(
 
         # Si PySide6 est chargé dans le runtime, on poste l'événement sur le thread UI principal
         if "PySide6.QtCore" in sys.modules:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, _invoke)
+            from PySide6.QtCore import QTimer, QCoreApplication
+            app = QCoreApplication.instance()
+            if app is not None:
+                QTimer.singleShot(0, app, _invoke)
+            else:
+                _invoke()
         else:
             _invoke()
 

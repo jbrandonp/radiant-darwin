@@ -24,6 +24,7 @@ from src.core.types import Vector3D
 # Constantes de précision machine IEEE 754 (Double précision 53 bits)
 EPSILON_MACHINE: Final[float] = 1.1102230246251565e-16  # 2^(-53)
 RESPLIT_CONSTANT: Final[float] = 134217729.0           # 2^27 + 1
+_HAS_FMA: Final[bool] = hasattr(math, "fma")
 
 
 def two_sum(a: float, b: float) -> Tuple[float, float]:
@@ -48,18 +49,21 @@ def two_product(a: float, b: float) -> Tuple[float, float]:
         (p, e) tel que a * b = p + e exactement.
     """
     p = a * b
-    try:
-        e = math.fma(a, b, -p)
-    except (AttributeError, ValueError):
-        c_a = RESPLIT_CONSTANT * a
-        a_hi = c_a - (c_a - a)
-        a_lo = a - a_hi
+    if _HAS_FMA:
+        try:
+            return p, math.fma(a, b, -p)
+        except (ValueError, OverflowError):
+            pass
 
-        c_b = RESPLIT_CONSTANT * b
-        b_hi = c_b - (c_b - b)
-        b_lo = b - b_hi
+    c_a = RESPLIT_CONSTANT * a
+    a_hi = c_a - (c_a - a)
+    a_lo = a - a_hi
 
-        e = a_lo * b_lo - (((p - a_hi * b_hi) - a_lo * b_hi) - a_hi * b_lo)
+    c_b = RESPLIT_CONSTANT * b
+    b_hi = c_b - (c_b - b)
+    b_lo = b - b_hi
+
+    e = a_lo * b_lo - (((p - a_hi * b_hi) - a_lo * b_hi) - a_hi * b_lo)
     return p, e
 
 

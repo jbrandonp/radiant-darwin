@@ -284,6 +284,72 @@ class IndustrialPostProcessor:
         return "\n".join(lines)
 
     @classmethod
+    def post_process_siemens(
+        cls,
+        operations: List[ToolpathOperation],
+        program_name: str = "PART_USINAGE",
+        work_coordinate: str = "G54",
+        enable_arcs: bool = True,
+        cutter_comp: str = "none"
+    ) -> str:
+        """Génère un programme conforme au standard Siemens Sinumerik 840D / 828D."""
+        clean_name = program_name.upper().replace(" ", "_")
+        lines: List[str] = [
+            f"; %_N_{clean_name}_MPF",
+            "; (POST-PROCESSEUR SIEMENS SINUMERIK 840D)",
+            f"{work_coordinate} G90 G71 G64",
+            "SUPA G00 Z0. D0 (DEGAGEMENT HAUT SECURISE)"
+        ]
+
+        for op_idx, op in enumerate(operations):
+            tool = op.tool
+            t_num = max(1, tool.tool_id)
+            spindle_rpm = int(tool.spindle_speed_rpm)
+
+            lines.extend([
+                "",
+                f"; --- OPERATION {op_idx + 1} : {op.name} ---",
+                f"T{t_num} D1 M06",
+                f"S{spindle_rpm} M03",
+                "M08 (ARROSAGE ON)"
+            ])
+
+            toolpath_blocks = cls._format_blocks_with_arcs_and_comp(
+                op.points, tool, t_num, cutter_comp=cutter_comp, enable_arcs=enable_arcs
+            )
+            lines.extend(toolpath_blocks)
+            lines.append("M09 (ARRET ARROSAGE)")
+            lines.append("SUPA G00 Z0. D0")
+
+        lines.extend([
+            "",
+            "M05 (ARRET BROCHE)",
+            "M30 (FIN DE PROGRAMME)"
+        ])
+        return "\n".join(lines)
+
+    @classmethod
+    def post_process(
+        cls,
+        dialect: CNCDialect,
+        operations: List[ToolpathOperation],
+        program_name: str = "PART_USINAGE",
+        work_coordinate: str = "G54",
+        enable_arcs: bool = True,
+        cutter_comp: str = "none"
+    ) -> str:
+        """Point d'entrée universel pour la post-génération G-Code selon le dialecte cible."""
+        if dialect == CNCDialect.HAAS:
+            return cls.post_process_haas(operations, program_name=program_name, work_coordinate=work_coordinate, enable_arcs=enable_arcs, cutter_comp=cutter_comp)
+        elif dialect == CNCDialect.FANUC:
+            return cls.post_process_fanuc(operations, program_name=program_name, work_coordinate=work_coordinate, enable_arcs=enable_arcs, cutter_comp=cutter_comp)
+        elif dialect == CNCDialect.HEIDENHAIN:
+            return cls.post_process_heidenhain(operations, program_name=program_name)
+        elif dialect == CNCDialect.SIEMENS:
+            return cls.post_process_siemens(operations, program_name=program_name, work_coordinate=work_coordinate, enable_arcs=enable_arcs, cutter_comp=cutter_comp)
+        return cls.post_process_fanuc(operations, program_name=program_name, work_coordinate=work_coordinate, enable_arcs=enable_arcs, cutter_comp=cutter_comp)
+
+    @classmethod
     def post_process_heidenhain(
         cls,
         operations: List[ToolpathOperation],

@@ -4,7 +4,7 @@ Fournit les modes Orbite, Panoramique (Pan), Zoom et orientations prédéfinies.
 """
 
 from __future__ import annotations
-from typing import Tuple
+from typing import Tuple, Dict
 import numpy as np
 
 from src.core.types import Vector3D

@@ -700,8 +700,6 @@ class DraftFeature(Feature):
         updated[tgt_key] = target.warp(_draft_warp)
         self.status = FeatureStatus.OK
         return updated
-        self.status = FeatureStatus.OK
-        return updated
 
 
 class HelixFeature(Feature):

@@ -321,13 +321,25 @@ def make_coons_patch(
             )
             grid[i, j] = r1 + r2 - t
 
-    knots_u = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0], dtype=np.float64) if nu == 3 else np.linspace(0.0, 1.0, nu + 3)
-    knots_v = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0], dtype=np.float64) if nv == 3 else np.linspace(0.0, 1.0, nv + 3)
+    deg_u = min(2, nu - 1)
+    deg_v = min(2, nv - 1)
+
+    def _clamped_knots(n_ctrl: int, deg: int) -> np.ndarray:
+        m = n_ctrl + deg + 1
+        knots = np.zeros(m, dtype=np.float64)
+        num_interior = m - 2 * (deg + 1)
+        if num_interior > 0:
+            knots[deg + 1 : m - deg - 1] = np.linspace(0.0, 1.0, num_interior + 2)[1:-1]
+        knots[m - deg - 1 :] = 1.0
+        return knots
+
+    knots_u = _clamped_knots(nu, deg_u)
+    knots_v = _clamped_knots(nv, deg_v)
 
     return NexusNURBSSurface(
         surface_id=name,
-        degree_u=min(2, nu - 1),
-        degree_v=min(2, nv - 1),
+        degree_u=deg_u,
+        degree_v=deg_v,
         knots_u=knots_u,
         knots_v=knots_v,
         control_points=grid

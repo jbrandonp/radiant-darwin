@@ -119,7 +119,8 @@ class CoordinatedMeshSealer:
         face1_vertices: np.ndarray,
         face2_triangles: np.ndarray,
         face2_vertices: np.ndarray,
-        boundary_verts: List[CoordinatedBoundaryVertex]
+        boundary_verts: List[CoordinatedBoundaryVertex],
+        tolerance_radius: float = 0.05
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Garantit que les deux maillages pointent rigoureusement vers les mêmes coordonnées 3D
@@ -134,13 +135,13 @@ class CoordinatedMeshSealer:
             # Plus proche sommet dans face 1
             dists1 = np.linalg.norm(f1_v - master_pt, axis=1)
             min_idx1 = int(np.argmin(dists1))
-            if dists1[min_idx1] < 0.05:
+            if dists1[min_idx1] < tolerance_radius:
                 f1_v[min_idx1] = master_pt
 
             # Plus proche sommet dans face 2
             dists2 = np.linalg.norm(f2_v - master_pt, axis=1)
             min_idx2 = int(np.argmin(dists2))
-            if dists2[min_idx2] < 0.05:
+            if dists2[min_idx2] < tolerance_radius:
                 f2_v[min_idx2] = master_pt
 
         return f1_v, face1_triangles, f2_v, face2_triangles
@@ -275,6 +276,7 @@ class SurfaceSurfaceIntersectionSolver:
         samples.append(p_curr)
 
         ds = max(1e-4, float(step_size))
+        eps = 1e-4
         for _ in range(num_steps):
             n1 = surf1_normal(u1, v1)
             n2 = surf2_normal(u2, v2)
@@ -286,8 +288,31 @@ class SurfaceSurfaceIntersectionSolver:
             if t_norm < 1e-8:
                 break
             t_unit = tangent / t_norm
+            delta_p = ds * t_unit
 
-            p_pred = p_curr + ds * t_unit
+            # Mise à jour paramétrique du germe de surface 1
+            s1_u = (surf1_eval(u1 + eps, v1) - surf1_eval(u1 - eps, v1)) / (2.0 * eps)
+            s1_v = (surf1_eval(u1, v1 + eps) - surf1_eval(u1, v1 - eps)) / (2.0 * eps)
+            e1, f1, g1 = float(np.dot(s1_u, s1_u)), float(np.dot(s1_u, s1_v)), float(np.dot(s1_v, s1_v))
+            det1 = e1 * g1 - f1 * f1
+            if det1 > 1e-12:
+                du1 = (g1 * float(np.dot(s1_u, delta_p)) - f1 * float(np.dot(s1_v, delta_p))) / det1
+                dv1 = (e1 * float(np.dot(s1_v, delta_p)) - f1 * float(np.dot(s1_u, delta_p))) / det1
+                u1 += du1
+                v1 += dv1
+
+            # Mise à jour paramétrique du germe de surface 2
+            s2_u = (surf2_eval(u2 + eps, v2) - surf2_eval(u2 - eps, v2)) / (2.0 * eps)
+            s2_v = (surf2_eval(u2, v2 + eps) - surf2_eval(u2, v2 - eps)) / (2.0 * eps)
+            e2, f2, g2 = float(np.dot(s2_u, s2_u)), float(np.dot(s2_u, s2_v)), float(np.dot(s2_v, s2_v))
+            det2 = e2 * g2 - f2 * f2
+            if det2 > 1e-12:
+                du2 = (g2 * float(np.dot(s2_u, delta_p)) - f2 * float(np.dot(s2_v, delta_p))) / det2
+                dv2 = (e2 * float(np.dot(s2_v, delta_p)) - f2 * float(np.dot(s2_u, delta_p))) / det2
+                u2 += du2
+                v2 += dv2
+
+            p_pred = p_curr + delta_p
             p1 = surf1_eval(u1, v1)
             p2 = surf2_eval(u2, v2)
             p_corr = (p_pred + p1 + p2) / 3.0

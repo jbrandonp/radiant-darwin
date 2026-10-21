@@ -22,6 +22,7 @@ from src.fea.calculix_bridge import (
     FeaMaterial,
     FeaElementType,
     CalculixResultParser,
+    FeaNodalResult,
 )
 
 
@@ -205,7 +206,7 @@ class FEASimulator:
 
     def _build_fea_result_from_calculix(
         self,
-        nodal_results: Dict[int, CalculixNodalResult],
+        nodal_results: Dict[int, FeaNodalResult],
         solid: Solid
     ) -> Optional[FEAResult]:
         """Convertit les résultats nodaux CalculiX en FEAResult structuré."""
